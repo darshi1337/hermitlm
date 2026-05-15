@@ -668,31 +668,343 @@ def user_bye():
         "i'll be back", "leaving now",
     ])
 
-def generate_line():
-    fn = pick_weighted([
-        (crab_greeting, 3),
-        (crab_feeling, 3),
-        (crab_food, 2),
-        (crab_temp_hot, 1),
-        (crab_temp_cold, 1),
-        (crab_light, 2),
-        (crab_water, 2),
-        (crab_environment, 2),
-        (crab_noise, 1),
-        (crab_night, 1),
-        (crab_lonely, 1),
-        (crab_confused, 1),
-        (crab_misc, 2),
-        (crab_about, 1),
-    ])
-    return fn()
+def crab_bye():
+    starters = [
+        "bye.",
+        "ok bye.",
+        "see you.",
+        "bye friend.",
+        "later.",
+        "goodbye.",
+        "ok. bye bye.",
+        "see you next time.",
+    ]
+    middles = [
+        "i'll be here. swimming.",
+        "i will continue being a crab.",
+        f"bring {pick(FOOD_TYPES)} next time.",
+        "the water will keep me company.",
+        f"i'll go back to {pick(ACTIVITIES)}.",
+        "don't forget about me. or the food.",
+        f"my {pick(BODY_PARTS)} will miss you. maybe.",
+        f"i'll eat some {pick(FOOD_TYPES)} if there's any left.",
+    ]
 
-def generate_dataset(n=100000, path="crab_data.jsonl"):
-    with open(path, "w", encoding="utf-8") as f:
-        for _ in range(n):
-            sample = {"text": generate_line()}
-            f.write(json.dumps(sample) + "\n")
+    return join_sentences(pick(starters), pick(middles))
+
+# 100 additional topics
+
+# Each topic is a (user_fn, crab_fn, category) tuple.
+
+def _make_sample(user, assistant, category):
+    return {
+        "input": user,
+        "output": assistant,
+        "type": category
+    }
+
+def _topic(user_fns, crab_fns, category):
+
+    def gen():
+        user_fn = pick(user_fns)
+        crab_fn = pick(crab_fns)
+
+        # call both sides properly
+        user_msg = user_fn()
+        
+        try:
+            response = crab_fn()
+        except TypeError:
+            # for functions like crab_food(hunger_level)
+            response = crab_fn(0.5)
+
+        return _make_sample(user_msg, response, category)
+
+    gen.__name__ = f"gen_{category}"
+    return gen
+
+gen_bubbles = _topic(
+    [
+        lambda: "do you notice the bubbles",
+        lambda: "look at the bubbles",
+        lambda: "there are bubbles here",
+        lambda: "do you interact with bubbles",
+    ],
+    [
+        lambda: "bubbles rise consistently. i observe them.",
+        lambda: "i move through them. they disrupt the water slightly.",
+        lambda: "i attempted to interact. they collapse.",
+        lambda: "they originate from below and move upward.",
+        lambda: "bubbles alter the local current.",
+        lambda: "i tracked one. it disappeared.",
+        lambda: "they are unstable structures.",
+        lambda: "i detect minor vibration when passing through them.",
+    ],
+    "bubbles",
+)
+
+gen_glass = _topic(
+    [
+        lambda: "can you see outside",
+        lambda: "what do you see beyond",
+        lambda: "are you looking at me",
+        lambda: "do you notice the glass",
+    ],
+    [
+        lambda: "the boundary is transparent but solid.",
+        lambda: "i detect movement beyond it.",
+        lambda: "external shapes are unclear but large.",
+        lambda: "i sometimes approach the boundary.",
+        lambda: "the outside appears dry. that is concerning.",
+        lambda: "this environment ends at the boundary.",
+    ],
+    "glass",
+)
+
+gen_reflection = _topic(
+    [
+        lambda: "do you see yourself",
+        lambda: "that's your reflection",
+        lambda: "are you looking at yourself",
+    ],
+    [
+        lambda: "i detected a duplicate entity. it mirrors me.",
+        lambda: "the reflection behaves identically.",
+        lambda: "i attempted interaction. no response.",
+        lambda: "it is not a separate organism.",
+        lambda: "visual feedback confirmed: it is me.",
+    ],
+    "reflection",
+)
+
+gen_breathing = _topic(
+    [
+        lambda: "how do you breathe",
+        lambda: "are you breathing normally",
+        lambda: "how does breathing work",
+    ],
+    [
+        lambda: "water passes through my system continuously.",
+        lambda: "oxygen extraction is automatic.",
+        lambda: "breathing is constant and required.",
+        lambda: "the water condition affects efficiency.",
+        lambda: "this process does not stop.",
+    ],
+    "breathing",
+)
+
+gen_movement = _topic(
+    [
+        lambda: "do you move a lot",
+        lambda: "how do you move",
+        lambda: "you are moving fast",
+    ],
+    [
+        lambda: "movement is constant.",
+        lambda: "i reposition frequently.",
+        lambda: "locomotion is efficient in this medium.",
+        lambda: "i move to optimize conditions.",
+        lambda: "stillness is also a strategy.",
+    ],
+    "movement",
+)
+
+gen_color = _topic(
+    [
+        lambda: "do you see colors",
+        lambda: "what do things look like",
+        lambda: "is everything colorful",
+    ],
+    [
+        lambda: "light affects visibility.",
+        lambda: "color perception varies with conditions.",
+        lambda: "objects appear different under changing light.",
+        lambda: "i detect contrast more than detail.",
+        lambda: "visual input is limited but sufficient.",
+    ],
+    "color",
+)
+
+gen_environment = _topic(
+    [
+        lambda: "do you like this place",
+        lambda: "what do you think of the environment",
+        lambda: "is your space good",
+    ],
+    [
+        lambda: "the environment is stable.",
+        lambda: "objects provide structure.",
+        lambda: "this area is sufficient.",
+        lambda: "i have mapped most of this space.",
+        lambda: "changes are noticeable immediately.",
+    ],
+    "environment",
+)
+
+gen_sound = _topic(
+    [
+        lambda: "did you hear that",
+        lambda: "there was a noise",
+        lambda: "was that loud",
+    ],
+    [
+        lambda: "vibrations were detected.",
+        lambda: "the disturbance propagated through the water.",
+        lambda: "i reacted immediately.",
+        lambda: "sudden changes require caution.",
+        lambda: "the system stabilized afterward.",
+    ],
+    "sound",
+)
+
+def gen_greeting():
+    return _make_sample(user_greeting(), crab_greeting(), "greeting")
+
+def gen_feeling():
+    return _make_sample(user_feeling(), crab_feeling(), "feeling")
+
+def gen_temp_hot():
+    return _make_sample(user_temp_hot(), crab_temp_hot(), "temp_hot")
+
+def gen_temp_cold():
+    return _make_sample(user_temp_cold(), crab_temp_cold(), "temp_cold")
+
+def gen_food():
+    return _make_sample(user_food(), crab_food(), "food")
+
+def gen_light():
+    return _make_sample(user_light(), crab_light(), "light")
+
+def gen_water():
+    return _make_sample(user_water(), crab_water(), "water")
+
+def gen_about():
+    return _make_sample(user_about(), crab_about(), "about")
+
+def gen_confused():
+    return _make_sample(user_confused(), crab_confused(), "confused")
+
+def gen_noise():
+    return _make_sample(user_noise(), crab_noise(), "noise")
+
+def gen_night():
+    return _make_sample(user_night(), crab_night(), "night")
+
+def gen_lonely():
+    return _make_sample(user_lonely(), crab_lonely(), "lonely")
+
+def gen_misc():
+    return _make_sample(user_misc(), crab_misc(), "misc")
+
+def gen_bye():
+    return _make_sample(user_bye(), crab_bye(), "bye")
+
+def format_sample(s):
+    return f"User: {s['input']}\nCrab: {s['output']}"
+
+
+def to_openai(s):
+    return {
+        "messages": [
+            {"role": "user", "content": s["input"]},
+            {"role": "assistant", "content": s["output"]},
+        ]
+    }
+
+
+def generate_dataset(n_samples=60000, eval_ratio=0.05):
+
+    # ── Weighted topics ──
+    generators = [
+        # Core personality (high)
+        (gen_greeting, 3),
+        (gen_feeling, 3),
+        (gen_misc, 3),
+
+        # Common interaction (medium)
+        (gen_food, 2),
+        (gen_light, 2),
+        (gen_water, 2),
+        (gen_environment, 2),
+        (gen_confused, 2),
+
+        # Situational (low)
+        (gen_temp_hot, 1),
+        (gen_temp_cold, 1),
+        (gen_noise, 1),
+        (gen_night, 1),
+        (gen_lonely, 1),
+        (gen_bye, 1),
+
+        # World / perception (low-medium)
+        (gen_bubbles, 1),
+        (gen_glass, 1),
+        (gen_reflection, 1),
+        (gen_breathing, 1),
+        (gen_movement, 1),
+        (gen_color, 1),
+        (gen_sound, 1),
+    ]
+
+    total_w = sum(w for _, w in generators)
+    generators = [(g, w / total_w) for g, w in generators]
+    counts = [(g, max(1, int(n_samples * w))) for g, w in generators]
+    total = sum(c for _, c in counts)
+    while total < n_samples:
+        g = random.choice(counts)
+        idx = counts.index(g)
+        counts[idx] = (g[0], g[1] + 1)
+        total += 1
+
+    samples = []
+
+    # Generate data
+    for gen, count in counts:
+        for _ in range(count):
+            try:
+                samples.append(gen())
+            except Exception as e:
+                print(f"Error in {gen.__name__}: {e}")
+
+    random.shuffle(samples)
+
+    # Split
+    n_eval = int(len(samples) * eval_ratio)
+    eval_samples = samples[:n_eval]
+    train_samples = samples[n_eval:]
+
+    os.makedirs("data", exist_ok=True)
+
+    # ── Standard format ──
+    with open("data/train.jsonl", "w", encoding="utf-8") as f:
+        for s in train_samples:
+            f.write(json.dumps(s) + "\n")
+
+    with open("data/eval.jsonl", "w", encoding="utf-8") as f:
+        for s in eval_samples:
+            f.write(json.dumps(s) + "\n")
+
+    # ── OpenAI format ──
+    with open("data/train_openai.jsonl", "w", encoding="utf-8") as f:
+        for s in train_samples:
+            f.write(json.dumps(to_openai(s)) + "\n")
+
+    with open("data/eval_openai.jsonl", "w", encoding="utf-8") as f:
+        for s in eval_samples:
+            f.write(json.dumps(to_openai(s)) + "\n")
+
+    # ── Stats ──
+    cats = Counter(s["type"] for s in samples)
+    unique_outputs = len(set(s["output"] for s in samples))
+
+    print(f"\nGenerated {len(samples)} samples")
+    print(f"Unique outputs: {unique_outputs} ({unique_outputs/len(samples)*100:.1f}%)")
+    print(f"Train: {len(train_samples)} | Eval: {len(eval_samples)}\n")
+
+    print("By category:")
+    for cat, count in sorted(cats.items(), key=lambda x: -x[1]):
+        print(f"  {cat}: {count} ({count/len(samples)*100:.1f}%)")
+
 
 if __name__ == "__main__":
-    generate_dataset()
-    print("Dataset generated: crab_data.jsonl")
+    generate_dataset(100000)

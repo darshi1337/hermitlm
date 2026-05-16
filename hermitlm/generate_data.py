@@ -912,7 +912,7 @@ def to_openai(s):
     }
 
 
-def generate_dataset(n_samples=60000, eval_ratio=0.05):
+def generate_dataset(n_samples=100000, eval_ratio=0.05):
 
     # ── Weighted topics ──
     generators = [

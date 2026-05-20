@@ -2,7 +2,7 @@ import json
 import os
 import random
 
-random.seed(617)
+random.seed()
 
 DATA_DIR = "data"
 VOCAB_SIZE = 4096
@@ -14,7 +14,7 @@ SPECIAL_TOKENS = [
 ]
 
 def train_tokenizer(texts, save_path, vocab_size=VOCAB_SIZE):
-    from tokenizers import Tokenizer, models, trainers, pre_tokenizers, decoders, processors
+    from tokenizers import Tokenizer, models, trainers, pre_tokenizers, decoders
 
     tokenizer = Tokenizer(models.BPE())
 
@@ -29,9 +29,6 @@ def train_tokenizer(texts, save_path, vocab_size=VOCAB_SIZE):
 
     print(f"Training tokenizer on {len(texts)} samples...")
     tokenizer.train_from_iterator(texts, trainer)
-
-    tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
-
     tokenizer.add_special_tokens(SPECIAL_TOKENS)
 
     tokenizer.save(save_path)
@@ -66,6 +63,7 @@ def prepare(data_dir=DATA_DIR, n_samples=100000, eval_ratio=0.05):
         from .generate_data import generate_dataset
     except ImportError:
         from generate_data import generate_dataset
+
     generate_dataset(n_samples, eval_ratio)
 
     texts = []
@@ -84,14 +82,13 @@ def prepare(data_dir=DATA_DIR, n_samples=100000, eval_ratio=0.05):
     tokenizer_path = os.path.join(data_dir, "tokenizer.json")
     tokenizer = train_tokenizer(texts, tokenizer_path)
 
-    # Test
-    test = "<|im_start|>user\nhello<|im_end|>\n<|im_start|>assistant\nstate stable.<|im_end|>"
-    ids = tokenizer.encode(test).ids
-    decoded = tokenizer.decode(ids)
+    test = (
+        "<|im_start|>user\nhello<|im_end|>\n"
+        "<|im_start|>assistant\nstate stable.<|im_end|>"
+    )
 
-    print("\nTokenizer test:")
-    print("Decoded:", decoded)
-
+    tokens = tokenizer.encode(test).tokens
+    print(tokens)
 
 if __name__ == "__main__":
     prepare()

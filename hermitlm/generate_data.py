@@ -3,7 +3,7 @@ import random
 import os
 from collections import Counter
 
-random.seed(617)
+random.seed()
 
 def pick(seq):
     return random.choice(seq)
@@ -14,6 +14,24 @@ def pick_weighted(pairs):
 
 def maybe(text, p=0.5):
     return text if random.random() < p else ""
+
+def vary(text):
+    prefixes = [
+        "", "", "",
+        "observation: ",
+        "status: ",
+        "note: ",
+    ]
+
+    suffixes = [
+        "", "", "",
+        " observed.",
+        " confirmed.",
+        " noted.",
+        " within range.",
+    ]
+
+    return pick(prefixes) + text + pick(suffixes)
 
 def join_sentences(*parts):
     return " ".join(p.strip() for p in parts if p).strip()
@@ -107,6 +125,36 @@ SOUNDS = [
 "thud","echo",
 ]
 
+ABSTRACT_TOPICS = [
+"gravity","redstone","speedrunning","dreams","taxes",
+"the internet","villagers","portals","weather","music",
+"diamonds","time","math","servers","inventory management",
+"boats","beds","lava","the moon","commands",
+]
+
+def crab_detail(category):
+    details = [
+        f"i note {pick_unique('detail_obj', CRAB_OBJECTS)} near {pick_unique('detail_spot', CRAB_SPOTS)}.",
+        f"water condition: {pick_unique('detail_water', WATER_DESCRIPTIONS)} and {pick_unique('detail_water', WATER_DESCRIPTIONS)}.",
+        f"current priority: {pick_unique('detail_food', FOOD_TYPES)}.",
+        f"i have checked this {random.randint(2, 18)} times.",
+        f"my {pick_unique('body', BODY_PARTS)} report {pick_unique('thing', WATER_THINGS)} changes.",
+        f"activity will continue as {pick_unique('detail_act', ACTIVITIES)}.",
+        f"small {pick_unique('sound', SOUNDS)} detected near the {pick_unique('detail_obj', CRAB_OBJECTS)}.",
+        f"this remains relevant to the {pick_unique('thing', WATER_THINGS)}.",
+    ]
+    return pick(details)
+
+def enrich_output(text, category):
+    if random.random() < 0.85:
+        text = join_sentences(text, crab_detail(category))
+    if random.random() < 0.25:
+        text = join_sentences(
+            text,
+            f"observation unit {random.randint(1, 999)} complete."
+        )
+    return text
+
 def crab_greeting():
     return join_sentences(
         pick_weighted([
@@ -115,18 +163,18 @@ def crab_greeting():
             ("you again.", 2),
             ("i noticed you.", 1),
         ]),
-        pick([
+        maybe(pick([
             f"i was just {pick_unique('act', ACTIVITIES)}.",
             f"i am {pick_unique('spot', CRAB_SPOTS)}.",
-            f"the water is {pick(WATER_DESCRIPTIONS)} today.",
-            f"the {pick(CRAB_OBJECTS)} looks different today.",
-            f"i heard a {pick(SOUNDS)} earlier.",
-        ]),
-        pick_weighted([
-            (f"the {pick(WATER_THINGS)} feels stable.", 2),
+            f"the water is {pick_unique('water', WATER_DESCRIPTIONS)} today.",
+            f"the {pick_unique('obj', CRAB_OBJECTS)} looks different today.",
+            f"i heard a {pick_unique('sound', SOUNDS)} earlier.",
+        ]), 0.85),
+        maybe(pick_weighted([
+            (f"the {pick_unique('thing', WATER_THINGS)} feels stable.", 2),
             ("i am observing.", 1),
             ("", 3),
-        ])
+        ]), 0.5)
     )
 
 
@@ -137,17 +185,17 @@ def crab_feeling():
             f"{pick_unique('feel', FEELINGS)}. that is my state.",
             f"currently {pick_unique('feel', FEELINGS)}.",
         ]),
-        pick([
-            f"the water is {pick(WATER_DESCRIPTIONS)}.",
+        maybe(pick([
+            f"the water is {pick_unique('water', WATER_DESCRIPTIONS)}.",
             f"i was {pick_unique('act', ACTIVITIES)}.",
-            f"the {pick(WATER_THINGS)} is steady.",
+            f"the {pick_unique('thing', WATER_THINGS)} is steady.",
             f"i secured {pick_unique('spot', CRAB_SPOTS)}.",
             "nothing has tried to eat me recently.",
-        ]),
-        pick_weighted([
+        ]), 0.8),
+        maybe(pick_weighted([
             ("this is acceptable.", 2),
             ("", 3),
-        ])
+        ]), 0.5)
     )
 
 
@@ -158,17 +206,17 @@ def crab_temp_hot():
             "temperature is rising.",
             "this is not ideal.",
         ]),
-        pick([
+        maybe(pick([
             "oxygen will decrease.",
             f"i am relocating to {pick_unique('spot', CRAB_SPOTS)}.",
-            f"my {pick(BODY_PARTS)} feel slower.",
+            f"i detect slower response in my {pick_unique('body', BODY_PARTS)}.",
             "i will conserve energy.",
-        ]),
-        pick_weighted([
+        ]), 0.8),
+        maybe(pick_weighted([
             ("adjustment is required.", 2),
             ("you should correct this.", 1),
             ("", 3),
-        ])
+        ]), 0.5)
     )
 
 
@@ -179,17 +227,17 @@ def crab_temp_cold():
             "temperature has dropped.",
             "cold conditions detected.",
         ]),
-        pick([
+        maybe(pick([
             "oxygen levels are better.",
             f"i will stay {pick_unique('spot', CRAB_SPOTS)}.",
-            f"my {pick(BODY_PARTS)} are less responsive.",
+            f"i detect less response in my {pick_unique('body', BODY_PARTS)}.",
             f"i stopped {pick_unique('act', ACTIVITIES)}.",
-        ]),
-        pick_weighted([
+        ]), 0.8),
+        maybe(pick_weighted([
             ("this is acceptable.", 2),
             ("i will adapt.", 1),
             ("", 3),
-        ])
+        ]), 0.5)
     )
 
 
@@ -206,17 +254,17 @@ def crab_food(hunger_level=0.5):
             ("i am interested in food.", 2),
             ("this is about food, correct.", 2),
         ]),
-        pick([
+        maybe(pick([
             f"provide the {pick_unique('food', FOOD_TYPES)}.",
             f"i prefer the {pick_unique('food', FOOD_TYPES)}.",
             "consumption is a priority.",
             f"i have been {pick_unique('act', ACTIVITIES)} waiting.",
             "my claws are ready.",
-        ]),
-        pick_weighted([
+        ]), 0.8),
+        maybe(pick_weighted([
             ("do not delay.", 2),
             ("", 3),
-        ])
+        ]), 0.5)
     )
 
 def crab_light():
@@ -225,39 +273,39 @@ def crab_light():
         ("it is brighter now.", 2),
         ("it is darker now.", 2),
         ("lighting conditions shifted.", 1),
-        (f"the light is now {pick(LIGHT_STATES)}.", 2),
+        (f"the light is now {pick_unique('light', LIGHT_STATES)}.", 2),
         ("the surroundings look different.", 1),
     ])
 
     reactions = pick([
         f"i can see the {pick_unique('obj', CRAB_OBJECTS)} more clearly.",
         f"i will move to {pick_unique('spot', CRAB_SPOTS)}.",
-        f"this light is {pick(LIGHT_STATES)}.",
+        f"this light is {pick_unique('light', LIGHT_STATES)}.",
         f"low light makes me bump into {pick_unique('obj', CRAB_OBJECTS)}.",
         f"i will remain {pick_unique('spot', CRAB_SPOTS)}.",
         f"i was {pick_unique('act', ACTIVITIES)} but now i am observing.",
-        f"my {pick(BODY_PARTS)} feel different in this light.",
+        f"my {pick_unique('body', BODY_PARTS)} feel different in this light.",
         "lower light makes me still.",
         "higher light makes me alert.",
     ])
 
     extras = pick_weighted([
         (f"the {pick_unique('obj', CRAB_OBJECTS)} casts a shadow.", 2),
-        (f"i prefer {pick(LIGHT_STATES)} light.", 1),
+        (f"i prefer {pick_unique('light', LIGHT_STATES)} light.", 1),
         ("", 4),
     ])
 
-    return join_sentences(changes, reactions, extras)
+    return join_sentences(changes, maybe(reactions, 0.85), maybe(extras, 0.5))
 
 def crab_water():
     starter = pick_weighted([
         ("the water is everything.", 3),
         ("this environment is water. it defines everything.", 1),
-        (f"the water feels {pick(WATER_DESCRIPTIONS)}.", 2),
-        (f"i can sense the water. it is {pick(WATER_DESCRIPTIONS)}.", 2),
-        (f"the {pick(WATER_THINGS)} is noticeable.", 1),
+        (f"the water feels {pick_unique('water', WATER_DESCRIPTIONS)}.", 2),
+        (f"i can sense the water. it is {pick_unique('water', WATER_DESCRIPTIONS)}.", 2),
+        (f"the {pick_unique('thing', WATER_THINGS)} is noticeable.", 1),
         ("conditions seem stable.", 2),
-        (f"the water near the {pick_unique('obj', CRAB_OBJECTS)} feels {pick(WATER_DESCRIPTIONS)}.", 1),
+        (f"the water near the {pick_unique('obj', CRAB_OBJECTS)} feels {pick_unique('water', WATER_DESCRIPTIONS)}.", 1),
         ("i detect changes in the water.", 2),
     ])
 
@@ -265,24 +313,24 @@ def crab_water():
         "breathing is efficient.",
         "this feels like fresh water.",
         "this is acceptable.",
-        f"the {pick(WATER_THINGS)} feels controlled.",
+        f"the {pick_unique('thing', WATER_THINGS)} feels controlled.",
         "clarity affects awareness.",
         "reduced visibility is not ideal.",
         f"i will move around {pick_unique('spot', CRAB_SPOTS)} to assess.",
         "this improves stability.",
         f"the {pick_unique('obj', CRAB_OBJECTS)} appears cleaner.",
-        f"my {pick(BODY_PARTS)} detect the difference.",
+        f"my {pick_unique('body', BODY_PARTS)} detect the difference.",
         f"i was {pick_unique('act', ACTIVITIES)} and noticed the change.",
     ])
 
     extra = pick_weighted([
-        (f"the {pick(WATER_THINGS)} is optimal.", 2),
+        (f"the {pick_unique('thing', WATER_THINGS)} is optimal.", 2),
         (f"i will respond by {pick_unique('act', ACTIVITIES)}.", 1),
         ("this is important for survival.", 2),
         ("", 3),
     ])
 
-    return join_sentences(starter, middle, extra)
+    return join_sentences(starter, maybe(middle, 0.8), maybe(extra, 0.5))
 
 def crab_about():
     starter = pick_weighted([
@@ -296,7 +344,7 @@ def crab_about():
     description = pick([
         f"i live in water. i consume {pick_unique('food', FOOD_TYPES)}.",
         "i move. i observe. i remain.",
-        f"i have {pick(BODY_PARTS)}. they function.",
+        f"i have {pick_unique('body', BODY_PARTS)}. they function.",
         f"i spend most of my time {pick_unique('act', ACTIVITIES)}.",
         "my behavior is simple but effective.",
         "i exist within this environment.",
@@ -306,20 +354,21 @@ def crab_about():
         f"currently i am {pick_unique('act', ACTIVITIES)}.",
         f"i remain near the {pick_unique('obj', CRAB_OBJECTS)}.",
         f"consumption of {pick_unique('food', FOOD_TYPES)} is optimal.",
-        f"my size is {pick(['small', 'very small', 'compact', 'minimal'])}.",
+        f"my size is {pick_unique('size', ['small', 'very small', 'compact', 'minimal'])}.",
     ])
 
     extra = pick_weighted([
         (f"i prefer the {pick_unique('obj', CRAB_OBJECTS)}.", 1),
-        (f"my {pick(BODY_PARTS)} are functional.", 2),
+        (f"function remains normal in my {pick_unique('body', BODY_PARTS)}.", 2),
         (f"i consume {pick_unique('food', FOOD_TYPES)} when available.", 2),
         ("this is sufficient.", 2),
         ("", 3),
     ])
 
-    return join_sentences(starter, description, extra)
+    return join_sentences(starter, maybe(description, 0.8), maybe(extra, 0.5))
 
 def crab_confused(thing=None):
+    thing = thing or pick_unique("topic", ABSTRACT_TOPICS)
 
     starter = pick_weighted([
         (f"i do not understand {thing}.", 3),
@@ -339,11 +388,11 @@ def crab_confused(thing=None):
         "i prioritize food and safety.",
         f"can we discuss {pick_unique('food', FOOD_TYPES)} instead.",
         "this seems unnecessarily complex.",
-        f"the {pick(WATER_THINGS)} is more important.",
+        f"the {pick_unique('thing', WATER_THINGS)} is more important.",
         f"i would rather consider {pick_unique('act', ACTIVITIES)}.",
     ])
 
-    return join_sentences(starter, deflection)
+    return join_sentences(starter, maybe(deflection, 0.8))
 
 def crab_environment():
     obj = pick_unique('obj', CRAB_OBJECTS)
@@ -359,7 +408,7 @@ def crab_environment():
     reaction = pick([
         f"i will inspect it from {pick_unique('spot', CRAB_SPOTS)}.",
         f"i will move around it {random.randint(3, 15)} times.",
-        f"i will test it with my {pick(BODY_PARTS)}.",
+        f"i will test it with my {pick_unique('body', BODY_PARTS)}.",
         "it may provide cover.",
         "this alters movement patterns.",
         f"i may claim {obj} as territory.",
@@ -377,7 +426,7 @@ def crab_environment():
         ("", 3),
     ])
 
-    return join_sentences(starter, reaction, extra)
+    return join_sentences(starter, maybe(reaction, 0.8), maybe(extra, 0.5))
 
 def crab_noise():
     sound = pick(SOUNDS)
@@ -393,7 +442,7 @@ def crab_noise():
     reaction = pick([
         "vibrations indicate potential danger.",
         f"i moved to {pick_unique('spot', CRAB_SPOTS)}.",
-        f"my {pick(BODY_PARTS)} became tense.",
+        f"tension increased in my {pick_unique('body', BODY_PARTS)}.",
         "rapid movement was required.",
         "this was not expected.",
         f"i was {pick_unique('act', ACTIVITIES)} and then stopped.",
@@ -405,12 +454,12 @@ def crab_noise():
 
     extra = pick_weighted([
         ("is it stable now.", 2),
-        (f"my {pick(BODY_PARTS)} remain tense.", 1),
+        (f"tension remains in my {pick_unique('body', BODY_PARTS)}.", 1),
         ("i will stay cautious.", 2),
         ("", 3),
     ])
 
-    return join_sentences(starter, reaction, extra)
+    return join_sentences(starter, maybe(reaction, 0.8), maybe(extra, 0.5))
 
 def crab_night():
     starter = pick_weighted([
@@ -425,7 +474,7 @@ def crab_night():
         "i will remain still.",
         "activity is no longer required.",
         f"i will stay {pick_unique('spot', CRAB_SPOTS)}.",
-        f"my {pick(BODY_PARTS)} are slowing.",
+        f"slowing detected in my {pick_unique('body', BODY_PARTS)}.",
         "this is a low-energy state.",
         "awareness remains but reduced.",
         f"i was {pick_unique('act', ACTIVITIES)} but have stopped.",
@@ -440,7 +489,7 @@ def crab_night():
         ("", 3),
     ])
 
-    return join_sentences(starter, middle, extra)
+    return join_sentences(starter, maybe(middle, 0.8), maybe(extra, 0.5))
 
 def crab_lonely():
     starter = pick_weighted([
@@ -457,10 +506,10 @@ def crab_lonely():
         "additional entities would change conditions.",
         "this state is stable.",
         f"the {pick_unique('obj', CRAB_OBJECTS)} provides some structure.",
-        f"the {pick(WATER_THINGS)} is consistent.",
+        f"the {pick_unique('thing', WATER_THINGS)} is consistent.",
         "interaction is not required for function.",
         f"i occasionally focus on {pick_unique('food', FOOD_TYPES)}.",
-        f"my {pick(BODY_PARTS)} respond normally.",
+        f"normal response confirmed in my {pick_unique('body', BODY_PARTS)}.",
         "this is a controlled environment.",
     ])
 
@@ -471,7 +520,7 @@ def crab_lonely():
         ("", 3),
     ])
 
-    return join_sentences(starter, middle, extra)
+    return join_sentences(starter, maybe(middle, 0.8), maybe(extra, 0.5))
 
 def crab_misc():
     starter = pick_weighted([
@@ -486,18 +535,18 @@ def crab_misc():
         "the water responds to movement.",
         "fluid enters and exits continuously.",
         "the boundary beyond is unclear.",
-        f"i counted my {pick(BODY_PARTS)}. quantity is sufficient.",
+        f"i counted my {pick_unique('body', BODY_PARTS)}. quantity is sufficient.",
         "bubbles rise consistently.",
         f"i detected my reflection near the {pick_unique('obj', CRAB_OBJECTS)}.",
-        f"the water is {pick(WATER_DESCRIPTIONS)} when sampled.",
-        f"i attempted to {pick(['move backwards', 'interact with a bubble', 'push an object', 'remain still'])}. results were limited.",
+        f"the water is {pick_unique('water', WATER_DESCRIPTIONS)} when sampled.",
+        f"i attempted to {pick_unique('attempt', ['move backwards', 'interact with a bubble', 'push an object', 'remain still'])}. results were limited.",
         f"the {pick_unique('obj', CRAB_OBJECTS)} appears different from {pick_unique('spot', CRAB_SPOTS)}.",
         f"perspective changes at {pick_unique('spot', CRAB_SPOTS)}.",
         f"priority remains {pick_unique('food', FOOD_TYPES)}.",
-        f"my {pick(BODY_PARTS)} perform standard motion patterns.",
-        f"the {pick(WATER_THINGS)} varies over time.",
+        f"my {pick_unique('body', BODY_PARTS)} perform standard motion patterns.",
+        f"the {pick_unique('thing', WATER_THINGS)} varies over time.",
         f"i located a small particle {pick_unique('spot', CRAB_SPOTS)}. it was not {pick_unique('food', FOOD_TYPES)}.",
-        f"minor movement detected in my {pick(BODY_PARTS)}.",
+        f"minor movement detected in my {pick_unique('body', BODY_PARTS)}.",
         f"i observed the {pick_unique('obj', CRAB_OBJECTS)} for {random.randint(5, 30)} units.",
     ])
 
@@ -590,6 +639,7 @@ def user_about():
 
 
 def user_confused(thing=None):
+    thing = thing or pick_unique("topic", ABSTRACT_TOPICS)
 
     return pick([
         f"do you understand {thing}",
@@ -604,7 +654,7 @@ def user_confused(thing=None):
 
 
 def user_environment():
-    obj = pick(CRAB_OBJECTS)
+    obj = pick_unique('obj', CRAB_OBJECTS)
 
     return pick([
         f"i added {obj}",
@@ -682,12 +732,12 @@ def crab_bye():
     middles = [
         "i'll be here. swimming.",
         "i will continue being a crab.",
-        f"bring {pick(FOOD_TYPES)} next time.",
+        f"bring {pick_unique('food', FOOD_TYPES)} next time.",
         "the water will keep me company.",
-        f"i'll go back to {pick(ACTIVITIES)}.",
+        f"i'll go back to {pick_unique('act', ACTIVITIES)}.",
         "don't forget about me. or the food.",
-        f"my {pick(BODY_PARTS)} will miss you. maybe.",
-        f"i'll eat some {pick(FOOD_TYPES)} if there's any left.",
+        f"my {pick_unique('body', BODY_PARTS)} will miss you. maybe.",
+        f"i'll eat some {pick_unique('food', FOOD_TYPES)} if there's any left.",
     ]
 
     return join_sentences(pick(starters), pick(middles))
@@ -699,7 +749,7 @@ def crab_bye():
 def _make_sample(user, assistant, category):
     return {
         "input": user,
-        "output": assistant,
+        "output": enrich_output(assistant, category),
         "type": category
     }
 
@@ -713,10 +763,10 @@ def _topic(user_fns, crab_fns, category):
         user_msg = user_fn()
         
         try:
-            response = crab_fn()
+            response = vary(crab_fn())
         except TypeError:
             # for functions like crab_food(hunger_level)
-            response = crab_fn(0.5)
+            response = vary(crab_fn(0.5))
 
         return _make_sample(user_msg, response, category)
 
@@ -757,6 +807,9 @@ gen_glass = _topic(
         lambda: "i sometimes approach the boundary.",
         lambda: "the outside appears dry. that is concerning.",
         lambda: "this environment ends at the boundary.",
+        lambda: "the glass permits sight but blocks movement.",
+        lambda: "i press close, then reassess.",
+        lambda: "large forms pass beyond the transparent wall.",
     ],
     "glass",
 )
@@ -773,6 +826,9 @@ gen_reflection = _topic(
         lambda: "i attempted interaction. no response.",
         lambda: "it is not a separate organism.",
         lambda: "visual feedback confirmed: it is me.",
+        lambda: "the duplicate vanishes when the angle changes.",
+        lambda: "i compare claw position. exact match.",
+        lambda: "mirror-entity classification downgraded to surface effect.",
     ],
     "reflection",
 )
@@ -789,6 +845,9 @@ gen_breathing = _topic(
         lambda: "breathing is constant and required.",
         lambda: "the water condition affects efficiency.",
         lambda: "this process does not stop.",
+        lambda: "gill function depends on moving water.",
+        lambda: "stable flow improves oxygen intake.",
+        lambda: "poor water makes breathing inefficient.",
     ],
     "breathing",
 )
@@ -805,6 +864,9 @@ gen_movement = _topic(
         lambda: "locomotion is efficient in this medium.",
         lambda: "i move to optimize conditions.",
         lambda: "stillness is also a strategy.",
+        lambda: "sideways motion remains the preferred method.",
+        lambda: "movement changes when the current shifts.",
+        lambda: "short bursts conserve energy.",
     ],
     "movement",
 )
@@ -821,11 +883,14 @@ gen_color = _topic(
         lambda: "objects appear different under changing light.",
         lambda: "i detect contrast more than detail.",
         lambda: "visual input is limited but sufficient.",
+        lambda: "bright objects attract attention first.",
+        lambda: "murky water reduces color certainty.",
+        lambda: "shape matters more than color.",
     ],
     "color",
 )
 
-gen_environment = _topic(
+gen_environment_status = _topic(
     [
         lambda: "do you like this place",
         lambda: "what do you think of the environment",
@@ -837,6 +902,10 @@ gen_environment = _topic(
         lambda: "this area is sufficient.",
         lambda: "i have mapped most of this space.",
         lambda: "changes are noticeable immediately.",
+        lambda: "cover points are positioned acceptably.",
+        lambda: "the layout supports cautious movement.",
+        lambda: "territory boundaries remain understandable.",
+        lambda: "environmental complexity is manageable.",
     ],
     "environment",
 )
@@ -853,6 +922,9 @@ gen_sound = _topic(
         lambda: "i reacted immediately.",
         lambda: "sudden changes require caution.",
         lambda: "the system stabilized afterward.",
+        lambda: "sound becomes vibration here.",
+        lambda: "i tracked the disturbance through the current.",
+        lambda: "loud events require stillness.",
     ],
     "sound",
 )
@@ -860,8 +932,8 @@ gen_sound = _topic(
 def gen_greeting():
     return _make_sample(user_greeting(), crab_greeting(), "greeting")
 
-def gen_feeling():
-    return _make_sample(user_feeling(), crab_feeling(), "feeling")
+def gen_state():
+    return _make_sample(user_feeling(), crab_feeling(), "state")
 
 def gen_temp_hot():
     return _make_sample(user_temp_hot(), crab_temp_hot(), "temp_hot")
@@ -882,7 +954,13 @@ def gen_about():
     return _make_sample(user_about(), crab_about(), "about")
 
 def gen_confused():
-    return _make_sample(user_confused(), crab_confused(), "confused")
+    thing = pick_unique("topic", ABSTRACT_TOPICS)
+    return _make_sample(user_confused(thing), crab_confused(thing), "confused")
+
+def gen_environment():
+    if random.random() < 0.65:
+        return _make_sample(user_environment(), crab_environment(), "environment")
+    return gen_environment_status()
 
 def gen_noise():
     return _make_sample(user_noise(), crab_noise(), "noise")
@@ -914,21 +992,20 @@ def to_openai(s):
 
 def generate_dataset(n_samples=100000, eval_ratio=0.05):
 
-    # ── Weighted topics ──
     generators = [
-        # Core personality (high)
+        # Core personality
         (gen_greeting, 3),
-        (gen_feeling, 3),
+        (gen_state, 3),
         (gen_misc, 3),
 
-        # Common interaction (medium)
+        # Common interaction
         (gen_food, 2),
         (gen_light, 2),
         (gen_water, 2),
         (gen_environment, 2),
         (gen_confused, 2),
 
-        # Situational (low)
+        # Situational
         (gen_temp_hot, 1),
         (gen_temp_cold, 1),
         (gen_noise, 1),
@@ -936,7 +1013,7 @@ def generate_dataset(n_samples=100000, eval_ratio=0.05):
         (gen_lonely, 1),
         (gen_bye, 1),
 
-        # World / perception (low-medium)
+        # World
         (gen_bubbles, 1),
         (gen_glass, 1),
         (gen_reflection, 1),
@@ -946,36 +1023,26 @@ def generate_dataset(n_samples=100000, eval_ratio=0.05):
         (gen_sound, 1),
     ]
 
-    total_w = sum(w for _, w in generators)
-    generators = [(g, w / total_w) for g, w in generators]
-    counts = [(g, max(1, int(n_samples * w))) for g, w in generators]
-    total = sum(c for _, c in counts)
-    while total < n_samples:
-        g = random.choice(counts)
-        idx = counts.index(g)
-        counts[idx] = (g[0], g[1] + 1)
-        total += 1
+    funcs, weights = zip(*generators)
 
     samples = []
 
-    # Generate data
-    for gen, count in counts:
-        for _ in range(count):
-            try:
-                samples.append(gen())
-            except Exception as e:
-                print(f"Error in {gen.__name__}: {e}")
+    for _ in range(n_samples):
+        gen = random.choices(funcs, weights=weights, k=1)[0]
+
+        try:
+            samples.append(gen())
+        except Exception as e:
+            print(f"Error in {gen.__name__}: {e}")
 
     random.shuffle(samples)
 
-    # Split
     n_eval = int(len(samples) * eval_ratio)
     eval_samples = samples[:n_eval]
     train_samples = samples[n_eval:]
 
     os.makedirs("data", exist_ok=True)
 
-    # ── Standard format ──
     with open("data/train.jsonl", "w", encoding="utf-8") as f:
         for s in train_samples:
             f.write(json.dumps(s) + "\n")
@@ -984,7 +1051,7 @@ def generate_dataset(n_samples=100000, eval_ratio=0.05):
         for s in eval_samples:
             f.write(json.dumps(s) + "\n")
 
-    # ── OpenAI format ──
+    # Save OpenAI format
     with open("data/train_openai.jsonl", "w", encoding="utf-8") as f:
         for s in train_samples:
             f.write(json.dumps(to_openai(s)) + "\n")
@@ -993,7 +1060,7 @@ def generate_dataset(n_samples=100000, eval_ratio=0.05):
         for s in eval_samples:
             f.write(json.dumps(to_openai(s)) + "\n")
 
-    # ── Stats ──
+    # Stats
     cats = Counter(s["type"] for s in samples)
     unique_outputs = len(set(s["output"] for s in samples))
 

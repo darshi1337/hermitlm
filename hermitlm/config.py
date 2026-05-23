@@ -3,7 +3,7 @@ from dataclasses import dataclass
 @dataclass
 class HermitConfig:
     # Tokenizer
-    vocab_size: int = 2833
+    vocab_size: int = 2834
     max_seq_len: int = 512
 
     # Model size

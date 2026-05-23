@@ -6,6 +6,7 @@ import time
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 import torch
+from tokenizers import Tokenizer
 
 from .config import HermitConfig, TrainConfig
 from .dataset import get_dataloader
@@ -41,6 +42,35 @@ def compute_loss(logits, targets, mask):
     loss = (loss * mask.view(-1)).sum() / mask.sum()
     return loss
 
+def sync_config_with_tokenizer(config, tokenizer_path):
+    tokenizer = Tokenizer.from_file(tokenizer_path)
+    vocab_size = tokenizer.get_vocab_size()
+
+    if config.vocab_size != vocab_size:
+        print(
+            f"Tokenizer vocab size is {vocab_size}; "
+            f"overriding config vocab_size={config.vocab_size}"
+        )
+        config.vocab_size = vocab_size
+
+    for attr, token in [
+        ("pad_id", "<pad>"),
+        ("bos_id", "<|im_start|>"),
+        ("eos_id", "<|im_end|>"),
+    ]:
+        token_id = tokenizer.token_to_id(token)
+        if token_id is not None:
+            setattr(config, attr, token_id)
+
+def check_token_ids(x, vocab_size, split):
+    max_id = int(x.max().item())
+    if max_id >= vocab_size:
+        raise ValueError(
+            f"{split} batch contains token id {max_id}, "
+            f"but model vocab_size is {vocab_size}. "
+            "Regenerate the tokenizer or let train.py sync from tokenizer.json."
+        )
+
 @torch.no_grad()
 def evaluate(model, loader, device, max_batches=50):
     model.eval()
@@ -54,6 +84,7 @@ def evaluate(model, loader, device, max_batches=50):
         y = y.to(device)
         mask = mask.to(device)
 
+        check_token_ids(x, model.config.vocab_size, "eval")
         logits, _ = model(x)
         loss = compute_loss(logits, y, mask)
 
@@ -73,6 +104,7 @@ def train():
     print(f"Device: {device}")
 
     tokenizer_path = os.path.join(tc.data_dir, "tokenizer.json")
+    sync_config_with_tokenizer(mc, tokenizer_path)
 
     model = HermitLM(mc).to(device)
     print(model.param_summary())
@@ -127,6 +159,8 @@ def train():
             x = x.to(device)
             y = y.to(device)
             mask = mask.to(device)
+
+            check_token_ids(x, model.config.vocab_size, "train")
 
             lr = get_lr(step, tc)
             for pg in optimizer.param_groups:

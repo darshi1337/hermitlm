@@ -104,5 +104,5 @@ def get_dataloader(
             pad_id=dataset.pad_id
         ),
         num_workers=0,
-        pin_memory=True,
+        pin_memory=torch.cuda.is_available(),
     )

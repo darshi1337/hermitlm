@@ -1,9 +1,11 @@
 import os
 import discord
 import asyncio
+from dotenv import load_dotenv
 
 from hermitlm.inference import HermitInference
 
+load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 CHECKPOINT = "checkpoints/best_model.pt"

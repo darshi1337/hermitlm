@@ -1,4 +1,9 @@
 # hermitlm
 
-To-Do
-- Add minecraft, Skycrab, MCSR references to the dataset
+HermitLM — a small transformer trained on synthetic aquatic dialogue.
+
+Features:
+- 8.15M parameter model
+- custom dataset
+- local training
+- crab-like personality

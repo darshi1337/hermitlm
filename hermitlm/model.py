@@ -146,6 +146,9 @@ class HermitLM(nn.Module):
             if next_id.item() == self.config.eos_id:
                 break
 
+        for token in set(idx[0].tolist()):
+            probs[0, token] *= 0.85
+
         return idx
 
     def param_count(self):

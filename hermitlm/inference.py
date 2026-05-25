@@ -26,7 +26,7 @@ class HermitInference:
 
         print(f"HermitLM loaded: {self.model.param_summary()}")
 
-    def chat(self, user_input, temperature=0.8, top_k=40, max_tokens=64):
+    def chat(self, user_input, temperature=0.6, top_k=20, max_tokens=40):
         prompt = self._format_prompt(user_input)
 
         input_ids = self.tokenizer.encode(prompt).ids
@@ -40,23 +40,37 @@ class HermitInference:
         )
 
         generated_ids = output_t[0].tolist()[len(input_ids):]
-
         text = self.tokenizer.decode(generated_ids)
+        text = text.strip().lower()
 
         if "<|im_end|>" in text:
             text = text.split("<|im_end|>")[0]
 
-        if "<|im_start|>" in text:
-            text = text.split("<|im_start|>")[0]
+        words = text.split()
+        cleaned = []
+        for w in words:
+            if not cleaned or cleaned[-1] != w:
+                cleaned.append(w)
+        text = " ".join(cleaned)
 
-        return text.strip()
+        if "." in text:
+            text = text.split(".")[0] + "."
+
+        if len(text) < 3:
+            text = "i am here."
+
+        return text
 
     def _format_prompt(self, user_input):
         return (
+            "<|im_start|>system\n"
+            "you are a small crab. speak simply. answer directly. "
+            "do not overthink. keep responses short.\n"
+            "<|im_end|>\n"
             "<|im_start|>user\n"
             f"{user_input}<|im_end|>\n"
             "<|im_start|>assistant\n"
-        )
+    )
 
 def main():
     import argparse

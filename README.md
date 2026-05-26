@@ -66,7 +66,7 @@ Small causal transformer. Learned positions, standard attention, LayerNorm, weig
 Invitation link:
 
 ```text
-https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&scope=bot%20applications.commands&permissions=68608
+https://discord.com/oauth2/authorize?client_id=1124355443683233864&scope=bot&permissions=274877975552
 ```
 
 ## Install

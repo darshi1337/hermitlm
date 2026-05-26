@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 from hermitlm.inference import HermitInference
 from hermitlm.voice import text_to__mp3
+from hermitlm.db import insert_conversation
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -50,11 +51,21 @@ async def on_message(message):
                 None,
                 lambda: text_to__mp3(response)
             )
-
         await message.channel.send(
             response,
             file=discord.File(audio_fp, filename="hermit_response.mp3"),
         )
+        try:
+            insert_conversation(
+                user_id=message.author.id,
+                username=str(message.author),
+                user_input=user_input,
+                bot_response=response,
+                channel_id=message.channel.id
+            )
+            print("✅ Logged to DB")
+        except Exception as e:
+            print("❌ DB ERROR:", e)
 
 
 client.run(TOKEN)

@@ -2,12 +2,9 @@
 
 ![HermitLM](assets/hermit_1.png)
 
-## HermitLM
+<video src="assets/video.mp4" controls width="100%"></video>
 
 A ~8M parameter LLM that talks like a tiny crab in an aquatic world.
-
-Dataset  Model  License  
-Train  Chat  Discord Bot
 
 This project exists to show that training your own language model is not magic. No giant lab, no mystery box, no billion-parameter monster required. HermitLM walks through the full path: synthetic data generation, tokenizer training, model architecture, training loop, inference, and a Discord bot that can reply with voice.
 
@@ -15,29 +12,23 @@ It will not write essays or replace frontier models. That is not the point. The 
 
 ```text
 You> hello crab
-Hermit> hello. i am near the kelp. the current feels stable.
+Hermit> you again. i am near the sand. i have checked this 9 times.
 
 You> are you hungry
-Hermit> food detected. i prefer soft algae. do not delay.
+Hermit> food detected. i have been exploring the cave waiting. current priority: bubble snacks.
 
 You> how is the water
-Hermit> the water feels clear. breathing is efficient. this is important for survival.
+Hermit> the water is everything. this improves stability. this remains relevant to the temperature.
 
 You> what is redstone
-Hermit> redstone appears to be a human concept. explain it in terms of food or movement.
+Hermit> redstone appears to be a human concept. the temperature is more important. water condition: swirling and clear.
 
 You> do you feel alone
-Hermit> i exist alone in this environment. the shell provides some structure. this is acceptable.
+Hermit> i exist alone in this environment. the tiny shell provides some structure. current priority: crunchy bits.
 
 You> goodnight crab
-Hermit> night cycle detected. movement will decrease. i will remain here until light returns.
+Hermit> it is now dark. i will remain still. i have checked this 18 times.
 ```
-
-## What Is HermitLM?
-
-HermitLM is a tiny language model that pretends to be a crab. It speaks in short, lowercase sentences about water, food, light, rocks, shells, bubbles, and cautious crab observations. It does not try to be a general assistant. It is a small character model built so the whole training pipeline feels understandable.
-
-The dataset is generated synthetically from crab-themed conversation templates, then converted into chat-style training text. The model is trained from scratch and can run locally for inference or inside a Discord bot.
 
 ## Architecture
 
@@ -55,6 +46,14 @@ The dataset is generated synthetically from crab-themed conversation templates, 
 | LM head | Weight-tied with embeddings |
 
 Small causal transformer. Learned positions, standard attention, LayerNorm, weight tying, and a compact SwiGLU feed-forward block.
+
+## Discord Bot
+
+Invitation link:
+
+```text
+https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&scope=bot%20applications.commands&permissions=68608
+```
 
 ## Install
 
@@ -101,9 +100,7 @@ By default, inference loads:
 
 - `checkpoints/best_model.pt`
 - `data/tokenizer.json`
-
-## Discord Bot
-
+```
 Create a `.env` file:
 
 ```env
@@ -142,3 +139,7 @@ ffprobe -version
 ```
 
 If `ffmpeg` is not available, HermitLM still sends normal-speed gTTS audio.
+
+## License
+
+MIT

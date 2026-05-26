@@ -1,4 +1,7 @@
 torch
 tokenizers
 numpy
-json
+discord.py
+python-dotenv
+gTTS
+pydub

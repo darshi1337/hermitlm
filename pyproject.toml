@@ -1,0 +1,26 @@
+[project]
+name = "hermitlm"
+version = "0.1.0"
+description = "A compact conversational language model with Discord + voice"
+authors = [{name="darshi1337"}]
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = [
+    "torch",
+    "tokenizers",
+    "discord.py",
+    "python-dotenv",
+    "gTTS",
+    "pydub"
+]
+
+[project.scripts]
+hermitlm = "hermitlm.__main__:main"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["hermitlm"]

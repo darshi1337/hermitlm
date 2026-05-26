@@ -1,5 +1,6 @@
 data/
 checkpoints/
+hermitlm.egg-info/
 __pycache__/
 *.pyc
 .env

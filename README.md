@@ -2,7 +2,7 @@
 
 ![HermitLM](assets/hermit_1.png)
 
-<video src="assets/video.mp4" controls width="100%"></video>
+[Watch demo video](assets/video.mp4)
 
 A ~8M parameter LLM that talks like a tiny crab in an aquatic world.
 

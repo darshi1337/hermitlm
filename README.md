@@ -1,7 +1,9 @@
 <h1 align="center">HermitLM</h1>
 
 <p align="center">
-  <img alt="Dataset" src="https://img.shields.io/badge/Dataset-hermitlm--100k-4b5563">
+  <a href="https://huggingface.co/datasets/darshi1337/hermitlm-100k-generic">
+    <img alt="Dataset" src="https://img.shields.io/badge/Dataset-hermitlm--100k-4b5563">
+  </a>
   <img alt="Model" src="https://img.shields.io/badge/Model-hermitlm--8M-b65f36">
   <img alt="License" src="https://img.shields.io/badge/License-MIT-3fa34d">
 </p>

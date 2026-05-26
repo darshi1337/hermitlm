@@ -8,9 +8,9 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 import torch
 from tokenizers import Tokenizer
 
-from .config import HermitConfig, TrainConfig
-from .dataset import get_dataloader
-from .model import HermitLM
+from hermitlm.config import HermitConfig, TrainConfig
+from hermitlm.dataset import get_dataloader
+from hermitlm.model import HermitLM
 
 def get_device(config):
     if config.device == "auto":

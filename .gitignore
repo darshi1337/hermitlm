@@ -3,3 +3,5 @@ checkpoints/
 __pycache__/
 *.pyc
 .env
+train_9000.py
+config.json

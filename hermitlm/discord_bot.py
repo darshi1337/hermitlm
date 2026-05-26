@@ -4,6 +4,7 @@ import asyncio
 from dotenv import load_dotenv
 
 from hermitlm.inference import HermitInference
+from hermitlm.voice import text_to__mp3
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -34,7 +35,7 @@ async def on_message(message):
             return
 
         async with message.channel.typing():
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(
                 None,
                 lambda: engine.chat(
@@ -45,7 +46,15 @@ async def on_message(message):
                 )
             )
 
-        await message.channel.send(response)
+            audio_fp = await loop.run_in_executor(
+                None,
+                lambda: text_to__mp3(response)
+            )
+
+        await message.channel.send(
+            response,
+            file=discord.File(audio_fp, filename="hermit_response.mp3"),
+        )
 
 
 client.run(TOKEN)

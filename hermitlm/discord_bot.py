@@ -1,22 +1,18 @@
 import asyncio
+import requests
 
 import discord
 
-from hermitlm.bot_faq import get_faq_response
-from hermitlm.db import init_db, insert_conversation
-from hermitlm.inference import HermitInference
+from hermitlm.db import init_db
 from hermitlm.settings import (
-    CHECKPOINT_PATH,
     DEFAULT_MAX_TOKENS,
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_K,
-    DEVICE,
     DISCORD_TOKEN,
-    TOKENIZER_PATH,
 )
 from hermitlm.voice import text_to_mp3
 
-engine = HermitInference(CHECKPOINT_PATH, TOKENIZER_PATH, device=DEVICE)
+API_URL = "http://127.0.0.1:8000/chat"
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -35,52 +31,67 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    if client.user not in message.mentions and not message.content.startswith("!hermit"):
+    if (
+        client.user not in message.mentions
+        and not message.content.startswith("!hermit")
+    ):
         return
 
     user_input = message.content.replace("!hermit", "").strip()
+
     if not user_input:
         return
 
-    response = get_faq_response(user_input)
+    async with message.channel.typing():
 
-    if response is None:
-        async with message.channel.typing():
-            loop = asyncio.get_running_loop()
-            response = await loop.run_in_executor(
+        payload = {
+            "user_id": str(message.author.id),
+            "message": user_input,
+            "temperature": DEFAULT_TEMPERATURE,
+            "top_k": DEFAULT_TOP_K,
+            "max_tokens": DEFAULT_MAX_TOKENS,
+        }
+
+        loop = asyncio.get_running_loop()
+
+        try:
+            response_json = await loop.run_in_executor(
                 None,
-                lambda: engine.chat(
-                    user_input,
-                    temperature=DEFAULT_TEMPERATURE,
-                    top_k=DEFAULT_TOP_K,
-                    max_tokens=DEFAULT_MAX_TOKENS,
-                ),
+                lambda: requests.post(
+                    API_URL,
+                    json=payload,
+                    timeout=30,
+                ).json()
             )
 
-    loop = asyncio.get_running_loop()
-    audio_fp = await loop.run_in_executor(None, lambda: text_to_mp3(response))
+            response = response_json.get(
+                "response",
+                "Something went wrong."
+            )
+
+        except Exception as e:
+            print("API ERROR:", e)
+            response = "Backend API is offline."
+
+        audio_fp = await loop.run_in_executor(
+            None,
+            lambda: text_to_mp3(response)
+        )
 
     await message.channel.send(
         response,
-        file=discord.File(audio_fp, filename="hermit_response.mp3"),
+        file=discord.File(
+            audio_fp,
+            filename="hermit_response.mp3"
+        ),
     )
-
-    try:
-        insert_conversation(
-            user_id=message.author.id,
-            username=str(message.author),
-            user_input=user_input,
-            bot_response=response,
-            channel_id=message.channel.id,
-        )
-        print("Logged to DB")
-    except Exception as e:
-        print("DB ERROR:", e)
 
 
 def run_bot():
     if not DISCORD_TOKEN:
-        raise ValueError("DISCORD_TOKEN not found in .env or environment")
+        raise ValueError(
+            "DISCORD_TOKEN not found in .env or environment"
+        )
 
     client.run(DISCORD_TOKEN)
 

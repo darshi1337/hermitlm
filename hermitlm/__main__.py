@@ -14,6 +14,7 @@ def main():
         print("  python -m hermitlm prepare      Generate data & tokenizer")
         print("  python -m hermitlm chat         Chat in terminal")
         print("  python -m hermitlm bot          Run Discord bot")
+        print("  python -m hermitlm api          Run FastAPI server")
         return
 
     cmd = sys.argv[1]
@@ -38,16 +39,19 @@ def main():
         inference_main()
 
     elif cmd == "bot":
-        from hermitlm.discord_bot import client
-        from dotenv import load_dotenv
+        from hermitlm.discord_bot import run_bot
 
-        load_dotenv()
-        token = os.getenv("DISCORD_TOKEN")
+        run_bot()
 
-        if not token:
-            raise ValueError("DISCORD_TOKEN not found in .env")
+    elif cmd == "api":
+        import uvicorn
 
-        client.run(token)
+        uvicorn.run(
+            "hermitlm.api:app",
+            host=os.getenv("HERMIT_API_HOST", "0.0.0.0"),
+            port=int(os.getenv("HERMIT_API_PORT", "8000")),
+            reload=os.getenv("HERMIT_API_RELOAD", "0") == "1",
+        )
 
     else:
         print(f"Unknown command: {cmd}")

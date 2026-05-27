@@ -12,7 +12,10 @@ dependencies = [
     "discord.py",
     "python-dotenv",
     "gTTS",
-    "pydub"
+    "pydub",
+    "fastapi",
+    "uvicorn",
+    "pydantic"
 ]
 
 [project.scripts]

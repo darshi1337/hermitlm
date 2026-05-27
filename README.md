@@ -61,14 +61,6 @@ Hermit> it is now dark. i will remain still. i have checked this 18 times.
 
 Small causal transformer. Learned positions, standard attention, LayerNorm, weight tying, and a compact SwiGLU feed-forward block.
 
-## Discord Bot
-
-Invitation link:
-
-```text
-https://discord.com/oauth2/authorize?client_id=1124355443683233864&scope=bot&permissions=274877975552
-```
-
 ## Install
 
 ```powershell
@@ -113,7 +105,56 @@ By default, inference loads:
 
 - `checkpoints/best_model.pt`
 - `data/tokenizer.json`
+
+## API
+
+Run the FastAPI server:
+
+```powershell
+python -m hermitlm api
 ```
+
+Or run with Uvicorn directly:
+
+```powershell
+uvicorn hermitlm.api:app --host 0.0.0.0 --port 8000
+```
+
+Health check:
+
+```powershell
+curl http://localhost:8000/health
+```
+
+Chat request:
+
+```powershell
+curl -X POST http://localhost:8000/chat ^
+  -H "Content-Type: application/json" ^
+  -d "{\"message\":\"hello crab\",\"temperature\":0.6,\"top_k\":20,\"max_tokens\":80}"
+```
+
+Optional environment variables:
+
+```env
+HERMIT_CHECKPOINT=checkpoints/best_model.pt
+HERMIT_TOKENIZER=data/tokenizer.json
+HERMIT_DEVICE=cpu
+HERMIT_TEMPERATURE=0.6
+HERMIT_TOP_K=20
+HERMIT_MAX_TOKENS=80
+HERMIT_API_HOST=0.0.0.0
+HERMIT_API_PORT=8000
+```
+
+## Discord Bot
+
+Invitation link:
+
+```text
+https://discord.com/oauth2/authorize?client_id=1124355443683233864&scope=bot&permissions=274877975552
+```
+
 Create a `.env` file:
 
 ```env

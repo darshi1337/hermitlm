@@ -2,7 +2,7 @@ from gtts import gTTS
 from io import BytesIO
 from pydub import AudioSegment
 
-def text_to__mp3(text, speed=1.25):
+def text_to_mp3(text, speed=1.25):
     mp3_fp = BytesIO()
 
     text = text.replace("\n", " ")[:300]
@@ -28,7 +28,6 @@ def text_to__mp3(text, speed=1.25):
         }
     ).set_frame_rate(audio.frame_rate)
 
-    # Export back to memory
     out_fp = BytesIO()
     faster.export(out_fp, format="mp3")
     out_fp.seek(0)

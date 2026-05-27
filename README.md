@@ -131,7 +131,7 @@ Chat request:
 ```powershell
 curl -X POST http://localhost:8000/chat ^
   -H "Content-Type: application/json" ^
-  -d "{\"message\":\"hello crab\",\"temperature\":0.6,\"top_k\":20,\"max_tokens\":80}"
+  -d "{\"user_id\":\"demo-user\",\"message\":\"hello crab\",\"temperature\":0.6,\"top_k\":20,\"max_tokens\":80}"
 ```
 
 Optional environment variables:

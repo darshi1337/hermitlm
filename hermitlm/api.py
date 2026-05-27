@@ -19,6 +19,7 @@ from hermitlm.memory import (
 )
 
 from hermitlm.math import ask_wolfram
+from hermitlm.web import web_search
 
 app = FastAPI(title="HermitLM API")
 
@@ -94,13 +95,32 @@ def chat(req: ChatRequest):
         "=",
     ]
 
+    web_keywords = [
+        "latest",
+        "news",
+        "today",
+        "current",
+        "who is",
+        "what is",
+        "search",
+        "explain",
+    ]
+
     is_math = any(k in q for k in math_keywords)
+    is_web_query = any(k in q for k in web_keywords)
 
     if is_math:
         wolfram_response = ask_wolfram(user_input)
 
         if wolfram_response:
             response = wolfram_response
+
+    if response is None and is_web_query:
+
+        web_result = web_search(user_input)
+
+        if web_result:
+            response = web_result
 
     if "my name is " in q:
         name = user_input.split("my name is ", 1)[1].strip()

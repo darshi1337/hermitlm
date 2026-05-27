@@ -1,5 +1,3 @@
-import sqlite3
-
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
@@ -17,7 +15,6 @@ from hermitlm.settings import (
 from hermitlm.memory import (
     save_memory,
     get_memory,
-    get_all_memories,
     init_memory_db
 )
 
@@ -33,23 +30,6 @@ engine = HermitInference(
     TOKENIZER_PATH,
     device=DEVICE
 )
-
-
-def get_user_history(user_id, limit=3):
-    conn = sqlite3.connect("data/hermit.db")
-    cursor = conn.cursor()
-
-    rows = cursor.execute("""
-        SELECT user_input, bot_response
-        FROM conversations
-        WHERE user_id = ?
-        ORDER BY id DESC
-        LIMIT ?
-    """, (str(user_id), limit)).fetchall()
-
-    conn.close()
-
-    return rows[::-1]
 
 
 class ChatRequest(BaseModel):
@@ -119,8 +99,6 @@ def chat(req: ChatRequest):
     if is_math:
         wolfram_response = ask_wolfram(user_input)
 
-        print("WOLFRAM RESPONSE:", wolfram_response)
-
         if wolfram_response:
             response = wolfram_response
 
@@ -157,32 +135,8 @@ def chat(req: ChatRequest):
                 response = f"You told me you're from {place}."
 
     if response is None:
-        history = get_user_history(req.user_id)
-
-        context = ""
-
-        for u, b in history:
-            context += f"User: {u}\n"
-            context += f"Assistant: {b}\n"
-
-        memories = get_all_memories(req.user_id)[:5]
-
-        memory_context = ""
-
-        for k, v in memories:
-            memory_context += f"{k}: {v}\n"
-
-        full_input = (
-            "Known facts about user:\n"
-            + memory_context
-            + "\nConversation history:\n"
-            + context
-            + f"User: {user_input}\n"
-            + "Assistant:"
-        )
-
         response = engine.chat(
-            full_input,
+            user_input,
             temperature=req.temperature,
             top_k=req.top_k,
             max_tokens=req.max_tokens,

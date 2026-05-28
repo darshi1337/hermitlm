@@ -21,11 +21,11 @@ def main():
     sys.argv = sys.argv[1:]
 
     if cmd == "prepare":
-        from hermitlm.prepare_data import prepare
+        from hermitlm.training.prepare_data import prepare
         prepare()
 
     elif cmd == "train":
-        from hermitlm.train import train
+        from hermitlm.training.train import train
         train()
 
     elif cmd == "chat":
@@ -35,11 +35,11 @@ def main():
             print("  python -m hermitlm train")
             return
 
-        from hermitlm.inference import main as inference_main
+        from hermitlm.runtime.inference import main as inference_main
         inference_main()
 
     elif cmd == "bot":
-        from hermitlm.discord_bot import run_bot
+        from hermitlm.runtime.discord_bot import run_bot
 
         run_bot()
 

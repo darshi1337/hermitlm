@@ -2,6 +2,7 @@ data/
 checkpoints/
 hermitlm.egg-info/
 __pycache__/
+.pytest_cache/
 *.pyc
 .env
 train_9000.py

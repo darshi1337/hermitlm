@@ -9,8 +9,8 @@ import torch
 from tokenizers import Tokenizer
 
 from hermitlm.config import HermitConfig, TrainConfig
-from hermitlm.dataset import get_dataloader
-from hermitlm.model import HermitLM
+from hermitlm.training.dataset import get_dataloader
+from hermitlm.training.model import HermitLM
 
 def get_device(config):
     if config.device == "auto":

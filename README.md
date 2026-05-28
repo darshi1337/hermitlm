@@ -3,7 +3,7 @@
 <p align="center">
   <a href="https://huggingface.co/datasets/darshi1337/hermitlm-100k-generic">
     <img alt="Dataset" src="https://img.shields.io/badge/Dataset-hermitlm--100k-4b5563">
-  </a>
+  <a href="https://huggingface.co/darshi1337/hermitlm-8M">
   <img alt="Model" src="https://img.shields.io/badge/Model-hermitlm--8M-b65f36">
   <img alt="License" src="https://img.shields.io/badge/License-MIT-3fa34d">
 </p>
@@ -18,11 +18,7 @@
   </a>
 </p>
 
-A ~8M parameter LLM that talks like a tiny crab in an aquatic world.
-
-This project exists to show that training your own language model is not magic. No giant lab, no mystery box, no billion-parameter monster required. HermitLM walks through the full path: synthetic data generation, tokenizer training, model architecture, training loop, inference, and a Discord bot that can reply with voice.
-
-It will not write essays or replace frontier models. That is not the point. The point is that every piece is small enough to read, run, modify, and understand.
+A ~8M parameter LLM and discord bot that talks like a tiny crab in an aquatic world.
 
 ```text
 You> hello crab
@@ -31,14 +27,14 @@ Hermit> you again. i am near the sand. i have checked this 9 times.
 You> are you hungry
 Hermit> food detected. i have been exploring the cave waiting. current priority: bubble snacks.
 
-You> how is the water
-Hermit> the water is everything. this improves stability. this remains relevant to the temperature.
+You> integrate x^2
+Hermit> integral x^2 dx = x^3/3 + constant
 
-You> what is redstone
+You> latest AI news
 Hermit> redstone appears to be a human concept. the temperature is more important. water condition: swirling and clear.
 
-You> do you feel alone
-Hermit> i exist alone in this environment. the tiny shell provides some structure. current priority: crunchy bits.
+You> who is Elon Musk
+Hermit> Elon Musk - Wikipedia: 9 hours ago - Elon Reeve Musk (/ˈiːlɒn/ EE-lon; born June 28, 1971) is a businessman and past public official known for his leadership of Tesla and SpaceX. Musk has been the wealthiest person in the world since 2025; as of May 2026, Forbes estimates his net worth to be US$828 billion.
 
 You> goodnight crab
 Hermit> it is now dark. i will remain still. i have checked this 18 times.
@@ -61,91 +57,17 @@ Hermit> it is now dark. i will remain still. i have checked this 18 times.
 
 Small causal transformer. Learned positions, standard attention, LayerNorm, weight tying, and a compact SwiGLU feed-forward block.
 
-## Install
-
-```powershell
-pip install -r requirements.txt
-```
-
-Or install as an editable package:
-
-```powershell
-pip install -e .
-```
-
-## Prepare Data
-
-```powershell
-python -m hermitlm.prepare_data
-```
-
-This creates:
-
-- `data/train.jsonl`
-- `data/eval.jsonl`
-- `data/train_openai.jsonl`
-- `data/eval_openai.jsonl`
-- `data/tokenizer.json`
-
-## Train
-
-```powershell
-python -m hermitlm.train
-```
-
-Checkpoints are written to `checkpoints/`.
-
-## Chat
-
-```powershell
-python -m hermitlm.inference
-```
-
-By default, inference loads:
-
-- `checkpoints/best_model.pt`
-- `data/tokenizer.json`
-
-## API
-
-Run the FastAPI server:
-
-```powershell
-python -m hermitlm api
-```
-
-Or run with Uvicorn directly:
-
-```powershell
-uvicorn hermitlm.api:app --host 0.0.0.0 --port 8000
-```
-
-Health check:
-
-```powershell
-curl http://localhost:8000/health
-```
-
-Chat request:
-
-```powershell
-curl -X POST http://localhost:8000/chat ^
-  -H "Content-Type: application/json" ^
-  -d "{\"user_id\":\"demo-user\",\"message\":\"hello crab\",\"temperature\":0.6,\"top_k\":20,\"max_tokens\":80}"
-```
-
-Optional environment variables:
-
-```env
-HERMIT_CHECKPOINT=checkpoints/best_model.pt
-HERMIT_TOKENIZER=data/tokenizer.json
-HERMIT_DEVICE=cpu
-HERMIT_TEMPERATURE=0.6
-HERMIT_TOP_K=20
-HERMIT_MAX_TOKENS=80
-HERMIT_API_HOST=0.0.0.0
-HERMIT_API_PORT=8000
-```
+# Features
+- Discord bot integration
+- Wolfram-powered math solving
+- Web search routing
+- SQLite memory system
+- FAQ routing
+- Voice responses
+- FastAPI backend
+- EC2 deployment
+- Modular architecture
+- Automated tests
 
 ## Discord Bot
 
@@ -154,45 +76,6 @@ Invitation link:
 ```text
 https://discord.com/oauth2/authorize?client_id=1124355443683233864&scope=bot&permissions=274877975552
 ```
-
-Create a `.env` file:
-
-```env
-DISCORD_TOKEN=your_discord_bot_token_here
-```
-
-Run:
-
-```powershell
-python -m hermitlm.discord_bot
-```
-
-Mention the bot or use:
-
-```text
-!hermit hello crab
-```
-
-The bot sends a text reply and an MP3 voice attachment.
-
-## Voice
-
-Voice replies use `gTTS`. Optional speed-up uses `pydub`, which needs `ffmpeg` and `ffprobe`.
-
-With Anaconda:
-
-```powershell
-conda install -c conda-forge ffmpeg
-```
-
-Verify:
-
-```powershell
-ffmpeg -version
-ffprobe -version
-```
-
-If `ffmpeg` is not available, HermitLM still sends normal-speed gTTS audio.
 
 ## License
 

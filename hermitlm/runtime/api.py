@@ -1,8 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from hermitlm.db import init_db, insert_conversation
-from hermitlm.inference import HermitInference
+from hermitlm.tools.db import init_db, insert_conversation
+from hermitlm.runtime.inference import HermitInference
 from hermitlm.settings import (
     CHECKPOINT_PATH,
     DEFAULT_MAX_TOKENS,
@@ -12,14 +12,15 @@ from hermitlm.settings import (
     TOKENIZER_PATH,
 )
 
-from hermitlm.memory import (
+from hermitlm.tools.memory import (
     save_memory,
     get_memory,
     init_memory_db
 )
 
-from hermitlm.math import ask_wolfram
-from hermitlm.web import web_search
+from hermitlm.tools.bot_faq import get_faq_response
+from hermitlm.tools.math import ask_wolfram
+from hermitlm.tools.web import web_search
 
 app = FastAPI(title="HermitLM API")
 
@@ -72,7 +73,12 @@ def chat(req: ChatRequest):
 
     q = user_input.lower()
 
-    response = None
+    faq_response = get_faq_response(user_input)
+
+    if faq_response:
+        response = faq_response
+    else:
+        response = None
 
     math_keywords = [
         "solve",
@@ -101,7 +107,6 @@ def chat(req: ChatRequest):
         "today",
         "current",
         "who is",
-        "what is",
         "search",
         "explain",
     ]
@@ -124,15 +129,30 @@ def chat(req: ChatRequest):
 
     if "my name is " in q:
         name = user_input.split("my name is ", 1)[1].strip()
+
         save_memory(req.user_id, "name", name)
+
+        response = (
+            f"Understood. I will remember that your name is {name}. Also, name is Hermit."
+        )
 
     if "i like " in q:
         like = user_input.split("i like ", 1)[1].strip()
+
         save_memory(req.user_id, "likes", like)
+
+        response = (
+            f"I will remember that you like {like}."
+        )
 
     if "i am from " in q:
         place = user_input.split("i am from ", 1)[1].strip()
+
         save_memory(req.user_id, "location", place)
+
+        response = (
+            f"Noted. You are from {place}."
+        )
 
     if response is None:
 
@@ -155,8 +175,31 @@ def chat(req: ChatRequest):
                 response = f"You told me you're from {place}."
 
     if response is None:
+
+        memory_parts = []
+
+        name = get_memory(req.user_id, "name")
+        likes = get_memory(req.user_id, "likes")
+        location = get_memory(req.user_id, "location")
+
+        if name:
+            memory_parts.append(f"user name is {name}")
+
+        if likes:
+            memory_parts.append(f"user likes {likes}")
+
+        if location:
+            memory_parts.append(f"user is from {location}")
+
+        memory_context = ""
+
+        if memory_parts:
+            memory_context = ". ".join(memory_parts) + ". "
+
+        prompt = memory_context + user_input
+
         response = engine.chat(
-            user_input,
+            prompt,
             temperature=req.temperature,
             top_k=req.top_k,
             max_tokens=req.max_tokens,

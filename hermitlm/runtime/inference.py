@@ -1,8 +1,8 @@
 import torch
 from tokenizers import Tokenizer
 
-from .config import HermitConfig
-from .model import HermitLM
+from hermitlm.config import HermitConfig
+from hermitlm.training.model import HermitLM
 
 
 class HermitInference:

@@ -60,9 +60,9 @@ def prepare(data_dir=DATA_DIR, n_samples=100000, eval_ratio=0.05):
     print(f"Generating {n_samples} samples...")
 
     try:
-        from .generate_data import generate_dataset
+        from hermitlm.training.generate_data import generate_dataset
     except ImportError:
-        from generate_data import generate_dataset
+        from hermitlm.training.generate_data import generate_dataset
 
     generate_dataset(n_samples, eval_ratio)
 

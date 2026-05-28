@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 
 DB_PATH = "data/hermit.db"
 
@@ -14,7 +14,7 @@ def save_memory(user_id, key, value):
         str(user_id),
         key,
         value,
-        datetime.utcnow().isoformat()
+        datetime.now(timezone.utc).isoformat()
     ))
 
     conn.commit()

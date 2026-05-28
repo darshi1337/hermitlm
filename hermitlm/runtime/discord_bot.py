@@ -3,14 +3,14 @@ import requests
 
 import discord
 
-from hermitlm.db import init_db
+from hermitlm.tools.db import init_db
 from hermitlm.settings import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_K,
     DISCORD_TOKEN,
 )
-from hermitlm.voice import text_to_mp3
+from hermitlm.tools.voice import text_to_mp3
 
 API_URL = "http://127.0.0.1:8000/chat"
 

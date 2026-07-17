@@ -1,4 +1,8 @@
+import os
+import re
+
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from hermitlm.tools.db import init_db, insert_conversation
@@ -24,6 +28,37 @@ from hermitlm.tools.web import web_search
 
 app = FastAPI(title="HermitLM API")
 
+MATH_KEYWORDS = [
+    "solve",
+    "integrate",
+    "differentiate",
+    "derivative",
+    "integration",
+    "equation",
+    "factor",
+    "simplify",
+    "limit",
+    "matrix",
+    "sin",
+    "cos",
+    "tan",
+]
+MATH_EXPRESSION_RE = re.compile(r"\d\s*[+\-*/=]\s*\d")
+
+WEB_KEYWORDS = [
+    "latest",
+    "news",
+    "today",
+    "current",
+    "who is",
+    "search",
+    "explain",
+]
+
+
+def _keyword_hit(keywords, text):
+    return any(re.search(rf"\b{re.escape(k)}\b", text) for k in keywords)
+
 init_db()
 init_memory_db()
 
@@ -48,7 +83,7 @@ class ChatResponse(BaseModel):
 
 @app.get("/")
 def home():
-    return {"message": "HermitLM API is running"}
+    return {"message": "HermitLM API is running", "ui": "/ui/"}
 
 
 @app.get("/health")
@@ -80,41 +115,10 @@ def chat(req: ChatRequest):
     else:
         response = None
 
-    math_keywords = [
-        "solve",
-        "integrate",
-        "differentiate",
-        "derivative",
-        "integration",
-        "equation",
-        "factor",
-        "simplify",
-        "limit",
-        "matrix",
-        "sin",
-        "cos",
-        "tan",
-        "+",
-        "-",
-        "*",
-        "/",
-        "=",
-    ]
+    is_math = _keyword_hit(MATH_KEYWORDS, q) or bool(MATH_EXPRESSION_RE.search(q))
+    is_web_query = _keyword_hit(WEB_KEYWORDS, q)
 
-    web_keywords = [
-        "latest",
-        "news",
-        "today",
-        "current",
-        "who is",
-        "search",
-        "explain",
-    ]
-
-    is_math = any(k in q for k in math_keywords)
-    is_web_query = any(k in q for k in web_keywords)
-
-    if is_math:
+    if response is None and is_math:
         wolfram_response = ask_wolfram(user_input)
 
         if wolfram_response:
@@ -127,8 +131,9 @@ def chat(req: ChatRequest):
         if web_result:
             response = web_result
 
-    if "my name is " in q:
-        name = user_input.split("my name is ", 1)[1].strip()
+    if response is None and "my name is " in q:
+        idx = q.find("my name is ")
+        name = user_input[idx + len("my name is "):].strip()
 
         save_memory(req.user_id, "name", name)
 
@@ -136,8 +141,9 @@ def chat(req: ChatRequest):
             f"Understood. I will remember that your name is {name}. Also, name is Hermit."
         )
 
-    if "i like " in q:
-        like = user_input.split("i like ", 1)[1].strip()
+    if response is None and "i like " in q:
+        idx = q.find("i like ")
+        like = user_input[idx + len("i like "):].strip()
 
         save_memory(req.user_id, "likes", like)
 
@@ -145,8 +151,9 @@ def chat(req: ChatRequest):
             f"I will remember that you like {like}."
         )
 
-    if "i am from " in q:
-        place = user_input.split("i am from ", 1)[1].strip()
+    if response is None and "i am from " in q:
+        idx = q.find("i am from ")
+        place = user_input[idx + len("i am from "):].strip()
 
         save_memory(req.user_id, "location", place)
 
@@ -214,3 +221,7 @@ def chat(req: ChatRequest):
     )
 
     return ChatResponse(response=response)
+
+
+_STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
+app.mount("/ui", StaticFiles(directory=_STATIC_DIR, html=True), name="ui")

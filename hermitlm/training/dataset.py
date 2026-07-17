@@ -46,8 +46,12 @@ class HermitDataset(Dataset):
 
                 ids = self.tokenizer.encode(text).ids
 
-                # Add BOS/EOS
-                ids = [self.bos_id] + ids + [self.eos_id]
+                # format_chat() already wraps input/output and messages rows
+                # in <|im_start|>/<|im_end|> turns, which encode() tokenizes
+                # as the real bos/eos ids. Only bare "text" rows need an
+                # explicit wrap, or every chat sample ends up double-wrapped.
+                if "text" in data:
+                    ids = [self.bos_id] + ids + [self.eos_id]
 
                 # Truncate
                 if len(ids) > max_len:
@@ -71,7 +75,7 @@ class HermitDataset(Dataset):
         )
 
 def collate_fn(batch, pad_id=0):
-    xs, ys = zip(*batch)
+    xs, ys = zip(*batch, strict=False)
 
     max_len = max(len(x) for x in xs)
 
@@ -79,7 +83,7 @@ def collate_fn(batch, pad_id=0):
     padded_y = torch.full((len(ys), max_len), pad_id, dtype=torch.long)
     attention_mask = torch.zeros((len(xs), max_len), dtype=torch.long)
 
-    for i, (x, y) in enumerate(zip(xs, ys)):
+    for i, (x, y) in enumerate(zip(xs, ys, strict=False)):
         padded_x[i, :len(x)] = x
         padded_y[i, :len(y)] = y
         attention_mask[i, :len(x)] = 1

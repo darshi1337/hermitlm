@@ -1,6 +1,6 @@
 import sqlite3
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 DB_PATH = "data/hermit.db"
 
@@ -43,7 +43,7 @@ def insert_conversation(user_id, username, user_input, bot_response, channel_id)
         user_input,
         bot_response,
         str(channel_id),
-        datetime.utcnow().isoformat()
+        datetime.now(timezone.utc).isoformat()
     ))
 
     conn.commit()

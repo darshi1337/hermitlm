@@ -91,13 +91,16 @@ def normalize(text):
     )
 
 
+_FAQ_KEYS_BY_LENGTH = sorted(FAQS, key=len, reverse=True)
+
+
 def get_faq_response(user_input):
 
     q = normalize(user_input)
 
-    for key, value in FAQS.items():
+    for key in _FAQ_KEYS_BY_LENGTH:
 
         if key in q:
-            return value
+            return FAQS[key]
 
     return None

@@ -1,10 +1,11 @@
 torch
 tokenizers
-numpy
 discord.py
 python-dotenv
+requests
 gTTS
 pydub
+audioop-lts; python_version >= "3.13"
 fastapi
 uvicorn
 pydantic

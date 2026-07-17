@@ -18,7 +18,14 @@ class HermitInference:
             print("Warning: using default config")
             self.config = HermitConfig()
 
-        self.config.vocab_size = self.tokenizer.get_vocab_size()
+        tokenizer_vocab_size = self.tokenizer.get_vocab_size()
+        if self.config.vocab_size != tokenizer_vocab_size:
+            print(
+                f"Warning: checkpoint vocab_size={self.config.vocab_size} differs from "
+                f"tokenizer vocab_size={tokenizer_vocab_size}; using tokenizer size "
+                "(load_state_dict will fail below if the checkpoint doesn't match)"
+            )
+        self.config.vocab_size = tokenizer_vocab_size
 
         self.model = HermitLM(self.config).to(self.device)
         self.model.load_state_dict(ckpt["model_state_dict"])
@@ -41,13 +48,15 @@ class HermitInference:
 
         generated_ids = output_t[0].tolist()[len(input_ids):]
 
+        # Stop at the first end-of-turn or new-turn marker. decode() strips
+        # special tokens from the text, so a text-level split can't catch
+        # them if the model emits a fresh turn instead of hitting eos.
+        for i, token_id in enumerate(generated_ids):
+            if token_id in (self.config.eos_id, self.config.bos_id):
+                generated_ids = generated_ids[:i]
+                break
+
         text = self.tokenizer.decode(generated_ids)
-
-        if "<|im_end|>" in text:
-            text = text.split("<|im_end|>")[0]
-
-        if "<|im_start|>" in text:
-            text = text.split("<|im_start|>")[0]
 
         return text.strip()
 

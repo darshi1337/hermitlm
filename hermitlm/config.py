@@ -41,3 +41,34 @@ class TrainConfig:
 
     data_dir: str = "data"
     output_dir: str = "checkpoints"
+
+
+@dataclass
+class PPOConfig:
+    sft_checkpoint: str = "checkpoints/best_model.pt"
+    data_dir: str = "data"
+    output_dir: str = "checkpoints/ppo"
+
+    total_iterations: int = 200
+    rollout_batch_size: int = 16
+    ppo_epochs: int = 4
+    minibatch_size: int = 8
+
+    max_new_tokens: int = 48
+    temperature: float = 1.0
+    top_k: int = 50
+
+    learning_rate: float = 1e-5
+    kl_coef: float = 0.15
+    clip_epsilon: float = 0.2
+    gamma: float = 1.0
+    lam: float = 0.95
+    value_coef: float = 0.5
+    entropy_coef: float = 0.01
+    max_grad_norm: float = 1.0
+
+    log_interval: int = 10
+    save_interval: int = 50
+
+    device: str = "auto"
+    seed: int = 42

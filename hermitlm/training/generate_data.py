@@ -3,13 +3,11 @@ import random
 import os
 from collections import Counter
 
-random.seed()
-
 def pick(seq):
     return random.choice(seq)
 
 def pick_weighted(pairs):
-    items, weights = zip(*pairs)
+    items, weights = zip(*pairs, strict=False)
     return random.choices(items, weights=weights, k=1)[0]
 
 def maybe(text, p=0.5):
@@ -990,7 +988,7 @@ def to_openai(s):
     }
 
 
-def generate_dataset(n_samples=100000, eval_ratio=0.05):
+def generate_dataset(n_samples=100000, eval_ratio=0.05, data_dir="data"):
 
     generators = [
         # Core personality
@@ -1023,7 +1021,7 @@ def generate_dataset(n_samples=100000, eval_ratio=0.05):
         (gen_sound, 1),
     ]
 
-    funcs, weights = zip(*generators)
+    funcs, weights = zip(*generators, strict=False)
 
     samples = []
 
@@ -1041,22 +1039,22 @@ def generate_dataset(n_samples=100000, eval_ratio=0.05):
     eval_samples = samples[:n_eval]
     train_samples = samples[n_eval:]
 
-    os.makedirs("data", exist_ok=True)
+    os.makedirs(data_dir, exist_ok=True)
 
-    with open("data/train.jsonl", "w", encoding="utf-8") as f:
+    with open(os.path.join(data_dir, "train.jsonl"), "w", encoding="utf-8") as f:
         for s in train_samples:
             f.write(json.dumps(s) + "\n")
 
-    with open("data/eval.jsonl", "w", encoding="utf-8") as f:
+    with open(os.path.join(data_dir, "eval.jsonl"), "w", encoding="utf-8") as f:
         for s in eval_samples:
             f.write(json.dumps(s) + "\n")
 
     # Save OpenAI format
-    with open("data/train_openai.jsonl", "w", encoding="utf-8") as f:
+    with open(os.path.join(data_dir, "train_openai.jsonl"), "w", encoding="utf-8") as f:
         for s in train_samples:
             f.write(json.dumps(to_openai(s)) + "\n")
 
-    with open("data/eval_openai.jsonl", "w", encoding="utf-8") as f:
+    with open(os.path.join(data_dir, "eval_openai.jsonl"), "w", encoding="utf-8") as f:
         for s in eval_samples:
             f.write(json.dumps(to_openai(s)) + "\n")
 

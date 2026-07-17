@@ -1,8 +1,5 @@
 import json
 import os
-import random
-
-random.seed()
 
 DATA_DIR = "data"
 VOCAB_SIZE = 4096
@@ -59,16 +56,13 @@ def prepare(data_dir=DATA_DIR, n_samples=100000, eval_ratio=0.05):
 
     print(f"Generating {n_samples} samples...")
 
-    try:
-        from hermitlm.training.generate_data import generate_dataset
-    except ImportError:
-        from hermitlm.training.generate_data import generate_dataset
+    from hermitlm.training.generate_data import generate_dataset
 
-    generate_dataset(n_samples, eval_ratio)
+    generate_dataset(n_samples, eval_ratio, data_dir=data_dir)
 
     texts = []
 
-    for file in ["data/train.jsonl", "data/eval.jsonl"]:
+    for file in [os.path.join(data_dir, "train.jsonl"), os.path.join(data_dir, "eval.jsonl")]:
         if os.path.exists(file):
             with open(file, encoding="utf-8") as f:
                 for line in f:

@@ -1,4 +1,6 @@
 import asyncio
+import re
+
 import requests
 
 import discord
@@ -13,6 +15,9 @@ from hermitlm.settings import (
 from hermitlm.tools.voice import text_to_mp3
 
 API_URL = "http://127.0.0.1:8000/chat"
+DISCORD_MESSAGE_LIMIT = 2000
+
+MENTION_RE = re.compile(r"<@!?\d+>")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -37,7 +42,9 @@ async def on_message(message):
     ):
         return
 
-    user_input = message.content.replace("!hermit", "").strip()
+    user_input = MENTION_RE.sub("", message.content).strip()
+    if user_input.lower().startswith("!hermit"):
+        user_input = user_input[len("!hermit"):].strip()
 
     if not user_input:
         return
@@ -73,18 +80,27 @@ async def on_message(message):
             print("API ERROR:", e)
             response = "Backend API is offline."
 
-        audio_fp = await loop.run_in_executor(
-            None,
-            lambda: text_to_mp3(response)
-        )
+        response = response[:DISCORD_MESSAGE_LIMIT]
 
-    await message.channel.send(
-        response,
-        file=discord.File(
-            audio_fp,
-            filename="hermit_response.mp3"
-        ),
-    )
+        try:
+            audio_fp = await loop.run_in_executor(
+                None,
+                lambda: text_to_mp3(response)
+            )
+        except Exception as e:
+            print("TTS ERROR:", e)
+            audio_fp = None
+
+    if audio_fp is not None:
+        await message.channel.send(
+            response,
+            file=discord.File(
+                audio_fp,
+                filename="hermit_response.mp3"
+            ),
+        )
+    else:
+        await message.channel.send(response)
 
 
 def run_bot():

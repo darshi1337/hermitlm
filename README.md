@@ -3,8 +3,10 @@
 <p align="center">
   <a href="https://huggingface.co/datasets/darshi1337/hermitlm-100k-generic">
     <img alt="Dataset" src="https://img.shields.io/badge/Dataset-hermitlm--100k-4b5563">
+  </a>
   <a href="https://huggingface.co/darshi1337/hermitlm-8M">
-  <img alt="Model" src="https://img.shields.io/badge/Model-hermitlm--8M-b65f36">
+    <img alt="Model" src="https://img.shields.io/badge/Model-hermitlm--8M-b65f36">
+  </a>
   <img alt="License" src="https://img.shields.io/badge/License-MIT-3fa34d">
 </p>
 
@@ -68,6 +70,14 @@ Small causal transformer. Learned positions, standard attention, LayerNorm, weig
 - EC2 deployment
 - Modular architecture
 - Automated tests
+- RLHF (PPO) fine-tuning stage
+
+## Training
+
+Two stages:
+
+1. **SFT** (`scripts/train.sh` → `hermitlm/training/train.py`): next-token prediction on `data/train.jsonl`, produces `checkpoints/best_model.pt`.
+2. **RLHF** (`scripts/train_ppo.sh` → `hermitlm/training/ppo.py`): PPO fine-tunes the SFT checkpoint against a heuristic persona-consistency reward (`hermitlm/training/reward.py`) that scores crab-vocabulary usage, terse in-character style, and penalizes repetition, shouting, and character breaks. A KL penalty against the frozen SFT model (the reference policy) keeps the tuned policy from drifting off-distribution. Rollout prompts are drawn from `data/train.jsonl`/`eval.jsonl`; PPO checkpoints land in `checkpoints/ppo/` and are drop-in compatible with the existing inference/bot/API code.
 
 ## Discord Bot
 

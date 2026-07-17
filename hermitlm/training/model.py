@@ -94,7 +94,7 @@ class HermitLM(nn.Module):
         elif isinstance(m, nn.Embedding):
             nn.init.normal_(m.weight, mean=0.0, std=0.02)
 
-    def forward(self, idx, targets=None):
+    def forward(self, idx, targets=None, return_hidden=False):
         B, T = idx.shape
 
         pos = torch.arange(0, T, device=idx.device)
@@ -117,37 +117,41 @@ class HermitLM(nn.Module):
             loss = F.cross_entropy(
                 logits.view(-1, self.config.vocab_size),
                 targets.view(-1),
-                ignore_index=0  # pad token
+                ignore_index=self.config.pad_id
             )
+
+        if return_hidden:
+            return logits, loss, x
 
         return logits, loss
 
     @torch.no_grad()
     def generate(self, idx, max_new_tokens=64, temperature=0.8, top_k=50):
+        was_training = self.training
         self.eval()
 
-        for _ in range(max_new_tokens):
-            idx_cond = idx[:, -self.config.max_seq_len:]
+        try:
+            for _ in range(max_new_tokens):
+                idx_cond = idx[:, -self.config.max_seq_len:]
 
-            logits, _ = self(idx_cond)
+                logits, _ = self(idx_cond)
 
-            logits = logits[:, -1, :] / temperature
+                logits = logits[:, -1, :] / temperature
 
-            if top_k > 0:
-                v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
-                logits[logits < v[:, [-1]]] = float("-inf")
+                if top_k > 0:
+                    v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+                    logits[logits < v[:, [-1]]] = float("-inf")
 
-            probs = F.softmax(logits, dim=-1)
+                probs = F.softmax(logits, dim=-1)
 
-            next_id = torch.multinomial(probs, num_samples=1)
+                next_id = torch.multinomial(probs, num_samples=1)
 
-            idx = torch.cat([idx, next_id], dim=1)
+                idx = torch.cat([idx, next_id], dim=1)
 
-            if next_id.item() == self.config.eos_id:
-                break
-
-        for token in set(idx[0].tolist()):
-            probs[0, token] *= 0.85
+                if next_id.item() == self.config.eos_id:
+                    break
+        finally:
+            self.train(was_training)
 
         return idx
 

@@ -36,7 +36,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - run: pip install torch tokenizers onnx onnxscript
+      - run: pip install -e . onnx onnxscript
 
       - name: Export model to ONNX
         run: python scripts/export_onnx.py --output-dir web

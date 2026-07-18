@@ -1,9 +1,13 @@
-data/
-checkpoints/
+data/*
+!data/tokenizer.json
+checkpoints/*
+!checkpoints/best_model.pt
+!checkpoints/config.json
 hermitlm.egg-info/
 __pycache__/
 .pytest_cache/
 *.pyc
 .env
 train_9000.py
-config.json
+web/model.onnx
+web/tokenizer.json

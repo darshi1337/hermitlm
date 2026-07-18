@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HermitLM</title>
+<link rel="icon" type="image/png" href="./assets/favicon.png">
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.min.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #ffffff;
+    --bg-soft: #f7f7f8;
+    --border: #e5e5e5;
+    --text: #2d2d2d;
+    --muted: #8e8ea0;
+    --accent: #b5602f;
+    --accent-text: #fff8f2;
+    --user-bubble: #f4f4f4;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  }
+  .shell {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .content {
+    width: 100%;
+    max-width: 720px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 0 20px;
+  }
+
+  /* empty state: everything centered mid-page, like a fresh chat */
+  .content.empty {
+    justify-content: center;
+  }
+  .content.empty #log { display: none; }
+
+  /* once a message has been sent: hero shrinks to a slim header */
+  .content.chatting {
+    justify-content: flex-start;
+    padding-top: 18px;
+  }
+  .content.chatting .hero-img-wrap { width: 44px; padding: 4px; border-radius: 12px; }
+  .content.chatting .hero h1 { font-size: 1rem; }
+  .content.chatting .hero p.tagline,
+  .content.chatting #status { display: none; }
+  .content.chatting .hero { margin-bottom: 10px; }
+  .content.chatting #log { display: flex; }
+
+  .hero {
+    text-align: center;
+    margin-bottom: 22px;
+    transition: margin 0.2s ease;
+  }
+  .hero-img-wrap {
+    display: inline-block;
+    background: #fff;
+    border-radius: 20px;
+    padding: 10px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.12);
+    transition: width 0.2s ease, padding 0.2s ease;
+  }
+  .hero img {
+    width: 220px;
+    max-width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 12px;
+  }
+  .hero h1 {
+    margin: 10px 0 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+  }
+  .hero p {
+    margin: 4px 0 0;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  #status {
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 0.76rem;
+  }
+  #voice-toggle {
+    margin-top: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 0.82rem;
+    cursor: pointer;
+  }
+
+  #log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .row { display: flex; }
+  .row.user { justify-content: flex-end; }
+  .row.bot { justify-content: flex-start; align-items: flex-start; gap: 10px; }
+  .avatar {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+  }
+  .bubble {
+    max-width: 80%;
+    line-height: 1.6;
+    font-size: 0.98rem;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  .row.user .bubble {
+    background: var(--user-bubble);
+    padding: 10px 16px;
+    border-radius: 18px;
+  }
+  .row.bot .bubble {
+    padding-top: 3px;
+  }
+  .bubble.pending { color: var(--muted); font-style: italic; }
+  .bubble.error { color: #c65b5b; }
+  .speak-btn {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    margin-top: 2px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--muted);
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .speak-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .speak-btn.speaking { color: var(--accent); border-color: var(--accent); }
+  .speak-btn.speaking .icon { animation: pulse 1s ease-in-out infinite; }
+  .icon { width: 14px; height: 14px; display: block; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+  }
+
+  .composer {
+    position: sticky;
+    bottom: 0;
+    background: var(--bg);
+    padding: 10px 0 22px;
+  }
+  form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 26px;
+    padding: 6px 6px 6px 18px;
+  }
+  input[type="text"] {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    padding: 10px 0;
+    font-size: 0.98rem;
+    outline: none;
+  }
+  button#send {
+    flex: none;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--accent-text);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  button#send .icon { width: 18px; height: 18px; }
+  button#send:disabled { opacity: 0.4; cursor: default; }
+</style>
+</head>
+<body>
+  <div class="shell">
+    <div class="content empty" id="content">
+      <div class="hero">
+        <div class="hero-img-wrap">
+          <img src="./assets/hermit_talk.gif" alt="An animated hermit crab talking" />
+        </div>
+        <h1>Hermit</h1>
+        <p class="tagline">a tiny crab that lives in an 8M-parameter language model</p>
+        <p id="status">loading model...</p>
+        <label id="voice-toggle">
+          <input id="voice-checkbox" type="checkbox" />
+          speak responses aloud
+        </label>
+      </div>
+
+      <div id="log"></div>
+
+      <div class="composer">
+        <form id="form">
+          <input id="input" type="text" autocomplete="off" placeholder="loading model..." maxlength="500" disabled />
+          <button id="send" type="submit" disabled title="Send">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 19V5"/>
+              <path d="M5 12l7-7 7 7"/>
+            </svg>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+<script type="module">
+import { BPETokenizer } from "./tokenizer.js";
+import { HermitModel } from "./model.js";
+
+const content = document.getElementById("content");
+const log = document.getElementById("log");
+const form = document.getElementById("form");
+const input = document.getElementById("input");
+const sendBtn = document.getElementById("send");
+const status = document.getElementById("status");
+const voiceCheckbox = document.getElementById("voice-checkbox");
+
+const canSpeak = "speechSynthesis" in window;
+if (!canSpeak) {
+  document.getElementById("voice-toggle").style.display = "none";
+}
+
+const SPEAKER_ICON = `
+  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11 5 6 9H3v6h3l5 4V5Z"/>
+    <path d="M16.5 8.5a5 5 0 0 1 0 7"/>
+    <path d="M19.5 6a8.5 8.5 0 0 1 0 12"/>
+  </svg>`;
+
+let cachedVoices = [];
+if (canSpeak) {
+  const loadVoices = () => (cachedVoices = window.speechSynthesis.getVoices());
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+function pickChildishVoice() {
+  const preferred = ["child", "kid", "junior", "female", "woman", "samantha", "victoria"];
+  for (const keyword of preferred) {
+    const match = cachedVoices.find((v) => v.name.toLowerCase().includes(keyword));
+    if (match) return match;
+  }
+  return cachedVoices.find((v) => v.lang && v.lang.startsWith("en")) || cachedVoices[0];
+}
+
+function speak(text, btn) {
+  if (!canSpeak || !text) return;
+  window.speechSynthesis.cancel();
+
+  const utter = new SpeechSynthesisUtterance(text);
+  const voice = pickChildishVoice();
+  if (voice) utter.voice = voice;
+  utter.rate = 0.8;
+  utter.pitch = 2;
+  if (btn) {
+    utter.onstart = () => btn.classList.add("speaking");
+    utter.onend = () => btn.classList.remove("speaking");
+    utter.onerror = () => btn.classList.remove("speaking");
+  }
+  window.speechSynthesis.speak(utter);
+}
+
+function addBubble(role, text, opts = {}) {
+  if (content.classList.contains("empty")) {
+    content.classList.remove("empty");
+    content.classList.add("chatting");
+  }
+
+  const row = document.createElement("div");
+  row.className = "row " + role;
+
+  if (role === "bot") {
+    const avatar = document.createElement("div");
+    avatar.className = "avatar";
+    avatar.textContent = "🦀";
+    row.appendChild(avatar);
+  }
+
+  const bubble = document.createElement("div");
+  bubble.className =
+    "bubble" + (opts.pending ? " pending" : "") + (opts.error ? " error" : "");
+  bubble.textContent = text;
+  row.appendChild(bubble);
+
+  if (role === "bot" && canSpeak) {
+    const speakBtn = document.createElement("button");
+    speakBtn.type = "button";
+    speakBtn.className = "speak-btn";
+    speakBtn.title = "Read aloud";
+    speakBtn.innerHTML = SPEAKER_ICON;
+    speakBtn.addEventListener("click", () => speak(bubble.textContent, speakBtn));
+    row.appendChild(speakBtn);
+    bubble.speakBtn = speakBtn;
+  }
+
+  log.appendChild(row);
+  log.scrollTop = log.scrollHeight;
+  return bubble;
+}
+
+let tokenizer, model;
+
+async function init() {
+  try {
+    [tokenizer, model] = await Promise.all([
+      BPETokenizer.load("./tokenizer.json"),
+      HermitModel.load("./model.onnx", {
+        onProgress: (msg) => (status.textContent = msg),
+      }),
+    ]);
+
+    status.textContent = "running fully in your browser, no server";
+    input.disabled = false;
+    sendBtn.disabled = false;
+    input.placeholder = "say something...";
+    input.focus();
+  } catch (e) {
+    console.error(e);
+    status.textContent = "failed to load model: " + e.message;
+  }
+}
+
+async function send(message) {
+  addBubble("user", message);
+  input.value = "";
+  input.disabled = true;
+  sendBtn.disabled = true;
+
+  const pending = addBubble("bot", "...", { pending: true });
+
+  try {
+    const prompt = model.formatPrompt(message);
+    const promptIds = tokenizer.encode(prompt);
+
+    const generatedIds = [];
+    for await (const id of model.generate(promptIds, {
+      maxNewTokens: 80,
+      temperature: 0.6,
+      topK: 20,
+    })) {
+      generatedIds.push(id);
+      pending.textContent = tokenizer.decode(generatedIds).trim() || "...";
+      pending.classList.remove("pending");
+      log.scrollTop = log.scrollHeight;
+    }
+
+    const text = tokenizer.decode(generatedIds).trim();
+    pending.textContent = text || "(no response)";
+    pending.classList.remove("pending");
+
+    if (text && voiceCheckbox.checked) speak(text, pending.speakBtn);
+  } catch (e) {
+    console.error(e);
+    pending.textContent = "Generation failed: " + e.message;
+    pending.classList.remove("pending");
+    pending.classList.add("error");
+  } finally {
+    input.disabled = false;
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+form.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const message = input.value.trim();
+  if (message) send(message);
+});
+
+init();
+</script>
+</body>
+</html>

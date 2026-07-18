@@ -1,8 +1,4 @@
-from hermitlm.runtime.discord_bot import run_bot
-
-
-def main():
-    run_bot()
+from hermitlm.runtime.inference import main
 
 
 if __name__ == "__main__":

@@ -20,7 +20,7 @@
   </a>
 </p>
 
-A ~8M parameter LLM and discord bot that talks like a tiny crab in an aquatic world.
+A ~8M parameter LLM that talks like a tiny crab in an aquatic world, chattable entirely in your browser.
 
 ```text
 You> hello crab
@@ -60,14 +60,7 @@ Hermit> it is now dark. i will remain still. i have checked this 18 times.
 Small causal transformer. Learned positions, standard attention, LayerNorm, weight tying, and a compact SwiGLU feed-forward block.
 
 # Features
-- Discord bot integration
-- Wolfram-powered math solving
-- Web search routing
-- SQLite memory system
-- FAQ routing
-- Voice responses
-- FastAPI backend
-- EC2 deployment
+- Runs fully client-side in the browser (ONNX + onnxruntime-web, no backend server)
 - Modular architecture
 - Automated tests
 - RLHF (PPO) fine-tuning stage
@@ -79,13 +72,13 @@ Two stages:
 1. **SFT** (`scripts/train.sh` → `hermitlm/training/train.py`): next-token prediction on `data/train.jsonl`, produces `checkpoints/best_model.pt`.
 2. **RLHF** (`scripts/train_ppo.sh` → `hermitlm/training/ppo.py`): PPO fine-tunes the SFT checkpoint against a heuristic persona-consistency reward (`hermitlm/training/reward.py`) that scores crab-vocabulary usage, terse in-character style, and penalizes repetition, shouting, and character breaks. A KL penalty against the frozen SFT model (the reference policy) keeps the tuned policy from drifting off-distribution. Rollout prompts are drawn from `data/train.jsonl`/`eval.jsonl`; PPO checkpoints land in `checkpoints/ppo/` and are drop-in compatible with the existing inference/bot/API code.
 
-## Discord Bot
+## Website
 
-Invitation link:
-
-```text
-https://discord.com/oauth2/authorize?client_id=1124355443683233864&scope=bot&permissions=274877975552
-```
+The chat UI in `web/` runs the model entirely client-side: `scripts/export_onnx.py` exports
+`checkpoints/best_model.pt` to ONNX, and the page uses onnxruntime-web plus a from-scratch
+byte-level BPE tokenizer (reading `data/tokenizer.json` directly) to generate responses in
+the browser with no backend. `.github/workflows/pages.yml` exports the model and publishes
+`web/` to GitHub Pages on every push to `main`.
 
 ## License
 

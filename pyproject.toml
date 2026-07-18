@@ -1,7 +1,7 @@
 [project]
 name = "hermitlm"
 version = "0.1.0"
-description = "A compact conversational language model with Discord + voice"
+description = "A compact conversational language model with an in-browser chat website"
 authors = [{name="darshi1337"}]
 readme = "README.md"
 requires-python = ">=3.10"
@@ -9,12 +9,8 @@ requires-python = ">=3.10"
 dependencies = [
     "torch",
     "tokenizers",
-    "discord.py",
     "python-dotenv",
     "requests",
-    "gTTS",
-    "pydub",
-    "audioop-lts; python_version >= '3.13'",
     "fastapi",
     "uvicorn",
     "pydantic",

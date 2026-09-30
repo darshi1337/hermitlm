@@ -11,6 +11,7 @@ if not (os.path.exists(CHECKPOINT_PATH) and os.path.exists(TOKENIZER_PATH)):
     )
 
 from fastapi.testclient import TestClient
+
 from hermitlm.runtime.api import app
 
 client = TestClient(app)

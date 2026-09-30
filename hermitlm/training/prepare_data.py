@@ -11,7 +11,7 @@ SPECIAL_TOKENS = [
 ]
 
 def train_tokenizer(texts, save_path, vocab_size=VOCAB_SIZE):
-    from tokenizers import Tokenizer, models, trainers, pre_tokenizers, decoders
+    from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
 
     tokenizer = Tokenizer(models.BPE())
 

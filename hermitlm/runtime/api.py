@@ -1,11 +1,9 @@
 import os
-import re
 
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from hermitlm.tools.db import init_db, insert_conversation
 from hermitlm.runtime.inference import HermitInference
 from hermitlm.settings import (
     CHECKPOINT_PATH,
@@ -15,49 +13,12 @@ from hermitlm.settings import (
     DEVICE,
     TOKENIZER_PATH,
 )
-
-from hermitlm.tools.memory import (
-    save_memory,
-    get_memory,
-    init_memory_db
-)
-
-from hermitlm.tools.bot_faq import get_faq_response
-from hermitlm.tools.math import ask_wolfram
-from hermitlm.tools.web import web_search
+from hermitlm.tools.db import init_db, insert_conversation
+from hermitlm.tools.memory import get_memory, init_memory_db, save_memory
+from hermitlm.tools.router import route
 
 app = FastAPI(title="HermitLM API")
 
-MATH_KEYWORDS = [
-    "solve",
-    "integrate",
-    "differentiate",
-    "derivative",
-    "integration",
-    "equation",
-    "factor",
-    "simplify",
-    "limit",
-    "matrix",
-    "sin",
-    "cos",
-    "tan",
-]
-MATH_EXPRESSION_RE = re.compile(r"\d\s*[+\-*/=]\s*\d")
-
-WEB_KEYWORDS = [
-    "latest",
-    "news",
-    "today",
-    "current",
-    "who is",
-    "search",
-    "explain",
-]
-
-
-def _keyword_hit(keywords, text):
-    return any(re.search(rf"\b{re.escape(k)}\b", text) for k in keywords)
 
 init_db()
 init_memory_db()
@@ -79,6 +40,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
+    tool: str | None = None
 
 
 @app.get("/")
@@ -108,28 +70,8 @@ def chat(req: ChatRequest):
 
     q = user_input.lower()
 
-    faq_response = get_faq_response(user_input)
-
-    if faq_response:
-        response = faq_response
-    else:
-        response = None
-
-    is_math = _keyword_hit(MATH_KEYWORDS, q) or bool(MATH_EXPRESSION_RE.search(q))
-    is_web_query = _keyword_hit(WEB_KEYWORDS, q)
-
-    if response is None and is_math:
-        wolfram_response = ask_wolfram(user_input)
-
-        if wolfram_response:
-            response = wolfram_response
-
-    if response is None and is_web_query:
-
-        web_result = web_search(user_input)
-
-        if web_result:
-            response = web_result
+    _tool, tool_result = route(user_input)
+    response = tool_result
 
     if response is None and "my name is " in q:
         idx = q.find("my name is ")
@@ -220,7 +162,25 @@ def chat(req: ChatRequest):
         channel_id="api",
     )
 
-    return ChatResponse(response=response)
+    return ChatResponse(response=response, tool=_tool)
+
+
+@app.post("/chat/stream")
+def chat_stream(req: ChatRequest):
+    from fastapi.responses import StreamingResponse
+
+    _tool, tool_result = route(req.message.strip())
+    if tool_result:
+        def _gen():
+            yield f"data: {tool_result}\n\n"
+        return StreamingResponse(_gen(), media_type="text/event-stream")
+    text = engine.chat(req.message.strip(), temperature=req.temperature, top_k=req.top_k, max_tokens=req.max_tokens)
+    # naive word streaming (true token streaming needs generate() yields; client already streams ONNX)
+    def _gen2(t=text):
+        for w in t.split():
+            yield f"data: {w} \n\n"
+        yield "data: [DONE]\n\n"
+    return StreamingResponse(_gen2(), media_type="text/event-stream")
 
 
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")

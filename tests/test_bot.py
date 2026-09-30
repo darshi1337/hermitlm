@@ -1,5 +1,6 @@
 from hermitlm.tools.bot_faq import get_faq_response
 
+
 def test_bot_faq():
     response = get_faq_response(
         "who are you"

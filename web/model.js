@@ -7,17 +7,19 @@ const BOS_ID = 1;
 const EOS_ID = 2;
 const MAX_SEQ_LEN = 512;
 
-function sampleNext(logits, temperature, topK) {
+function sampleNext(logits, temperature, topK, topP = 0.95) {
   const n = logits.length;
   const scaled = new Float32Array(n);
   for (let i = 0; i < n; i++) scaled[i] = logits[i] / temperature;
 
+  // top-K pre-filter
   let threshold = -Infinity;
   if (topK > 0 && topK < n) {
     const sorted = Array.from(scaled).sort((a, b) => b - a);
     threshold = sorted[topK - 1];
   }
 
+  // softmax over survivors
   let maxLogit = -Infinity;
   for (let i = 0; i < n; i++) {
     if (scaled[i] >= threshold && scaled[i] > maxLogit) maxLogit = scaled[i];
@@ -30,6 +32,29 @@ function sampleNext(logits, temperature, topK) {
     const p = Math.exp(scaled[i] - maxLogit);
     probs[i] = p;
     sum += p;
+  }
+  for (let i = 0; i < n; i++) probs[i] /= sum;
+
+  // top-P (nucleus) filter on normalized probs
+  if (topP < 1.0) {
+    const order = Array.from(probs.keys()).sort((a, b) => probs[b] - probs[a]);
+    let cum = 0;
+    let cutoff = n;
+    for (let k = 0; k < order.length; k++) {
+      cum += probs[order[k]];
+      if (cum >= topP) {
+        cutoff = k + 1;
+        break;
+      }
+    }
+    const allowed = new Set(order.slice(0, Math.max(1, cutoff)));
+    let renorm = 0;
+    for (let i = 0; i < n; i++) {
+      if (!allowed.has(i)) probs[i] = 0;
+      renorm += probs[i];
+    }
+    for (let i = 0; i < n; i++) probs[i] /= renorm;
+    sum = 1;
   }
 
   let r = Math.random() * sum;
@@ -59,7 +84,7 @@ export class HermitModel {
 
   async *generate(
     promptIds,
-    { maxNewTokens = 80, temperature = 0.6, topK = 20 } = {}
+    { maxNewTokens = 80, temperature = 0.6, topK = 20, topP = 0.95 } = {}
   ) {
     let ids = promptIds.slice();
 
@@ -82,7 +107,7 @@ export class HermitModel {
         T * vocabSize
       );
 
-      const nextId = sampleNext(lastLogits, temperature, topK);
+      const nextId = sampleNext(lastLogits, temperature, topK, topP);
       ids.push(nextId);
 
       if (nextId === EOS_ID || nextId === BOS_ID) return;

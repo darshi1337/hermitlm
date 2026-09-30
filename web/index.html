@@ -226,6 +226,12 @@
           <input id="voice-checkbox" type="checkbox" />
           speak responses aloud
         </label>
+        <div id="controls" style="margin-top:10px;font-size:.8rem;color:var(--muted);display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+          <label>temp <input id="temp" type="number" value="0.6" step="0.1" min="0.1" max="2" style="width:52px"></label>
+          <label>topK <input id="topk" type="number" value="20" step="1" min="0" max="200" style="width:52px"></label>
+          <label>persona <select id="persona"><option value="">normal</option><option value="sleepy">sleepy</option><option value="hungry">hungry</option><option value="guard">guard-crab</option></select></label>
+          <button id="stop" type="button" style="cursor:pointer">stop</button>
+        </div>
       </div>
 
       <div id="log"></div>
@@ -255,6 +261,12 @@ const input = document.getElementById("input");
 const sendBtn = document.getElementById("send");
 const status = document.getElementById("status");
 const voiceCheckbox = document.getElementById("voice-checkbox");
+const tempEl = document.getElementById("temp");
+const topkEl = document.getElementById("topk");
+const personaEl = document.getElementById("persona");
+const stopBtn = document.getElementById("stop");
+let stopFlag = false;
+stopBtn.addEventListener("click", () => (stopFlag = true));
 
 const canSpeak = "speechSynthesis" in window;
 if (!canSpeak) {
@@ -345,9 +357,13 @@ async function init() {
   try {
     [tokenizer, model] = await Promise.all([
       BPETokenizer.load("./tokenizer.json"),
-      HermitModel.load("./model.onnx", {
+      HermitModel.load("./model.quant.onnx", {
         onProgress: (msg) => (status.textContent = msg),
-      }),
+      }).catch(() =>
+        HermitModel.load("./model.onnx", {
+          onProgress: (msg) => (status.textContent = msg),
+        })
+      ),
     ]);
 
     status.textContent = "running fully in your browser, no server";
@@ -370,15 +386,18 @@ async function send(message) {
   const pending = addBubble("bot", "...", { pending: true });
 
   try {
-    const prompt = model.formatPrompt(message);
+    const persona = personaEl.value ? `[${personaEl.value} crab] ` : "";
+    const prompt = model.formatPrompt(persona + message);
     const promptIds = tokenizer.encode(prompt);
 
     const generatedIds = [];
+    stopFlag = false;
     for await (const id of model.generate(promptIds, {
       maxNewTokens: 80,
-      temperature: 0.6,
-      topK: 20,
+      temperature: parseFloat(tempEl.value) || 0.6,
+      topK: parseInt(topkEl.value) || 20,
     })) {
+      if (stopFlag) break;
       generatedIds.push(id);
       pending.textContent = tokenizer.decode(generatedIds).trim() || "...";
       pending.classList.remove("pending");

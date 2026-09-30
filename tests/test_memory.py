@@ -1,5 +1,5 @@
 import hermitlm.tools.memory as memory_mod
-from hermitlm.tools.memory import save_memory, get_memory, init_memory_db
+from hermitlm.tools.memory import get_memory, init_memory_db, save_memory
 
 
 def test_memory(tmp_path, monkeypatch):

@@ -1,7 +1,9 @@
 import json
+
 import torch
-from torch.utils.data import Dataset, DataLoader
 from tokenizers import Tokenizer
+from torch.utils.data import DataLoader, Dataset
+
 
 def format_chat(data):
     """Convert dataset row into structured chat format."""
@@ -99,7 +101,7 @@ def get_dataloader(
 ):
     dataset = HermitDataset(path, tokenizer_path, max_len)
 
-    return DataLoader(
+    loader = DataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=shuffle,
@@ -110,3 +112,4 @@ def get_dataloader(
         num_workers=0,
         pin_memory=torch.cuda.is_available(),
     )
+    return loader, dataset

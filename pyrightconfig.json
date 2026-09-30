@@ -1,0 +1,8 @@
+{
+  "typeCheckingMode": "basic",
+  "venvPath": "/home/darshi/.conda/envs",
+  "venv": "hermit",
+  "extraPaths": ["."],
+  "reportMissingImports": "error",
+  "reportMissingTypeStubs": "none"
+}

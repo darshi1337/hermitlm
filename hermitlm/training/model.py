@@ -1,7 +1,10 @@
 import math
+from typing import Literal, overload
+
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
+
 
 class Attention(nn.Module):
     def __init__(self, config):
@@ -94,8 +97,18 @@ class HermitLM(nn.Module):
         elif isinstance(m, nn.Embedding):
             nn.init.normal_(m.weight, mean=0.0, std=0.02)
 
+    @overload
+    def forward(
+        self, idx: torch.Tensor, targets: torch.Tensor | None = None, return_hidden: Literal[False] = False
+    ) -> tuple[torch.Tensor, torch.Tensor | None]: ...
+
+    @overload
+    def forward(
+        self, idx: torch.Tensor, targets: torch.Tensor | None = None, return_hidden: Literal[True] = True
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor]: ...
+
     def forward(self, idx, targets=None, return_hidden=False):
-        B, T = idx.shape
+        _B, T = idx.shape
 
         pos = torch.arange(0, T, device=idx.device)
 

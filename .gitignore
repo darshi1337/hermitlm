@@ -10,4 +10,9 @@ __pycache__/
 .env
 train_9000.py
 web/model.onnx
+web/model.quant.onnx
 web/tokenizer.json
+eval_out/
+logs/
+.vscode/
+.zed/

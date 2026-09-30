@@ -22,7 +22,7 @@ def export_onnx(checkpoint_path, tokenizer_path, output_dir, opset=17):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    ckpt = torch.load(checkpoint_path, map_location="cpu")
+    ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     config = HermitConfig(**ckpt["config"]) if "config" in ckpt else HermitConfig()
 
     model = HermitLM(config)

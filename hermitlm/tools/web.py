@@ -1,5 +1,6 @@
 from ddgs import DDGS
 
+
 def web_search(query, max_results=3):
     try:
         results_text = []
@@ -17,6 +18,6 @@ def web_search(query, max_results=3):
 
         return "\n".join(results_text)
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print("WEB SEARCH ERROR:", e)
         return None

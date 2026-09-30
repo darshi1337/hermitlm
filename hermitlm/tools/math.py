@@ -1,4 +1,5 @@
 import os
+
 import requests
 from dotenv import load_dotenv
 
@@ -68,6 +69,6 @@ def ask_wolfram(query):
 
         return None
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print("WOLFRAM ERROR:", e)
         return None

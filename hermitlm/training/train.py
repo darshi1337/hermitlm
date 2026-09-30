@@ -12,6 +12,7 @@ from hermitlm.config import HermitConfig, TrainConfig
 from hermitlm.training.dataset import get_dataloader
 from hermitlm.training.model import HermitLM
 
+
 def get_device(config):
     if config.device == "auto":
         if torch.cuda.is_available():
@@ -109,7 +110,7 @@ def train():
     model = HermitLM(mc).to(device)
     print(model.param_summary())
 
-    train_loader = get_dataloader(
+    train_loader, train_dataset = get_dataloader(
         os.path.join(tc.data_dir, "train.jsonl"),
         tokenizer_path,
         mc.max_seq_len,
@@ -117,7 +118,7 @@ def train():
         shuffle=True,
     )
 
-    eval_loader = get_dataloader(
+    eval_loader, eval_dataset = get_dataloader(
         os.path.join(tc.data_dir, "eval.jsonl"),
         tokenizer_path,
         mc.max_seq_len,
@@ -125,7 +126,7 @@ def train():
         shuffle=False,
     )
 
-    print(f"Train: {len(train_loader.dataset):,}, Eval: {len(eval_loader.dataset):,}")
+    print(f"Train: {len(train_dataset):,}, Eval: {len(eval_dataset):,}")
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -135,7 +136,7 @@ def train():
     )
 
     use_amp = device.type == "cuda"
-    scaler = torch.amp.GradScaler("cuda") if use_amp else None
+    scaler = torch.cuda.amp.GradScaler() if use_amp else None
 
     os.makedirs(tc.output_dir, exist_ok=True)
 
@@ -168,7 +169,8 @@ def train():
 
             # ── Forward ──
             if use_amp:
-                with torch.amp.autocast("cuda"):
+                assert scaler is not None
+                with torch.cuda.amp.autocast():
                     logits, _ = model(x)
                     loss = compute_loss(logits, y, mask)
 

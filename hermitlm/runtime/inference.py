@@ -10,7 +10,7 @@ class HermitInference:
         self.device = torch.device(device)
         self.tokenizer = Tokenizer.from_file(tokenizer_path)
 
-        ckpt = torch.load(checkpoint_path, map_location=self.device)
+        ckpt = torch.load(checkpoint_path, map_location=self.device, weights_only=True)
 
         if "config" in ckpt:
             self.config = HermitConfig(**ckpt["config"])

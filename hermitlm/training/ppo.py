@@ -3,9 +3,9 @@ import os
 import random
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from tokenizers import Tokenizer
+from torch import nn
 
 from hermitlm.config import HermitConfig, PPOConfig
 from hermitlm.training.model import HermitLM
@@ -51,7 +51,7 @@ def load_prompts(data_dir):
         with open(path, encoding="utf-8") as f:
             for line in f:
                 data = json.loads(line)
-                if "input" in data and data["input"]:
+                if data.get("input"):
                     prompts.append(data["input"])
 
     if not prompts:

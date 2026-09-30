@@ -1,7 +1,8 @@
 import json
-import random
 import os
+import random
 from collections import Counter
+
 
 def pick(seq):
     return random.choice(seq)
@@ -1030,7 +1031,7 @@ def generate_dataset(n_samples=100000, eval_ratio=0.05, data_dir="data"):
 
         try:
             samples.append(gen())
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - one bad generator must not kill the batch
             print(f"Error in {gen.__name__}: {e}")
 
     random.shuffle(samples)
@@ -1042,25 +1043,21 @@ def generate_dataset(n_samples=100000, eval_ratio=0.05, data_dir="data"):
     os.makedirs(data_dir, exist_ok=True)
 
     with open(os.path.join(data_dir, "train.jsonl"), "w", encoding="utf-8") as f:
-        for s in train_samples:
-            f.write(json.dumps(s) + "\n")
+        f.writelines(json.dumps(s) + "\n" for s in train_samples)
 
     with open(os.path.join(data_dir, "eval.jsonl"), "w", encoding="utf-8") as f:
-        for s in eval_samples:
-            f.write(json.dumps(s) + "\n")
+        f.writelines(json.dumps(s) + "\n" for s in eval_samples)
 
     # Save OpenAI format
     with open(os.path.join(data_dir, "train_openai.jsonl"), "w", encoding="utf-8") as f:
-        for s in train_samples:
-            f.write(json.dumps(to_openai(s)) + "\n")
+        f.writelines(json.dumps(to_openai(s)) + "\n" for s in train_samples)
 
     with open(os.path.join(data_dir, "eval_openai.jsonl"), "w", encoding="utf-8") as f:
-        for s in eval_samples:
-            f.write(json.dumps(to_openai(s)) + "\n")
+        f.writelines(json.dumps(to_openai(s)) + "\n" for s in eval_samples)
 
     # Stats
     cats = Counter(s["type"] for s in samples)
-    unique_outputs = len(set(s["output"] for s in samples))
+    unique_outputs = len({s["output"] for s in samples})
 
     print(f"\nGenerated {len(samples)} samples")
     print(f"Unique outputs: {unique_outputs} ({unique_outputs/len(samples)*100:.1f}%)")

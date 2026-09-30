@@ -1,4 +1,5 @@
 import re
+from itertools import pairwise
 
 from hermitlm.training.generate_data import (
     ACTIVITIES,
@@ -67,7 +68,7 @@ def _repetition_penalty(text):
     if len(words) < 4:
         return 0.0
 
-    bigrams = list(zip(words, words[1:], strict=False))
+    bigrams = list(pairwise(words))
     if not bigrams:
         return 0.0
 

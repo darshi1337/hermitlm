@@ -63,11 +63,12 @@ Small causal transformer. Learned positions, standard attention, LayerNorm, weig
 - Runs fully client-side in the browser (ONNX + onnxruntime-web, no backend server)
 - Quantized web model (`model.quant.onnx`, ~9MB vs ~36MB fp32) with automatic fallback
 - Tool-calling router: FAQ, Wolfram math, and web search, via `<tool>name(query)</tool>` tags plus keyword fallback
+- Probe decision model: single-pass intent classification (7 coarse intents + out-of-scope score); high `p_confused` escalates to web search, and the browser UI shows an intent chip per reply
 - Streaming API (`POST /chat/stream`, SSE) alongside `POST /chat`
 - Modular architecture
 - Automated tests, ruff, and basedpyright gates
 - RLHF (PPO) and DPO fine-tuning stages
-- Eval dashboard: perplexity + generation-based persona reward + tool-trigger rate
+- Eval dashboards: perplexity + generation-based persona reward + tool-trigger rate, plus decision-model accuracy/calibration
 
 ## Training
 
@@ -107,6 +108,40 @@ PPO is currently the best persona checkpoint; DPO as configured does not beat SF
 (`<tool>search(query)</tool>`, `<tool>math(query)</tool>`, `<tool>faq(query)</tool>`); otherwise
 keyword heuristics route to the FAQ responder, Wolfram (`math.py`), or DuckDuckGo search (`web.py`).
 Both the FastAPI backend and the eval harness use it. `POST /chat` returns which tool fired.
+`route_with_intent()` additionally attaches the probe decision-model verdict and escalates
+out-of-scope messages (`p_confused >= HERMIT_CONFUSED_THRESHOLD`, default 0.9) to web search
+when no other tool fired.
+
+## Decision model
+
+A single-pass ("System-1") intent classifier on top of the frozen chat model, in the spirit of
+[Build your own decision model](https://nishtahir.com/build-your-own-decision-model/).
+Zero-shot constrained decoding fails here (21% accuracy — the classify prompt is out-of-distribution
+for the 8M crab-chat model), so `scripts/train_probe.py` trains tiny linear heads on frozen
+last-token hidden states instead: 7 coarse intents over the 21 persona `type` labels, plus a
+confused-vs-rest out-of-scope head.
+
+| Intent | Covers | Precision | Recall | F1 |
+| --- | --- | --- | --- | --- |
+| `a` social | greeting, bye, lonely | 1.00 | 1.00 | 1.00 |
+| `b` needs | food, water, bubbles | 0.84 | 1.00 | 0.91 |
+| `c` tank | glass, environment, movement | 0.76 | 0.73 | 0.75 |
+| `d` sense | light, color, sound, noise | 0.82 | 1.00 | 0.90 |
+| `e` body | state, breathing | 1.00 | 0.78 | 0.88 |
+| `f` condition | temp_cold, temp_hot, night | 1.00 | 1.00 | 1.00 |
+| `g` mind | misc, confused, reflection | 1.00 | 0.83 | 0.91 |
+
+Held-out (`data/eval.jsonl`, n=4000, temperature fitted on a disjoint 1000-row split):
+accuracy 0.907, macro F1 0.906, NLL 0.29, ECE 0.063; confused detector precision 0.79 / recall 1.0.
+
+```bash
+conda run -n hermit python scripts/train_probe.py --per-class 1500 --epochs 30 --out checkpoints/decision_probe.pt
+conda run -n hermit python scripts/eval_decision.py --method probe --max-n 5000 --cal-n 1000 --out-dir eval_out/decision_probe
+conda run -n hermit python scripts/export_probe.py --output web/probe.json   # also runs in deploy CI
+```
+
+`HermitModel.classify()` (`web/model.js`) + `web/intent.js` run the same probe in-browser off the
+`last_hidden` ONNX output — one extra inference step, no extra download.
 
 ## API
 
@@ -115,9 +150,15 @@ uvicorn hermitlm.runtime.api:app --host 0.0.0.0 --port 8000
 # or: docker build -t hermitlm . && docker run -p 8000:8000 hermitlm
 ```
 
-- `GET /health` — status, checkpoint, tokenizer, device.
+- `GET /health` — status, checkpoint, tokenizer, device, probe.
 - `POST /chat` — `{user_id, message, temperature, top_k, max_tokens}` → `{response, tool, intent}` (`intent`: coarse label + confidence + `p_confused`; high `p_confused` escalates to web search).
 - `POST /chat/stream` — same request, server-sent events stream.
+
+```json
+POST /chat {"user_id": "demo", "message": "hello crab"}
+→ {"response": "oh. it's you...", "tool": null,
+   "intent": {"label": "a", "name": "social", "confidence": 1.0, "p_confused": 0.0067}}
+```
 
 ## Website
 
@@ -138,13 +179,13 @@ byte-level BPE tokenizer (reading `data/tokenizer.json` directly) to generate re
 conda create -n hermit -c pytorch -c conda-forge python=3.11 cpuonly pytorch tokenizers onnxruntime
 conda activate hermit
 pip install -e . -r requirements.txt
-pytest tests/          # 14 passed, 1 skipped (Wolfram test needs WOLFRAM_APP_ID + network)
+pytest tests/          # 31 passed
 ruff check .           # clean
 basedpyright           # clean (basic mode, see pyrightconfig.json)
 ```
 
 Copy `.env` from the documented keys (`HERMIT_CHECKPOINT`, `HERMIT_TOKENIZER`, `HERMIT_DEVICE`,
-`WOLFRAM_APP_ID`, …). Never commit `.env`.
+`HERMIT_PROBE`, `HERMIT_CONFUSED_THRESHOLD`, `WOLFRAM_APP_ID`, …). Never commit `.env`.
 
 ## License
 

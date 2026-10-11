@@ -15,7 +15,7 @@ from hermitlm.settings import (
 )
 from hermitlm.tools.db import init_db, insert_conversation
 from hermitlm.tools.memory import get_memory, init_memory_db, save_memory
-from hermitlm.tools.router import route
+from hermitlm.tools.router import route_with_intent
 
 app = FastAPI(title="HermitLM API")
 
@@ -38,9 +38,17 @@ class ChatRequest(BaseModel):
     max_tokens: int = Field(DEFAULT_MAX_TOKENS, ge=1, le=256)
 
 
+class IntentResponse(BaseModel):
+    label: str
+    name: str
+    confidence: float
+    p_confused: float
+
+
 class ChatResponse(BaseModel):
     response: str
     tool: str | None = None
+    intent: IntentResponse | None = None
 
 
 @app.get("/")
@@ -50,11 +58,14 @@ def home():
 
 @app.get("/health")
 def health():
+    from hermitlm.settings import PROBE_PATH
+
     return {
         "status": "ok",
         "checkpoint": CHECKPOINT_PATH,
         "tokenizer": TOKENIZER_PATH,
         "device": DEVICE,
+        "probe": PROBE_PATH if os.path.exists(PROBE_PATH) else None,
     }
 
 
@@ -70,7 +81,7 @@ def chat(req: ChatRequest):
 
     q = user_input.lower()
 
-    _tool, tool_result = route(user_input)
+    _tool, tool_result, intent = route_with_intent(user_input)
     response = tool_result
 
     if response is None and "my name is " in q:
@@ -162,14 +173,18 @@ def chat(req: ChatRequest):
         channel_id="api",
     )
 
-    return ChatResponse(response=response, tool=_tool)
+    return ChatResponse(
+        response=response,
+        tool=_tool,
+        intent=IntentResponse(**{k: intent[k] for k in ("label", "name", "confidence", "p_confused")}) if intent else None,
+    )
 
 
 @app.post("/chat/stream")
 def chat_stream(req: ChatRequest):
     from fastapi.responses import StreamingResponse
 
-    _tool, tool_result = route(req.message.strip())
+    _tool, tool_result, _intent = route_with_intent(req.message.strip())
     if tool_result:
         def _gen():
             yield f"data: {tool_result}\n\n"

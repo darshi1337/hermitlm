@@ -3,6 +3,7 @@ data/*
 checkpoints/*
 !checkpoints/best_model.pt
 !checkpoints/config.json
+!checkpoints/decision_probe.pt
 hermitlm.egg-info/
 __pycache__/
 .pytest_cache/

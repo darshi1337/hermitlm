@@ -1,7 +1,12 @@
 """Unified tool router with function-call tag parsing.
 
 Model can emit <tool>name(arg)</tool>; router also falls back to keyword heuristics.
+`route_with_intent` additionally runs the probe decision model
+(`hermitlm/tools/decision_model.py`): every reply carries a coarse intent
+label, and high `p_confused` (out-of-scope) escalates to web search when no
+other tool fired.
 """
+import os
 import re
 
 
@@ -55,3 +60,72 @@ def route(user_input):
         if r:
             return "web", r
     return None, None
+
+
+_probe = None
+_probe_failed = False
+
+
+def _get_probe():
+    """Lazily load the intent probe; return None (and never raise) if unavailable."""
+    global _probe, _probe_failed
+    if _probe is not None or _probe_failed:
+        return _probe
+    try:
+        from hermitlm.settings import (
+            CHECKPOINT_PATH,
+            DEVICE,
+            PROBE_PATH,
+            TOKENIZER_PATH,
+        )
+        from hermitlm.tools.decision_model import ProbeDecisionModel
+
+        if not (os.path.exists(CHECKPOINT_PATH) and os.path.exists(TOKENIZER_PATH) and os.path.exists(PROBE_PATH)):
+            _probe_failed = True
+            return None
+        _probe = ProbeDecisionModel(CHECKPOINT_PATH, TOKENIZER_PATH, PROBE_PATH, device=DEVICE)
+        return _probe
+    except Exception:  # noqa: BLE001 - probe must never break routing
+        _probe_failed = True
+        return None
+
+
+def classify_intent(user_input):
+    """Return {label, name, confidence, p_confused, proba} or None if probe unavailable."""
+    probe = _get_probe()
+    if probe is None:
+        return None
+    try:
+        from hermitlm.tools.decision_model import COARSE_NAMES
+
+        label, proba, p_confused = probe.predict(user_input)
+        return {
+            "label": label,
+            "name": COARSE_NAMES[label],
+            "confidence": round(proba[label], 4),
+            "p_confused": round(p_confused, 4),
+            "proba": {k: round(v, 4) for k, v in proba.items()},
+        }
+    except Exception:  # noqa: BLE001 - classification is best-effort
+        return None
+
+
+def route_with_intent(user_input, confused_threshold=None):
+    """Return (tool_name, result, intent) where intent is classify_intent() or None.
+
+    Escalation: if no tool fired and p_confused >= threshold, try web search.
+    """
+    from hermitlm.settings import CONFUSED_THRESHOLD
+
+    tool, result = route(user_input)
+    intent = classify_intent(user_input)
+    if tool is None and intent is not None:
+        threshold = CONFUSED_THRESHOLD if confused_threshold is None else confused_threshold
+        if intent["p_confused"] >= threshold:
+            try:
+                web_result = _web(user_input)
+            except Exception:  # noqa: BLE001 - escalation must not break chat
+                web_result = None
+            if web_result:
+                return "web", web_result, intent
+    return tool, result, intent

@@ -186,6 +186,11 @@
     background: var(--accent-soft); color: var(--accent);
     border: 1px solid var(--border); border-radius: 999px; padding: 5px 13px;
   }
+  a.search-chip {
+    display: inline-block; margin-top: 6px; font-size: 0.78rem; text-decoration: none;
+    background: var(--accent-soft); color: var(--accent);
+    border: 1px solid var(--border); border-radius: 999px; padding: 5px 13px;
+  }
 
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -281,6 +286,7 @@
 <script type="module">
 import { BPETokenizer } from "./tokenizer.js";
 import { HermitModel } from "./model.js";
+import { classifyIntent, CONFUSED_THRESHOLD } from "./intent.js";
 import { localMath } from "./math.js";
 
 const content = document.getElementById("content");
@@ -478,7 +484,7 @@ function addBubble(role, text, opts = {}) {
   }
   msg.appendChild(bubble);
 
-  if (role === "bot" && !opts.pending) {
+  if (role === "bot") {
     const meta = document.createElement("div");
     meta.className = "meta";
     bubble.meta = meta;
@@ -529,7 +535,7 @@ function addBubble(role, text, opts = {}) {
   return bubble;
 }
 
-let tokenizer, model;
+let tokenizer, model, probe = null;
 
 function setStatus(text, kind = "") {
   status.textContent = text;
@@ -550,6 +556,10 @@ async function init() {
     ]);
 
     setStatus("live · in-browser");
+    try {
+      const res = await fetch("./probe.json");
+      if (res.ok) probe = await res.json();
+    } catch (e) { console.warn("probe unavailable", e); }
     input.disabled = false;
     sendBtn.disabled = false;
     input.placeholder = "Say something to the crab…";
@@ -571,26 +581,36 @@ async function send(message) {
   autoresize();
   syncCharcount();
 
+  // probe decision model: one forward pass, intent label + out-of-scope signal
+  const persona = personaEl.value ? `[${personaEl.value} crab] ` : "";
+  const prompt = model.formatPrompt(persona + message);
+  const promptIds = tokenizer.encode(prompt);
+  let intent = null;
+  try {
+    const hidden = await model.classify(promptIds);
+    if (hidden && probe) intent = classifyIntent(hidden, probe);
+  } catch (e) { console.warn("intent failed", e); }
+  const intentText = intent
+    ? `intent: ${intent.name} · ${(intent.confidence * 100).toFixed(0)}%`
+    : "";
+
   // local tools first (no model needed): math solver
   const mathAnswer = localMath(message);
   if (mathAnswer) {
     const b = addBubble("bot", mathAnswer);
-    if (b.meta) b.meta.textContent = "computed locally · crab arithmetic";
+    if (b.meta) b.meta.textContent = ["computed locally · crab arithmetic", intentText].filter(Boolean).join(" · ");
     saveHistory();
     return;
   }
   input.disabled = true;
 
   const pending = addBubble("bot", "", { pending: true });
+  if (pending.meta && intentText) pending.meta.textContent = intentText;
   generating = true;
   sendBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`;
   const t0 = performance.now();
 
   try {
-    const persona = personaEl.value ? `[${personaEl.value} crab] ` : "";
-    const prompt = model.formatPrompt(persona + message);
-    const promptIds = tokenizer.encode(prompt);
-
     const generatedIds = [];
     stopFlag = false;
     for await (const id of model.generate(promptIds, {
@@ -612,7 +632,17 @@ async function send(message) {
     const secs = (performance.now() - t0) / 1000;
     const clock = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     if (pending.meta && generatedIds.length > 0) {
-      pending.meta.textContent = `${generatedIds.length} tokens · ${(generatedIds.length / secs).toFixed(1)} tok/s · ${clock}`;
+      pending.meta.textContent = [intentText, `${generatedIds.length} tokens · ${(generatedIds.length / secs).toFixed(1)} tok/s · ${clock}`].filter(Boolean).join(" · ");
+    }
+    // out-of-scope escalation: static site has no backend search, offer one
+    if (intent && intent.p_confused >= CONFUSED_THRESHOLD) {
+      const link = document.createElement("a");
+      link.className = "search-chip";
+      link.textContent = "crab doesn't know — search the web ↗";
+      link.href = "https://duckduckgo.com/?q=" + encodeURIComponent(message);
+      link.target = "_blank";
+      link.rel = "noopener";
+      pending.after(link);
     }
 
     if (text !== "(no response)" && voiceCheckbox.checked) speak(text);

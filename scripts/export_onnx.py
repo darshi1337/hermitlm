@@ -8,14 +8,16 @@ from hermitlm.config import HermitConfig
 from hermitlm.training.model import HermitLM
 
 
-class LogitsOnly(torch.nn.Module):
+class ChatWithHidden(torch.nn.Module):
     def __init__(self, model):
         super().__init__()
         self.model = model
 
     def forward(self, input_ids):
-        logits, _ = self.model(input_ids)
-        return logits
+        # logits for chat generation + last-token hidden state for the
+        # probe decision model (single forward pass, no extra download).
+        _logits, _loss, hidden = self.model(input_ids, return_hidden=True)
+        return _logits, hidden[:, -1, :]
 
 
 def export_onnx(checkpoint_path, tokenizer_path, output_dir, opset=17):
@@ -29,7 +31,7 @@ def export_onnx(checkpoint_path, tokenizer_path, output_dir, opset=17):
     model.load_state_dict(ckpt["model_state_dict"])
     model.eval()
 
-    wrapper = LogitsOnly(model)
+    wrapper = ChatWithHidden(model)
     dummy = torch.randint(0, config.vocab_size, (1, 8), dtype=torch.long)
 
     onnx_path = output_dir / "model.onnx"
@@ -38,7 +40,7 @@ def export_onnx(checkpoint_path, tokenizer_path, output_dir, opset=17):
         (dummy,),
         str(onnx_path),
         input_names=["input_ids"],
-        output_names=["logits"],
+        output_names=["logits", "last_hidden"],
         dynamic_axes={"input_ids": {1: "seq_len"}, "logits": {1: "seq_len"}},
         opset_version=opset,
         dynamo=False,

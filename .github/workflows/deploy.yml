@@ -36,10 +36,16 @@ jobs:
         with:
           python-version: "3.11"
 
-      - run: pip install -e . onnx onnxscript
+      - run: pip install -e . onnx onnxscript onnxruntime
 
       - name: Export model to ONNX
         run: python scripts/export_onnx.py --output-dir web
+
+      - name: Quantize model for the web
+        run: python scripts/quantize_onnx.py --input web/model.onnx --output web/model.quant.onnx
+
+      - name: Export probe head to JSON
+        run: python scripts/export_probe.py --output web/probe.json
 
       - uses: actions/configure-pages@v5
 

@@ -11,3 +11,6 @@ DEVICE = os.getenv("HERMIT_DEVICE", "cpu")
 DEFAULT_TEMPERATURE = float(os.getenv("HERMIT_TEMPERATURE", "0.6"))
 DEFAULT_TOP_K = int(os.getenv("HERMIT_TOP_K", "20"))
 DEFAULT_MAX_TOKENS = int(os.getenv("HERMIT_MAX_TOKENS", "80"))
+
+PROBE_PATH = os.getenv("HERMIT_PROBE", "checkpoints/decision_probe.pt")
+CONFUSED_THRESHOLD = float(os.getenv("HERMIT_CONFUSED_THRESHOLD", "0.9"))

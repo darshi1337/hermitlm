@@ -82,6 +82,25 @@ export class HermitModel {
     return `<|im_start|>user\n${userInput}<|im_end|>\n<|im_start|>assistant\n`;
   }
 
+  // Single forward pass over the prompt; returns the last-token hidden
+  // state for the probe decision model, or null if the loaded artifact
+  // predates the `last_hidden` output. Shares the chat session: no extra
+  // download, one extra inference step.
+  async classify(promptIds) {
+    const context =
+      promptIds.length > MAX_SEQ_LEN
+        ? promptIds.slice(promptIds.length - MAX_SEQ_LEN)
+        : promptIds;
+    const inputTensor = new ort.Tensor(
+      "int64",
+      BigInt64Array.from(context.map((id) => BigInt(id))),
+      [1, context.length]
+    );
+    const results = await this.session.run({ input_ids: inputTensor });
+    if (!results.last_hidden) return null;
+    return results.last_hidden.data;
+  }
+
   async *generate(
     promptIds,
     { maxNewTokens = 80, temperature = 0.6, topK = 20, topP = 0.95 } = {}

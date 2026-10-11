@@ -116,7 +116,7 @@ uvicorn hermitlm.runtime.api:app --host 0.0.0.0 --port 8000
 ```
 
 - `GET /health` — status, checkpoint, tokenizer, device.
-- `POST /chat` — `{user_id, message, temperature, top_k, max_tokens}` → `{response, tool}`.
+- `POST /chat` — `{user_id, message, temperature, top_k, max_tokens}` → `{response, tool, intent}` (`intent`: coarse label + confidence + `p_confused`; high `p_confused` escalates to web search).
 - `POST /chat/stream` — same request, server-sent events stream.
 
 ## Website
@@ -125,8 +125,10 @@ The chat UI in `web/` runs the model entirely client-side: `scripts/export_onnx.
 `checkpoints/best_model.pt` to ONNX, `scripts/quantize_onnx.py` produces the uint8 `model.quant.onnx`
 (the page tries it first and falls back to `model.onnx`), and the page uses onnxruntime-web plus a from-scratch
 byte-level BPE tokenizer (reading `data/tokenizer.json` directly) to generate responses in
-the browser with no backend. The UI streams tokens as they generate and offers temperature/top-K,
-persona modes (normal/sleepy/hungry/guard-crab), a stop button, and speech synthesis.
+ the browser with no backend. The UI streams tokens as they generate and offers temperature/top-K,
+ persona modes (normal/sleepy/hungry/guard-crab), a stop button, and speech synthesis.
+ Every reply also shows a probe decision-model intent chip (`web/intent.js` + `web/probe.json`,
+ single forward pass over the prompt); high out-of-scope score links to a web search.
 `.github/workflows/deploy.yml` exports the model and publishes
 `web/` to GitHub Pages on every push to `main`.
 

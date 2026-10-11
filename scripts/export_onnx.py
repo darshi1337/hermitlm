@@ -5,19 +5,7 @@ from pathlib import Path
 import torch
 
 from hermitlm.config import HermitConfig
-from hermitlm.training.model import HermitLM
-
-
-class ChatWithHidden(torch.nn.Module):
-    def __init__(self, model):
-        super().__init__()
-        self.model = model
-
-    def forward(self, input_ids):
-        # Return logits for chat generation. Also return the last-token hidden
-        # state for the probe decision model (single forward pass, no extra download).
-        _logits, _loss, hidden = self.model(input_ids, return_hidden=True)
-        return _logits, hidden[:, -1, :]
+from hermitlm.training.model import ChatWithHidden, HermitLM
 
 
 def export_onnx(checkpoint_path, tokenizer_path, output_dir, opset=17):

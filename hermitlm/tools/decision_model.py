@@ -13,6 +13,9 @@ of the tokenizer holds single tokens for `a`-`g` (ids 21-27), but uppercase
 `A`-`G` are out-of-vocabulary and encode to nothing.
 """
 
+import json
+from pathlib import Path
+
 import torch
 import torch.nn.functional as F
 from tokenizers import Tokenizer
@@ -179,3 +182,27 @@ class ProbeDecisionModel:
     @staticmethod
     def coarse_of(fine_type: str) -> str:
         return FINE_TO_COARSE[fine_type]
+
+
+def export_probe(probe_path: str, output_path: str) -> dict:
+    """Write probe head weights to JSON for the browser UI. Return the data."""
+    probe = torch.load(probe_path, map_location="cpu", weights_only=True)
+    data = {
+        "options": OPTION_LETTERS,
+        "names": {letter: COARSE_NAMES[letter] for letter in OPTION_LETTERS},
+        "temperature7": float(probe["temperature7"]),
+        "temperature_bin": float(probe["temperature_bin"]),
+        "head7": {
+            "weight": probe["head7"]["weight"].tolist(),
+            "bias": probe["head7"]["bias"].tolist(),
+        },
+        "head_bin": {
+            "weight": probe["head_bin"]["weight"].tolist(),
+            "bias": probe["head_bin"]["bias"].tolist(),
+        },
+    }
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(data))
+    print(f"Exported probe to {out} ({out.stat().st_size / 1024:.1f}KB)")
+    return data

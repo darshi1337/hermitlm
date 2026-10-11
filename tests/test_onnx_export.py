@@ -18,8 +18,7 @@ def _toy_config():
 
 
 def test_export_wrapper_returns_logits_and_last_hidden():
-    from hermitlm.training.model import HermitLM
-    from scripts.export_onnx import ChatWithHidden
+    from hermitlm.training.model import ChatWithHidden, HermitLM
 
     config = _toy_config()
     model = HermitLM(config).eval()
@@ -34,7 +33,7 @@ def test_export_wrapper_returns_logits_and_last_hidden():
 
 
 def test_export_probe_json_matches_checkpoint(tmp_path):
-    from scripts.export_probe import export_probe
+    from hermitlm.tools.decision_model import export_probe
 
     out = tmp_path / "probe.json"
     data = export_probe("checkpoints/decision_probe.pt", str(out))

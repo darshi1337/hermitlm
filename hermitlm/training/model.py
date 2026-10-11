@@ -174,3 +174,19 @@ class HermitLM(nn.Module):
     def param_summary(self):
         total = self.param_count()
         return f"HermitLM: {total:,} params ({total/1e6:.2f}M)"
+
+
+class ChatWithHidden(nn.Module):
+    """ONNX export wrapper. Returns chat logits plus the last-token hidden state.
+
+    The hidden state feeds the probe decision model, so one shared artifact
+    serves both chat generation and single-pass intent classification.
+    """
+
+    def __init__(self, model: HermitLM):
+        super().__init__()
+        self.model = model
+
+    def forward(self, idx):
+        _logits, _loss, hidden = self.model(idx, return_hidden=True)
+        return _logits, hidden[:, -1, :]

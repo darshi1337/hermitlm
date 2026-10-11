@@ -82,8 +82,8 @@ export class HermitModel {
     return `<|im_start|>user\n${userInput}<|im_end|>\n<|im_start|>assistant\n`;
   }
 
-  // Single forward pass over the prompt; returns the last-token hidden
-  // state for the probe decision model, or null if the loaded artifact
+  // Single forward pass over the prompt. Returns the last-token hidden
+  // state for the probe decision model. Returns null if the loaded artifact
   // predates the `last_hidden` output. Shares the chat session: no extra
   // download, one extra inference step.
   async classify(promptIds) {

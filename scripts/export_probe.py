@@ -1,9 +1,9 @@
 """Export probe decision-head weights to web/probe.json for in-browser intent.
 
-Reads checkpoints/decision_probe.pt (see scripts/train_probe.py) and writes
-a small JSON (~12KB) with the 7-way + confused-vs-rest linear heads and
-their temperatures. web/intent.js applies them to the model's last_hidden
-ONNX output. Run on every push via .github/workflows/deploy.yml.
+Reads checkpoints/decision_probe.pt (see scripts/train_probe.py). It writes a small
+JSON (~61KB) with the 7-way and confused-vs-rest linear heads and their
+temperatures. web/intent.js applies them to the last_hidden output of the model.
+Run on every push via .github/workflows/deploy.yml.
 """
 
 import argparse

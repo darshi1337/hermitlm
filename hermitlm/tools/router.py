@@ -1,7 +1,7 @@
 """Unified tool router with function-call tag parsing.
 
-Model can emit <tool>name(arg)</tool>; router also falls back to keyword heuristics.
-`route_with_intent` additionally runs the probe decision model
+Model can emit <tool>name(arg)</tool>. The router also falls back to keyword heuristics.
+`route_with_intent` also runs the probe decision model
 (`hermitlm/tools/decision_model.py`): every reply carries a coarse intent
 label, and high `p_confused` (out-of-scope) escalates to web search when no
 other tool fired.
@@ -67,7 +67,7 @@ _probe_failed = False
 
 
 def _get_probe():
-    """Lazily load the intent probe; return None (and never raise) if unavailable."""
+    """Load the intent probe on first use. Return None (and never raise) if unavailable."""
     global _probe, _probe_failed
     if _probe is not None or _probe_failed:
         return _probe

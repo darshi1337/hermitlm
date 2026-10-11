@@ -6,10 +6,10 @@ pass, take the last-position logits, mask to the allowed option tokens and
 softmax them into a calibrated decision.
 
 The decision task is intent classification over the persona data
-(`data/train.jsonl` / `data/eval.jsonl`, `{input, output, type}`). The 21
-fine-grained `type` labels are collapsed into 7 coarse intents whose
-verbalizers are the single lowercase letters a-g. Lowercase matters: this
-tokenizer's vocab has single tokens for `a`-`g` (ids 21-27) but uppercase
+(`data/train.jsonl` / `data/eval.jsonl`, `{input, output, type}`). The mapping
+collapses the 21 fine-grained `type` labels into 7 coarse intents. The
+verbalizers are the single lowercase letters a-g. Lowercase matters. The vocab
+of the tokenizer holds single tokens for `a`-`g` (ids 21-27), but uppercase
 `A`-`G` are out-of-vocabulary and encode to nothing.
 """
 
@@ -20,8 +20,9 @@ from tokenizers import Tokenizer
 from hermitlm.config import HermitConfig
 from hermitlm.training.model import HermitLM
 
-# Coarse intent mapping: 7 balanced-ish buckets covering all 21 fine types.
-# Counts on train.jsonl (95k): a~14.9k b~14.8k c~11.9k d~14.8k e~11.9k f~9.0k g~17.9k
+# Coarse intent mapping: 7 balanced buckets covering all 21 fine types.
+# Bucket sizes on train.jsonl (95k) stay within a factor of two:
+# a~14.9k b~14.8k c~11.9k d~14.8k e~11.9k f~9.0k g~17.9k
 COARSE_MEMBERS: dict[str, list[str]] = {
     "a": ["greeting", "bye", "lonely"],  # social
     "b": ["food", "water", "bubbles"],  # needs
@@ -69,7 +70,7 @@ def get_option_ids(tokenizer: Tokenizer) -> list[int]:
 
 
 def format_prompt(query: str) -> str:
-    """Build the classification prompt; the model scores one letter next."""
+    """Build the classification prompt. The model scores one letter next."""
     options = "\n".join(f"{letter}. {COARSE_NAMES[letter]}" for letter in OPTION_LETTERS)
     return (
         "<|im_start|>user\n"
@@ -128,11 +129,11 @@ def chat_prompt(query: str) -> str:
 
 
 class ProbeDecisionModel:
-    """Supervised System-1 head: frozen LM forward pass + linear probe.
+    """Supervised System-1 head: frozen LM forward pass plus linear probe.
 
-    Same single-pass cost profile as constrained decoding, but trained, so
-    it actually works on this 8M chat model. Predicts the 7 coarse intents
-    plus P(confused) as the out-of-scope ("I don't know") signal.
+    Same single-pass cost profile as constrained decoding, but trained. It
+    predicts the 7 coarse intents plus P(confused) as the out-of-scope signal
+    (option E from the article).
     """
 
     def __init__(self, checkpoint_path: str, tokenizer_path: str, probe_path: str, device: str = "cpu"):

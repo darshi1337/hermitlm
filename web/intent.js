@@ -1,6 +1,6 @@
-// In-browser probe decision model. Mirrors ProbeDecisionModel.predict() in
-// hermitlm/tools/decision_model.py: one forward pass gives `last_hidden`
-// (see HermitModel.classify in model.js), this module applies the exported
+// In-browser probe decision model. Mirrors ProbeDecisionModel.predict() from
+// hermitlm/tools/decision_model.py. One forward pass gives `last_hidden`
+// (see HermitModel.classify in model.js). This module applies the exported
 // linear heads (web/probe.json) with temperature-scaled softmax.
 
 export const CONFUSED_THRESHOLD = 0.9;

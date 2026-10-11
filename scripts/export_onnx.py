@@ -14,8 +14,8 @@ class ChatWithHidden(torch.nn.Module):
         self.model = model
 
     def forward(self, input_ids):
-        # logits for chat generation + last-token hidden state for the
-        # probe decision model (single forward pass, no extra download).
+        # Return logits for chat generation. Also return the last-token hidden
+        # state for the probe decision model (single forward pass, no extra download).
         _logits, _loss, hidden = self.model(input_ids, return_hidden=True)
         return _logits, hidden[:, -1, :]
 

@@ -1,8 +1,8 @@
 """Zero-shot eval + temperature calibration for the decision model.
 
-Mirrors the article's eval: accuracy, per-class precision/recall/F1 and a
-confidence-vs-accuracy bin table, then a grid search over temperature T
-(minimizing NLL) to fix the expected overconfidence.
+Mirrors the eval from the article: accuracy, per-class precision/recall/F1, and a
+confidence-vs-accuracy bin table. Then a grid search over temperature T
+(minimizing NLL) fixes the expected overconfidence.
 
 Usage:
     conda run -n hermit python scripts/eval_decision.py \
@@ -170,7 +170,7 @@ def run_eval(
         report["calibrated"] = report["probed"]
     else:
         model = DecisionModel(checkpoint, tokenizer_path, device)
-        # Collect base (T=1) probas once; rescale analytically for the grid.
+        # Collect base (T=1) probas one time. Rescale them analytically for the grid.
         base_probas: list[dict[str, float]] = []
         with torch.no_grad():
             for r in rows:

@@ -1,11 +1,11 @@
 """Train a linear probe decision head on frozen HermitLM hidden states.
 
-Zero-shot constrained decoding fails on this model (the classify prompt is
-out-of-distribution; option letters sit at near-tied low logits), so the
+Zero-shot constrained decoding fails on this model. The classify prompt is
+out-of-distribution. Option letters sit at near-tied low logits. Thus the
 System-1 decision model is a tiny supervised head instead: one frozen
 forward pass over the natural chat prompt, last-token hidden state, linear
-layer -> 7 coarse intents. Same single-pass cost profile as the article's
-method, plus a binary confused-vs-rest (out-of-scope) head.
+layer -> 7 coarse intents. Same single-pass cost profile as the method from
+the article, plus a binary confused-vs-rest (out-of-scope) head.
 
 Usage:
     conda run -n hermit python scripts/train_probe.py \
@@ -122,7 +122,7 @@ def main() -> None:
             if d.get("input") and d.get("type") in FINE_TO_COARSE:
                 buckets[FINE_TO_COARSE[d["type"]]].append(d["input"])
     queries, coarse_idx, is_confused, fine_of = [], [], [], []
-    # need fine labels for the binary head: rebuild with types
+    # Keep the fine labels for the binary head. Rebuild the pool with types.
     typed: dict[str, list[tuple[str, str]]] = collections.defaultdict(list)
     with open(args.train) as f:
         for line in f:

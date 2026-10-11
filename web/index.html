@@ -581,7 +581,7 @@ async function send(message) {
   autoresize();
   syncCharcount();
 
-  // probe decision model: one forward pass, intent label + out-of-scope signal
+  // Probe decision model: one forward pass gives the intent label and the out-of-scope signal.
   const persona = personaEl.value ? `[${personaEl.value} crab] ` : "";
   const prompt = model.formatPrompt(persona + message);
   const promptIds = tokenizer.encode(prompt);
@@ -594,7 +594,7 @@ async function send(message) {
     ? `intent: ${intent.name} · ${(intent.confidence * 100).toFixed(0)}%`
     : "";
 
-  // local tools first (no model needed): math solver
+  // Local tools run first and need no model: math solver.
   const mathAnswer = localMath(message);
   if (mathAnswer) {
     const b = addBubble("bot", mathAnswer);
@@ -634,7 +634,7 @@ async function send(message) {
     if (pending.meta && generatedIds.length > 0) {
       pending.meta.textContent = [intentText, `${generatedIds.length} tokens · ${(generatedIds.length / secs).toFixed(1)} tok/s · ${clock}`].filter(Boolean).join(" · ");
     }
-    // out-of-scope escalation: static site has no backend search, offer one
+    // Out-of-scope escalation: the static site has no backend search, so link to a web search.
     if (intent && intent.p_confused >= CONFUSED_THRESHOLD) {
       const link = document.createElement("a");
       link.className = "search-chip";

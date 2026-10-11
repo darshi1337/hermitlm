@@ -63,7 +63,7 @@ Small causal transformer. Learned positions, standard attention, LayerNorm, weig
 - Runs fully client-side in the browser (ONNX + onnxruntime-web, no backend server)
 - Quantized web model (`model.quant.onnx`, ~9MB vs ~36MB fp32) with automatic fallback
 - Tool-calling router: FAQ, Wolfram math, and web search, via `<tool>name(query)</tool>` tags plus keyword fallback
-- Probe decision model: single-pass intent classification (7 coarse intents + out-of-scope score); high `p_confused` escalates to web search, and the browser UI shows an intent chip per reply
+- Probe decision model: single-pass intent classification into 7 coarse intents, plus an out-of-scope score. High `p_confused` escalates to web search. The browser UI shows an intent chip on each reply.
 - Streaming API (`POST /chat/stream`, SSE) alongside `POST /chat`
 - Modular architecture
 - Automated tests, ruff, and basedpyright gates
@@ -75,15 +75,17 @@ Small causal transformer. Learned positions, standard attention, LayerNorm, weig
 Three stages:
 
 1. **SFT** (`scripts/train.sh` → `hermitlm/training/train.py`): next-token prediction on `data/train.jsonl`, produces `checkpoints/best_model.pt`.
-2. **RLHF** (`scripts/train_ppo.sh` → `hermitlm/training/ppo.py`): PPO fine-tunes the SFT checkpoint against a heuristic persona-consistency reward (`hermitlm/training/reward.py`) that scores crab-vocabulary usage, terse in-character style, and penalizes repetition, shouting, and character breaks. A KL penalty against the frozen SFT model (the reference policy) keeps the tuned policy from drifting off-distribution. Rollout prompts are drawn from `data/train.jsonl`/`eval.jsonl`; PPO checkpoints land in `checkpoints/ppo/` and are drop-in compatible with the existing inference/bot/API code.
-3. **DPO** (`scripts/train_dpo.sh` → `hermitlm/training/dpo.py`): simpler preference-tuning alternative to PPO. Builds chosen/rejected pairs on-policy (4 candidates per prompt, best vs worst by `score_response`, kept only if the score gap clears a margin filter), optimized against a frozen SFT reference. Checkpoints land in `checkpoints/dpo/`.
+
+2. **RLHF** (`scripts/train_ppo.sh` → `hermitlm/training/ppo.py`): PPO fine-tunes the SFT checkpoint against a heuristic persona-consistency reward (`hermitlm/training/reward.py`). The reward scores crab-vocabulary use and terse in-character style. It penalizes repetition, shouting, and character breaks. A KL penalty against the frozen SFT model (the reference policy) keeps the tuned policy from drifting off-distribution. Training draws rollout prompts from `data/train.jsonl`/`eval.jsonl`. PPO checkpoints land in `checkpoints/ppo/` and stay drop-in compatible with the inference, bot, and API code.
+
+3. **DPO** (`scripts/train_dpo.sh` → `hermitlm/training/dpo.py`): simpler preference-tuning alternative to PPO. It builds chosen/rejected pairs on-policy (4 candidates per prompt, best vs worst by `score_response`). A pair survives only if the score gap clears a margin filter. It optimizes against a frozen SFT reference. Checkpoints land in `checkpoints/dpo/`.
 
 ## Eval
 
 `scripts/eval.py` scores a checkpoint on three axes and writes `report.json`/`report.md`:
 
 - **Perplexity** on `data/eval.jsonl` (proxy, first 50 batches).
-- **Persona reward**: `score_response` over the model's own generations for 10 held-out prompts (not reference texts, so checkpoints are comparable).
+- **Persona reward**: `score_response` over generations from the model for 10 held-out prompts (not reference texts, so checkpoints are comparable).
 - **Tool triggers**: offline keyword/tag routing check (no network).
 
 ```bash
@@ -100,15 +102,16 @@ Latest comparison (persona measured over 10 sampled generations, so ±0.05 noise
 | PPO (`ppo_final.pt`) | 1.992 | **0.648** |
 | DPO (`dpo_final.pt`, margin filter) | 1.930 | 0.449 |
 
-PPO is currently the best persona checkpoint; DPO as configured does not beat SFT.
+PPO is now the best persona checkpoint. DPO as configured does not beat SFT.
 
 ## Tools
 
 `hermitlm/tools/router.py` is the single entry point. The model can emit function-call tags
-(`<tool>search(query)</tool>`, `<tool>math(query)</tool>`, `<tool>faq(query)</tool>`); otherwise
+(`<tool>search(query)</tool>`, `<tool>math(query)</tool>`, `<tool>faq(query)</tool>`). Otherwise
 keyword heuristics route to the FAQ responder, Wolfram (`math.py`), or DuckDuckGo search (`web.py`).
 Both the FastAPI backend and the eval harness use it. `POST /chat` returns which tool fired.
-`route_with_intent()` additionally attaches the probe decision-model verdict and escalates
+
+`route_with_intent()` also attaches the probe decision-model verdict. It escalates
 out-of-scope messages (`p_confused >= HERMIT_CONFUSED_THRESHOLD`, default 0.9) to web search
 when no other tool fired.
 
@@ -116,10 +119,10 @@ when no other tool fired.
 
 A single-pass ("System-1") intent classifier on top of the frozen chat model, in the spirit of
 [Build your own decision model](https://nishtahir.com/build-your-own-decision-model/).
-Zero-shot constrained decoding fails here (21% accuracy — the classify prompt is out-of-distribution
-for the 8M crab-chat model), so `scripts/train_probe.py` trains tiny linear heads on frozen
-last-token hidden states instead: 7 coarse intents over the 21 persona `type` labels, plus a
-confused-vs-rest out-of-scope head.
+Zero-shot constrained decoding fails here with 21% accuracy. The classify prompt is out-of-distribution
+for the 8M crab-chat model. Thus `scripts/train_probe.py` trains tiny linear heads on frozen
+last-token hidden states instead. The heads cover 7 coarse intents over the 21 persona `type` labels,
+plus a confused-vs-rest out-of-scope head.
 
 | Intent | Covers | Precision | Recall | F1 |
 | --- | --- | --- | --- | --- |
@@ -132,7 +135,7 @@ confused-vs-rest out-of-scope head.
 | `g` mind | misc, confused, reflection | 1.00 | 0.83 | 0.91 |
 
 Held-out (`data/eval.jsonl`, n=4000, temperature fitted on a disjoint 1000-row split):
-accuracy 0.907, macro F1 0.906, NLL 0.29, ECE 0.063; confused detector precision 0.79 / recall 1.0.
+accuracy 0.907, macro F1 0.906, NLL 0.29, ECE 0.063. The confused detector reaches precision 0.79 at recall 1.0.
 
 ```bash
 conda run -n hermit python scripts/train_probe.py --per-class 1500 --epochs 30 --out checkpoints/decision_probe.pt
@@ -141,7 +144,7 @@ conda run -n hermit python scripts/export_probe.py --output web/probe.json   # a
 ```
 
 `HermitModel.classify()` (`web/model.js`) + `web/intent.js` run the same probe in-browser off the
-`last_hidden` ONNX output — one extra inference step, no extra download.
+`last_hidden` ONNX output. This costs one extra inference step and no extra download.
 
 ## API
 
@@ -150,9 +153,9 @@ uvicorn hermitlm.runtime.api:app --host 0.0.0.0 --port 8000
 # or: docker build -t hermitlm . && docker run -p 8000:8000 hermitlm
 ```
 
-- `GET /health` — status, checkpoint, tokenizer, device, probe.
-- `POST /chat` — `{user_id, message, temperature, top_k, max_tokens}` → `{response, tool, intent}` (`intent`: coarse label + confidence + `p_confused`; high `p_confused` escalates to web search).
-- `POST /chat/stream` — same request, server-sent events stream.
+- `GET /health`: status, checkpoint, tokenizer, device, probe.
+- `POST /chat`: `{user_id, message, temperature, top_k, max_tokens}` → `{response, tool, intent}`. `intent` holds the coarse label, the confidence, and `p_confused`. High `p_confused` escalates to web search.
+- `POST /chat/stream`: same request, server-sent events stream.
 
 ```json
 POST /chat {"user_id": "demo", "message": "hello crab"}
@@ -162,14 +165,19 @@ POST /chat {"user_id": "demo", "message": "hello crab"}
 
 ## Website
 
-The chat UI in `web/` runs the model entirely client-side: `scripts/export_onnx.py` exports
-`checkpoints/best_model.pt` to ONNX, `scripts/quantize_onnx.py` produces the uint8 `model.quant.onnx`
-(the page tries it first and falls back to `model.onnx`), and the page uses onnxruntime-web plus a from-scratch
-byte-level BPE tokenizer (reading `data/tokenizer.json` directly) to generate responses in
- the browser with no backend. The UI streams tokens as they generate and offers temperature/top-K,
+The chat UI in `web/` runs the model entirely client-side. `scripts/export_onnx.py` exports
+`checkpoints/best_model.pt` to ONNX. `scripts/quantize_onnx.py` produces the uint8 `model.quant.onnx`.
+The page tries the quantized model first and falls back to `model.onnx`.
+
+The page uses onnxruntime-web plus a from-scratch byte-level BPE tokenizer. The tokenizer reads
+`data/tokenizer.json` directly. The page generates responses in
+ the browser with no backend.
+
+The UI streams tokens as they generate and offers temperature/top-K,
  persona modes (normal/sleepy/hungry/guard-crab), a stop button, and speech synthesis.
- Every reply also shows a probe decision-model intent chip (`web/intent.js` + `web/probe.json`,
- single forward pass over the prompt); high out-of-scope score links to a web search.
+
+ Every reply also shows a probe decision-model intent chip (`web/intent.js` + `web/probe.json`).
+ Classification costs a single forward pass over the prompt. A high out-of-scope score links to a web search.
 `.github/workflows/deploy.yml` exports the model and publishes
 `web/` to GitHub Pages on every push to `main`.
 

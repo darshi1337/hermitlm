@@ -6,7 +6,7 @@
 <title>Hermit — tiny crab, tiny model</title>
 <meta name="description" content="HermitLM: an 8M-parameter language model that talks like a tiny crab. Runs fully in your browser.">
 <link rel="icon" type="image/png" href="./assets/favicon.png">
-<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.min.js"></script>
+<script src="./vendor/ort.min.js" defer></script>
 <style>
   :root {
     color-scheme: light;
@@ -59,7 +59,7 @@
     border: 1px solid #bbf7d0; padding: 4px 10px; border-radius: 999px; white-space: nowrap;
   }
   .pill.loading { color: #b45309; background: #fffbeb; border-color: #fde68a; }
-  .pill.error { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
+  .pill.error { color: #b91c1c; background: #fef2f2; border-color: #fecaca; cursor: pointer; }
   .icon-btn {
     width: 32px; height: 32px; border-radius: 9px; cursor: pointer;
     border: 1px solid var(--border); background: var(--card); color: var(--muted);
@@ -277,6 +277,7 @@
             <label class="switch" id="voice-toggle"><input id="voice-checkbox" type="checkbox"> voice</label>
             <button id="stop" type="button">stop</button>
           </div>
+          <div class="hint" id="session-stats"></div>
         </details>
         <div class="hint">Enter to send · Shift+Enter for new line</div>
       </div>
@@ -286,7 +287,7 @@
 <script type="module">
 import { BPETokenizer } from "./tokenizer.js";
 import { HermitModel } from "./model.js";
-import { classifyIntent, CONFUSED_THRESHOLD } from "./intent.js";
+import { classifyIntent, classifyFine, CONFUSED_THRESHOLD, CLARIFY_THRESHOLD } from "./intent.js";
 import { localMath } from "./math.js";
 
 const content = document.getElementById("content");
@@ -306,6 +307,7 @@ const micBtn = document.getElementById("mic");
 let stopFlag = false;
 let generating = false;
 let lastUserText = "";
+let manualPersona = false;
 stopBtn.addEventListener("click", () => (stopFlag = true));
 
 function syncPersonaBadge() {
@@ -313,7 +315,11 @@ function syncPersonaBadge() {
   personaBadge.textContent = v ? `🦀 ${v}` : "";
   personaBadge.classList.toggle("show", !!v);
 }
-personaEl.addEventListener("change", syncPersonaBadge);
+personaEl.addEventListener("change", () => { manualPersona = true; syncPersonaBadge(); });
+
+// Probe intent to persona mode. Mirrors INTENT_PERSONA in
+// hermitlm/tools/decision_model.py. Auto-applies only until the user picks one.
+const INTENT_PERSONA = { a: "", b: "hungry", c: "", d: "guard", e: "sleepy", f: "sleepy", g: "" };
 
 /* voice input */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -379,6 +385,14 @@ function pin() {
 }
 
 /* history persistence */
+const sessionCounts = {};
+function updateSessionStats(intent) {
+  const el = document.getElementById("session-stats");
+  if (intent) sessionCounts[intent.name] = (sessionCounts[intent.name] || 0) + 1;
+  if (!el) return;
+  const parts = Object.entries(sessionCounts).map(([name, n]) => `${name} ${n}`);
+  el.textContent = parts.length ? `session intents: ${parts.join(" · ")}` : "";
+}
 function saveHistory() {
   try {
     const rows = [...log.querySelectorAll(".row")].map((row) => ({
@@ -537,13 +551,31 @@ function addBubble(role, text, opts = {}) {
 
 let tokenizer, model, probe = null;
 
+// onnxruntime ships vendored (no CDN dependency). If the vendor copy is
+// missing, fall back to the CDN before giving up.
+async function ensureOrt() {
+  if (typeof ort !== "undefined") return;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.min.js";
+    s.onload = resolve;
+    s.onerror = () => reject(new Error("blocked"));
+    document.head.appendChild(s);
+  });
+}
+
 function setStatus(text, kind = "") {
   status.textContent = text;
   status.className = "pill" + (kind ? " " + kind : "");
 }
 
 async function init() {
+  const t0 = performance.now();
+  const secs = () => `${((performance.now() - t0) / 1000).toFixed(0)}s`;
   try {
+    setStatus("runtime…", "loading");
+    await ensureOrt();
+    setStatus("tokenizer…", "loading");
     [tokenizer, model] = await Promise.all([
       BPETokenizer.load("./tokenizer.json"),
       HermitModel.load("./model.quant.onnx", {
@@ -555,44 +587,89 @@ async function init() {
       ),
     ]);
 
-    setStatus("live · in-browser");
+    setStatus("probe…", "loading");
     try {
       const res = await fetch("./probe.json");
       if (res.ok) probe = await res.json();
     } catch (e) { console.warn("probe unavailable", e); }
+
+    setStatus(`live · in-browser · loaded in ${secs()}`);
     input.disabled = false;
     sendBtn.disabled = false;
     input.placeholder = "Say something to the crab…";
     input.focus();
   } catch (e) {
     console.error(e);
-    setStatus("failed to load", "error");
+    setStatus("failed to load — click to retry", "error");
   }
 }
+status.addEventListener("click", () => {
+  if (status.classList.contains("error")) location.reload();
+});
+window.addEventListener("error", (e) => {
+  if (input.disabled && !status.classList.contains("error")) {
+    setStatus(`failed to load (${e.message || "script error"}) — click to retry`, "error");
+  }
+});
 
-async function send(message) {
+async function send(message, opts = {}) {
   if (generating) {
     stopFlag = true;
     return;
   }
   lastUserText = message;
+  if (opts.forcePersona !== undefined) {
+    personaEl.value = opts.forcePersona || "";
+    syncPersonaBadge();
+  }
   addBubble("user", message);
   input.value = "";
   autoresize();
   syncCharcount();
 
-  // Probe decision model: one forward pass gives the intent label and the out-of-scope signal.
+  // Probe decision model: classify the raw message first (persona framing
+  // does not change intent), then auto-apply the persona to generation.
+  const rawIds = tokenizer.encode(model.formatPrompt(message));
+  let intent = null, fine = null;
+  try {
+    const hidden = await model.classify(rawIds);
+    if (hidden && probe) {
+      intent = classifyIntent(hidden, probe);
+      fine = classifyFine(hidden, probe);
+    }
+  } catch (e) { console.warn("intent failed", e); }
+  const intentText = intent
+    ? `intent: ${intent.name}${fine ? " · " + fine.fine : ""} · ${(intent.confidence * 100).toFixed(0)}%`
+    : "";
+  if (intent && !manualPersona) {
+    personaEl.value = INTENT_PERSONA[intent.label] || "";
+    syncPersonaBadge();
+  }
+  updateSessionStats(intent);
   const persona = personaEl.value ? `[${personaEl.value} crab] ` : "";
   const prompt = model.formatPrompt(persona + message);
   const promptIds = tokenizer.encode(prompt);
-  let intent = null;
-  try {
-    const hidden = await model.classify(promptIds);
-    if (hidden && probe) intent = classifyIntent(hidden, probe);
-  } catch (e) { console.warn("intent failed", e); }
-  const intentText = intent
-    ? `intent: ${intent.name} · ${(intent.confidence * 100).toFixed(0)}%`
-    : "";
+
+  // Confidence gate: ask which of the top two intents the user means.
+  if (intent && !opts.fromClarify && intent.confidence < CLARIFY_THRESHOLD && intent.p_confused < CONFUSED_THRESHOLD) {
+    const [first, second] = intent.top2;
+    const bubble = addBubble("bot", `Quick check before I scuttle ahead: is this about ${probe.names[first[0]]} or ${probe.names[second[0]]}?`);
+    const msg = bubble.parentElement;
+    for (const [letter] of intent.top2) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "retry-chip";
+      chip.textContent = probe.names[letter];
+      chip.addEventListener("click", () => {
+        chip.disabled = true;
+        send(lastUserText, { fromClarify: true, forcePersona: INTENT_PERSONA[letter] || "" });
+      });
+      msg.appendChild(chip);
+    }
+    if (bubble.meta && intentText) bubble.meta.textContent = intentText;
+    saveHistory();
+    return;
+  }
 
   // Local tools run first and need no model: math solver.
   const mathAnswer = localMath(message);

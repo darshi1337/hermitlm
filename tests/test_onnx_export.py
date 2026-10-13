@@ -44,5 +44,7 @@ def test_export_probe_json_matches_checkpoint(tmp_path):
     assert len(data["head7"]["weight"][0]) == len(data["head_bin"]["weight"][0])
     assert len(data["head_bin"]["bias"]) == 2
     assert data["temperature7"] > 0 and data["temperature_bin"] > 0
+    assert data["fine_options"] == sorted(data["fine_options"])
+    assert len(data["head21"]["bias"]) == len(data["fine_options"])
     reloaded = json.loads(out.read_text())
     assert reloaded["options"] == data["options"]

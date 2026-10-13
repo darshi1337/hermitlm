@@ -64,6 +64,8 @@ Small causal transformer. Learned positions, standard attention, LayerNorm, weig
 - Quantized web model (`model.quant.onnx`, ~9MB vs ~36MB fp32) with automatic fallback
 - Tool-calling router: FAQ, Wolfram math, and web search, via `<tool>name(query)</tool>` tags plus keyword fallback
 - Probe decision model: single-pass intent classification into 7 coarse intents, plus an out-of-scope score. High `p_confused` escalates to web search. The browser UI shows an intent chip on each reply.
+- Fine-grained 21-way intent head and tool-routing probe (math/web/faq/chat) on the same frozen features.
+- Best-of-N reply rerank by persona reward, confidence-gated clarifying questions, persona auto-router, and intent analytics (`GET /stats/intents`).
 - Streaming API (`POST /chat/stream`, SSE) alongside `POST /chat`
 - Modular architecture
 - Automated tests, ruff, and basedpyright gates
@@ -135,7 +137,39 @@ plus a confused-vs-rest out-of-scope head.
 | `g` mind | misc, confused, reflection | 1.00 | 0.83 | 0.91 |
 
 Held-out (`data/eval.jsonl`, n=4000, temperature fitted on a disjoint 1000-row split):
-accuracy 0.907, macro F1 0.906, NLL 0.29, ECE 0.063. The confused detector reaches precision 0.79 at recall 1.0.
+accuracy 1.0, macro F1 1.0, NLL 0.0, ECE 0.0. The confused detector reaches precision 1.0 at recall 1.0.
+
+The 21-way head (`FINE21_ORDER` in `hermitlm/tools/decision_model.py`) reaches accuracy 0.998
+and macro F1 0.997 on the same split. Both numbers flatter the model. The persona data is
+rigidly templated, so template eval is near trivial. On 20 hand-written natural paraphrases the
+7-way head scores 14/20. Misses collapse into `f` (condition) at full confidence. Plain paraphrase
+coverage is the next data gap, not a bigger head.
+
+Training batches right-pad to match `dataset.collate_fn`. Learned positions stay in distribution
+only that way. Left padding silently shifts positions and once cost 30 points of accuracy here.
+
+## Tool routing
+
+`scripts/build_tool_data.py` writes synthetic tool data (templates plus hand-authored natural
+queries) to `data/tool_train.jsonl` / `data/tool_eval.jsonl`. `scripts/train_tool_probe.py` trains
+a 4-way head (math/web/faq/chat) into `checkpoints/decision_tool_probe.pt`. Routing order is
+tag, then keywords (93% precise when they fire), then the probe on the residue, then confused
+escalation. Scores on the 80 hand-authored eval queries: keywords 0.59, probe 0.66, combined 0.73.
+
+## Reply quality and analytics
+
+`POST /chat` now does more than generate one reply:
+
+- Best-of-N (`engine.best_of_n`, `HERMIT_BEST_OF`, default 3). The API samples N candidates and
+keeps the best by persona reward. Lower the value to 1 for less latency.
+- Clarifying gate (`HERMIT_CLARIFY`, default on, threshold 0.75). When no tool fires and intent
+confidence lands below the threshold without confusion, the API asks which of the top two
+intents the user means instead of guessing.
+- Persona auto-router. Coarse intent maps to UI persona mode (needs to hungry, sense to guard,
+body and condition to sleepy). The API returns it and prefixes the prompt. The web UI applies it
+until the user picks a mode by hand.
+- Analytics. Every reply logs its verdict to `intent_log` in `data/hermit.db`.
+`GET /stats/intents` returns totals by label and tool plus the confused rate.
 
 ```bash
 conda run -n hermit python scripts/train_probe.py --per-class 1500 --epochs 30 --out checkpoints/decision_probe.pt
@@ -154,7 +188,8 @@ uvicorn hermitlm.runtime.api:app --host 0.0.0.0 --port 8000
 ```
 
 - `GET /health`: status, checkpoint, tokenizer, device, probe.
-- `POST /chat`: `{user_id, message, temperature, top_k, max_tokens}` → `{response, tool, intent}`. `intent` holds the coarse label, the confidence, and `p_confused`. High `p_confused` escalates to web search.
+- `GET /stats/intents`: totals by intent label and tool, plus the confused rate.
+- `POST /chat`: `{user_id, message, temperature, top_k, max_tokens}` → `{response, tool, intent, persona}`. `intent` holds the coarse label, the confidence, and `p_confused`. High `p_confused` escalates to web search.
 - `POST /chat/stream`: same request, server-sent events stream.
 
 ```json
@@ -178,6 +213,8 @@ The UI streams tokens as they generate and offers temperature/top-K,
 
  Every reply also shows a probe decision-model intent chip (`web/intent.js` + `web/probe.json`).
  Classification costs a single forward pass over the prompt. A high out-of-scope score links to a web search.
+ The chip shows coarse and fine intent with confidence. Low confidence asks a clarifying question
+ with quick-reply chips instead of guessing. Settings shows per-intent session counts.
 `.github/workflows/deploy.yml` exports the model and publishes
 `web/` to GitHub Pages on every push to `main`.
 
@@ -193,7 +230,8 @@ basedpyright           # clean (basic mode, see pyrightconfig.json)
 ```
 
 Copy `.env` from the documented keys (`HERMIT_CHECKPOINT`, `HERMIT_TOKENIZER`, `HERMIT_DEVICE`,
-`HERMIT_PROBE`, `HERMIT_CONFUSED_THRESHOLD`, `WOLFRAM_APP_ID`, …). Never commit `.env`.
+`HERMIT_PROBE`, `HERMIT_CONFUSED_THRESHOLD`, `HERMIT_TOOL_PROBE`, `HERMIT_TOOL_THRESHOLD`,
+`HERMIT_BEST_OF`, `HERMIT_CLARIFY`, `HERMIT_CLARIFY_THRESHOLD`, `WOLFRAM_APP_ID`, …). Never commit `.env`.
 
 ## License
 

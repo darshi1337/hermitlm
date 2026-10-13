@@ -60,6 +60,24 @@ class HermitInference:
 
         return text.strip()
 
+    def chat_candidates(self, user_input, n, temperature=0.8, top_k=40, max_tokens=64):
+        """Generate n independent candidates with the same logic as chat()."""
+        return [self.chat(user_input, temperature, top_k, max_tokens) for _ in range(max(1, n))]
+
+    def best_of_n(self, user_input, n=3, temperature=0.8, top_k=40, max_tokens=64):
+        """Generate n candidates, keep the best by persona reward.
+
+        Return (best_text, scores). n=1 skips reranking.
+        """
+        candidates = self.chat_candidates(user_input, n, temperature, top_k, max_tokens)
+        if len(candidates) == 1:
+            return candidates[0], [0.0]
+        from hermitlm.training.reward import score_response
+
+        scores = [score_response(text) for text in candidates]
+        best = max(range(len(candidates)), key=lambda i: scores[i])
+        return candidates[best], scores
+
     def _format_prompt(self, user_input):
         return (
             "<|im_start|>user\n"

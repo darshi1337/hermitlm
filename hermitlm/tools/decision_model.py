@@ -48,11 +48,31 @@ COARSE_NAMES: dict[str, str] = {
 
 OPTION_LETTERS: list[str] = ["a", "b", "c", "d", "e", "f", "g"]
 
+TOOL_CLASSES: list[str] = ["math", "web", "faq", "chat"]
+
+# Coarse intent to UI persona mode. Empty string means normal (no override).
+INTENT_PERSONA: dict[str, str] = {
+    "a": "",
+    "b": "hungry",
+    "c": "",
+    "d": "guard",
+    "e": "sleepy",
+    "f": "sleepy",
+    "g": "",
+}
+
 FINE_TO_COARSE: dict[str, str] = {
     fine: coarse for coarse, fines in COARSE_MEMBERS.items() for fine in fines
 }
 
 ALL_FINE_TYPES: list[str] = sorted(FINE_TO_COARSE)
+
+# Fine-grained 21-way verbalizers: a-u are all single tokens in this vocab.
+FINE21_ORDER: list[str] = ALL_FINE_TYPES
+FINE21_LETTERS: list[str] = [chr(ord("a") + i) for i in range(len(FINE21_ORDER))]
+FINE_TO_LETTER: dict[str, str] = {
+    fine: letter for fine, letter in zip(FINE21_ORDER, FINE21_LETTERS)
+}
 
 
 def get_option_ids(tokenizer: Tokenizer) -> list[int]:
@@ -63,6 +83,19 @@ def get_option_ids(tokenizer: Tokenizer) -> list[int]:
     """
     ids: list[int] = []
     for letter in OPTION_LETTERS:
+        encoded = tokenizer.encode(letter).ids
+        if len(encoded) != 1:
+            raise ValueError(f"option {letter!r} is not a single token: {encoded}")
+        ids.append(encoded[0])
+    if len(set(ids)) != len(ids):
+        raise ValueError(f"option token ids are not distinct: {ids}")
+    return ids
+
+
+def get_fine_option_ids(tokenizer: Tokenizer) -> list[int]:
+    """Resolve each fine-grained letter (a-u) to a single token id."""
+    ids: list[int] = []
+    for letter in FINE21_LETTERS:
         encoded = tokenizer.encode(letter).ids
         if len(encoded) != 1:
             raise ValueError(f"option {letter!r} is not a single token: {encoded}")
@@ -160,6 +193,15 @@ class ProbeDecisionModel:
         self.head_bin.load_state_dict(probe["head_bin"])
         self.head_bin.eval()
         self.temperature_bin = float(probe["temperature_bin"])
+        self.head21 = None
+        self.temperature21 = 1.0
+        if "head21" in probe:
+            self.head21 = nn.Linear(d_model, len(FINE21_ORDER)).to(self.device)
+            self.head21.load_state_dict(probe["head21"])
+            self.head21.eval()
+            self.temperature21 = float(probe.get("temperature21", 1.0))
+        self.tool_head = None
+        self.tool_temperature = 1.0
 
     @torch.no_grad()
     def _hidden(self, query: str) -> torch.Tensor:
@@ -178,6 +220,46 @@ class ProbeDecisionModel:
         logits_bin = self.head_bin(h.unsqueeze(0)) / self.temperature_bin
         p_confused = float(torch.softmax(logits_bin, dim=-1)[0, 1])
         return max(OPTION_LETTERS, key=lambda letter: proba[letter]), proba, p_confused
+
+    @torch.no_grad()
+    def predict_fine(self, query: str) -> tuple[str, dict[str, float]] | None:
+        """Return (fine_type, proba_over_21) or None if the probe file predates head21."""
+        if self.head21 is None:
+            return None
+        h = self._hidden(query)
+        logits = self.head21(h.unsqueeze(0)) / self.temperature21
+        proba = torch.softmax(logits, dim=-1)[0]
+        by_fine = {fine: float(p) for fine, p in zip(FINE21_ORDER, proba.tolist())}
+        return max(FINE21_ORDER, key=lambda fine: by_fine[fine]), by_fine
+
+    def load_tool_heads(self, tool_probe_path: str) -> bool:
+        """Load tool-routing heads into this instance (shares the frozen LM).
+
+        Return True on success, False if the file is missing or invalid.
+        """
+        from torch import nn
+
+        try:
+            tool = torch.load(tool_probe_path, map_location=self.device, weights_only=True)
+            self.tool_head = nn.Linear(tool["d_model"], len(TOOL_CLASSES)).to(self.device)
+            self.tool_head.load_state_dict(tool["head"])
+            self.tool_head.eval()
+            self.tool_temperature = float(tool["temperature"])
+            return True
+        except Exception:  # noqa: BLE001 - missing file means no tool routing
+            self.tool_head = None
+            return False
+
+    @torch.no_grad()
+    def predict_tool(self, query: str) -> tuple[str, dict[str, float]] | None:
+        """Return (tool_label, proba_over_4) or None if tool heads are not loaded."""
+        if getattr(self, "tool_head", None) is None:
+            return None
+        h = self._hidden(query)
+        logits = self.tool_head(h.unsqueeze(0)) / self.tool_temperature
+        proba = torch.softmax(logits, dim=-1)[0]
+        by_tool = {label: float(p) for label, p in zip(TOOL_CLASSES, proba.tolist())}
+        return max(TOOL_CLASSES, key=lambda label: by_tool[label]), by_tool
 
     @staticmethod
     def coarse_of(fine_type: str) -> str:
@@ -201,6 +283,13 @@ def export_probe(probe_path: str, output_path: str) -> dict:
             "bias": probe["head_bin"]["bias"].tolist(),
         },
     }
+    if "head21" in probe:
+        data["head21"] = {
+            "weight": probe["head21"]["weight"].tolist(),
+            "bias": probe["head21"]["bias"].tolist(),
+        }
+        data["temperature21"] = float(probe.get("temperature21", 1.0))
+        data["fine_options"] = FINE21_ORDER
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(data))

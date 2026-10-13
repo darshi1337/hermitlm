@@ -6,14 +6,18 @@ from pydantic import BaseModel, Field
 
 from hermitlm.runtime.inference import HermitInference
 from hermitlm.settings import (
+    BEST_OF,
     CHECKPOINT_PATH,
+    CLARIFY,
+    CLARIFY_THRESHOLD,
     DEFAULT_MAX_TOKENS,
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_K,
     DEVICE,
     TOKENIZER_PATH,
 )
-from hermitlm.tools.db import init_db, insert_conversation
+from hermitlm.tools.db import init_db, insert_conversation, insert_intent, intent_stats
+from hermitlm.tools.decision_model import COARSE_NAMES, INTENT_PERSONA
 from hermitlm.tools.memory import get_memory, init_memory_db, save_memory
 from hermitlm.tools.router import route_with_intent
 
@@ -49,6 +53,7 @@ class ChatResponse(BaseModel):
     response: str
     tool: str | None = None
     intent: IntentResponse | None = None
+    persona: str | None = None
 
 
 @app.get("/")
@@ -69,6 +74,11 @@ def health():
     }
 
 
+@app.get("/stats/intents")
+def stats_intents():
+    return intent_stats()
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
     user_input = req.message.strip()
@@ -83,6 +93,7 @@ def chat(req: ChatRequest):
 
     _tool, tool_result, intent = route_with_intent(user_input)
     response = tool_result
+    persona = INTENT_PERSONA.get((intent or {}).get("label", ""), "") or None
 
     if response is None and "my name is " in q:
         idx = q.find("my name is ")
@@ -156,14 +167,34 @@ def chat(req: ChatRequest):
         if memory_parts:
             memory_context = ". ".join(memory_parts) + ". "
 
+        if (
+            response is None
+            and _tool is None
+            and CLARIFY
+            and intent is not None
+            and intent["confidence"] < CLARIFY_THRESHOLD
+            and intent["p_confused"] < 0.9
+            and len(intent.get("top2", [])) == 2
+        ):
+            (first, _), (second, _) = intent["top2"]
+            response = (
+                "Quick check before I scuttle ahead: is this about "
+                f"{COARSE_NAMES[first]} or {COARSE_NAMES[second]}?"
+            )
+
         prompt = memory_context + user_input
 
-        response = engine.chat(
-            prompt,
-            temperature=req.temperature,
-            top_k=req.top_k,
-            max_tokens=req.max_tokens,
-        )
+        if response is None:
+            if persona:
+                prompt = f"[{persona} crab] " + prompt
+
+            response, _scores = engine.best_of_n(
+                prompt,
+                n=BEST_OF,
+                temperature=req.temperature,
+                top_k=req.top_k,
+                max_tokens=req.max_tokens,
+            )
 
     insert_conversation(
         user_id=req.user_id,
@@ -172,11 +203,13 @@ def chat(req: ChatRequest):
         bot_response=response,
         channel_id="api",
     )
+    insert_intent(user_input, intent, _tool)
 
     return ChatResponse(
         response=response,
         tool=_tool,
         intent=IntentResponse(**{k: intent[k] for k in ("label", "name", "confidence", "p_confused")}) if intent else None,
+        persona=persona,
     )
 
 
@@ -185,6 +218,7 @@ def chat_stream(req: ChatRequest):
     from fastapi.responses import StreamingResponse
 
     _tool, tool_result, _intent = route_with_intent(req.message.strip())
+    insert_intent(req.message.strip(), _intent, _tool)
     if tool_result:
         def _gen():
             yield f"data: {tool_result}\n\n"

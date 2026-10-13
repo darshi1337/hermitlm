@@ -23,7 +23,7 @@ import torch.nn.functional as F
 from tokenizers import Tokenizer
 
 from hermitlm.config import HermitConfig
-from hermitlm.tools.decision_model import FINE_TO_COARSE, OPTION_LETTERS
+from hermitlm.tools.decision_model import FINE21_ORDER, FINE_TO_COARSE, OPTION_LETTERS
 from hermitlm.training.model import HermitLM
 
 
@@ -41,7 +41,9 @@ def extract_hidden(
         ids = [tokenizer.encode(chat_prompt(q)).ids[-max_seq_len:] for q in batch]
         width = max(len(s) for s in ids)
         pad = 0
-        padded = [[pad] * (width - len(s)) + s for s in ids]
+        # right padding matches training (dataset.collate_fn); the true last
+        # token sits at lengths-1, where learned positions stay in distribution
+        padded = [s + [pad] * (width - len(s)) for s in ids]
         idx = torch.tensor(padded, dtype=torch.long, device=device)
         _, _, hidden = model(idx, return_hidden=True)
         lengths = torch.tensor([len(s) for s in ids], device=device)
@@ -99,6 +101,7 @@ def main() -> None:
     parser.add_argument("--tokenizer", default="data/tokenizer.json")
     parser.add_argument("--train", default="data/train.jsonl")
     parser.add_argument("--per-class", type=int, default=1500)
+    parser.add_argument("--per-fine", type=int, default=400)
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", default="cpu")
@@ -148,14 +151,35 @@ def main() -> None:
     print(f"positives: {sum(is_confused)}/{len(is_confused)}")
     head_bin, t_bin = train_head(feats, torch.tensor(is_confused), 2, args.epochs, args.seed + 1)
 
+    fine_queries, fine_targets = [], []
+    by_fine: dict[str, list[str]] = collections.defaultdict(list)
+    with open(args.train) as f:
+        for line in f:
+            d = json.loads(line)
+            if d.get("input") and d.get("type") in FINE_TO_COARSE:
+                by_fine[d["type"]].append(d["input"])
+    for fine in FINE21_ORDER:
+        pool = by_fine[fine]
+        random.shuffle(pool)
+        for q in pool[: args.per_fine]:
+            fine_queries.append(q)
+            fine_targets.append(FINE21_ORDER.index(fine))
+    print(f"sampled {len(fine_queries)} queries for 21-way ({args.per_fine}/fine-type cap)")
+    fine_feats = extract_hidden(model, tokenizer, fine_queries, config.max_seq_len, device)
+    print("== 21-way head ==")
+    head21, t21 = train_head(fine_feats, torch.tensor(fine_targets), len(FINE21_ORDER), args.epochs, args.seed + 2)
+
     torch.save(
         {
             "head7": head7.state_dict(),
             "temperature7": t7,
             "head_bin": head_bin.state_dict(),
             "temperature_bin": t_bin,
+            "head21": head21.state_dict(),
+            "temperature21": t21,
             "d_model": feats.size(1),
             "options": OPTION_LETTERS,
+            "fine_options": FINE21_ORDER,
             "base_checkpoint": args.checkpoint,
         },
         args.out,

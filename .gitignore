@@ -1,9 +1,12 @@
 data/*
 !data/tokenizer.json
+!data/tool_train.jsonl
+!data/tool_eval.jsonl
 checkpoints/*
 !checkpoints/best_model.pt
 !checkpoints/config.json
 !checkpoints/decision_probe.pt
+!checkpoints/decision_tool_probe.pt
 hermitlm.egg-info/
 __pycache__/
 .pytest_cache/

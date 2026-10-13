@@ -1,0 +1,80 @@
+{"input": "how much is 17 times 23", "label": "math"}
+{"input": "can you solve 3x + 5 = 20", "label": "math"}
+{"input": "derivative of x cubed", "label": "math"}
+{"input": "what is 144 divided by 12", "label": "math"}
+{"input": "help me factor x squared plus five x plus six", "label": "math"}
+{"input": "sin 30 degrees plus cos 60", "label": "math"}
+{"input": "integrate 2x dx", "label": "math"}
+{"input": "7 + 8 * 3", "label": "math"}
+{"input": "what is the limit of one over x", "label": "math"}
+{"input": "simplify forty two over fifty six", "label": "math"}
+{"input": "subtract 15 from 100", "label": "math"}
+{"input": "matrix multiplication example", "label": "math"}
+{"input": "solve for x: 2x = 10", "label": "math"}
+{"input": "what is nine squared", "label": "math"}
+{"input": "differentiate sin x", "label": "math"}
+{"input": "add nineteen and twenty seven", "label": "math"}
+{"input": "cosine of zero", "label": "math"}
+{"input": "factor x squared minus nine", "label": "math"}
+{"input": "how do I compute twelve percent of eighty", "label": "math"}
+{"input": "two plus two", "label": "math"}
+{"input": "give me the latest AI news", "label": "web"}
+{"input": "who is Elon Musk", "label": "web"}
+{"input": "search for hermit crab facts", "label": "web"}
+{"input": "what happened today in tech", "label": "web"}
+{"input": "what is the current time in tokyo", "label": "web"}
+{"input": "explain black holes like I am five", "label": "web"}
+{"input": "look up the weather in oslo", "label": "web"}
+{"input": "find me a recipe for miso soup", "label": "web"}
+{"input": "any news about spacex today", "label": "web"}
+{"input": "who won the match yesterday", "label": "web"}
+{"input": "search the web for cheap flights", "label": "web"}
+{"input": "what is everyone talking about", "label": "web"}
+{"input": "current bitcoin price", "label": "web"}
+{"input": "tell me something new from science", "label": "web"}
+{"input": "who is the prime minister of japan", "label": "web"}
+{"input": "look up train times to kyoto", "label": "web"}
+{"input": "what is new in python 3.13", "label": "web"}
+{"input": "find reviews of that crab restaurant", "label": "web"}
+{"input": "latest breakthroughs in fusion", "label": "web"}
+{"input": "who wrote dune", "label": "web"}
+{"input": "who are you, really", "label": "faq"}
+{"input": "who built you", "label": "faq"}
+{"input": "how old are you, crab", "label": "faq"}
+{"input": "where is home for you", "label": "faq"}
+{"input": "do you ever sleep", "label": "faq"}
+{"input": "are you a living thing", "label": "faq"}
+{"input": "what do you eat down there", "label": "faq"}
+{"input": "what is your purpose in life", "label": "faq"}
+{"input": "do you like people", "label": "faq"}
+{"input": "can you actually think", "label": "faq"}
+{"input": "what language is that", "label": "faq"}
+{"input": "tell me about darshi", "label": "faq"}
+{"input": "are you stuck in that cave", "label": "faq"}
+{"input": "what are you up to right now", "label": "faq"}
+{"input": "does anything scare you", "label": "faq"}
+{"input": "introduce yourself", "label": "faq"}
+{"input": "what keeps you going", "label": "faq"}
+{"input": "is hermitlm your name", "label": "faq"}
+{"input": "who is in charge here", "label": "faq"}
+{"input": "do you dream", "label": "faq"}
+{"input": "hello crab", "label": "chat"}
+{"input": "are you hungry", "label": "chat"}
+{"input": "the water feels cold today", "label": "chat"}
+{"input": "goodnight, see you tomorrow", "label": "chat"}
+{"input": "you are moving fast", "label": "chat"}
+{"input": "was that loud just now", "label": "chat"}
+{"input": "i feel a bit lonely", "label": "chat"}
+{"input": "look at the bubbles rising", "label": "chat"}
+{"input": "is the glass clean", "label": "chat"}
+{"input": "it is dark in here", "label": "chat"}
+{"input": "time to eat something tasty", "label": "chat"}
+{"input": "how are you feeling", "label": "chat"}
+{"input": "the light just changed", "label": "chat"}
+{"input": "can you see outside the tank", "label": "chat"}
+{"input": "that noise scared me, sorry", "label": "chat"}
+{"input": "what do things look like to you", "label": "chat"}
+{"input": "everything stable on your end", "label": "chat"}
+{"input": "do you see yourself in the mirror", "label": "chat"}
+{"input": "there is a tiny shell near the gravel", "label": "chat"}
+{"input": "keep scuttling sideways, friend", "label": "chat"}

@@ -31,6 +31,15 @@ def test_option_ids_are_single_distinct_tokens():
     assert ids == [21, 22, 23, 24, 25, 26, 27]
 
 
+def test_fine_option_ids_are_single_distinct_tokens():
+    from hermitlm.tools.decision_model import FINE21_LETTERS, get_fine_option_ids
+
+    tokenizer = Tokenizer.from_file(TOKENIZER_PATH)
+    ids = get_fine_option_ids(tokenizer)
+    assert len(ids) == 21 == len(FINE21_LETTERS)
+    assert len(set(ids)) == 21
+
+
 def test_option_ids_reject_multi_token_verbalizer(monkeypatch):
     import hermitlm.tools.decision_model as dm
 
@@ -91,3 +100,16 @@ def test_probe_predict_known_intents():
     assert 0.0 <= p_confused <= 1.0
     _, _, p_conf = model.predict("what is inventory management")
     assert p_conf > p_confused  # out-of-scope scores higher on confused head
+
+
+def test_probe_predict_fine_known_type():
+    from hermitlm.tools.decision_model import ProbeDecisionModel
+
+    model = ProbeDecisionModel(
+        "checkpoints/best_model.pt", TOKENIZER_PATH, "checkpoints/decision_probe.pt", device="cpu"
+    )
+    result = model.predict_fine("hello crab")
+    assert result is not None
+    fine_label, by_fine = result
+    assert fine_label == "greeting"
+    assert abs(sum(by_fine.values()) - 1.0) < 1e-5

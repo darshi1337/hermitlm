@@ -49,6 +49,12 @@ def test_confused_escalates_to_web(monkeypatch):
             proba["g"] = 0.7
             return "g", proba, 0.97
 
+        def predict_fine(self, query):
+            return "confused", {"confused": 1.0}
+
+        def predict_tool(self, query):
+            return "chat", {"math": 0.0, "web": 0.0, "faq": 0.0, "chat": 1.0}
+
     monkeypatch.setattr(router, "_probe", FakeProbe())
     monkeypatch.setattr(router, "_probe_failed", False)
     monkeypatch.setattr(router, "_faq", lambda q: None)
@@ -67,6 +73,12 @@ def test_no_escalation_below_threshold(monkeypatch):
             proba = {letter: 0.05 for letter in "abcdefg"}
             proba["a"] = 0.7
             return "a", proba, 0.1
+
+        def predict_fine(self, query):
+            return "greeting", {"greeting": 1.0}
+
+        def predict_tool(self, query):
+            return "chat", {"math": 0.0, "web": 0.0, "faq": 0.0, "chat": 1.0}
 
     monkeypatch.setattr(router, "_probe", CalmProbe())
     monkeypatch.setattr(router, "_probe_failed", False)

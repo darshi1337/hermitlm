@@ -77,6 +77,7 @@ def _get_probe():
             DEVICE,
             PROBE_PATH,
             TOKENIZER_PATH,
+            TOOL_PROBE_PATH,
         )
         from hermitlm.tools.decision_model import ProbeDecisionModel
 
@@ -84,6 +85,8 @@ def _get_probe():
             _probe_failed = True
             return None
         _probe = ProbeDecisionModel(CHECKPOINT_PATH, TOKENIZER_PATH, PROBE_PATH, device=DEVICE)
+        if os.path.exists(TOOL_PROBE_PATH):
+            _probe.load_tool_heads(TOOL_PROBE_PATH)
         return _probe
     except Exception:  # noqa: BLE001 - probe must never break routing
         _probe_failed = True
@@ -91,7 +94,7 @@ def _get_probe():
 
 
 def classify_intent(user_input):
-    """Return {label, name, confidence, p_confused, proba} or None if probe unavailable."""
+    """Return intent dict (label, name, confidence, p_confused, proba, fine, top2) or None."""
     probe = _get_probe()
     if probe is None:
         return None
@@ -99,26 +102,76 @@ def classify_intent(user_input):
         from hermitlm.tools.decision_model import COARSE_NAMES
 
         label, proba, p_confused = probe.predict(user_input)
-        return {
+        ranked = sorted(proba.items(), key=lambda kv: kv[1], reverse=True)[:2]
+        result = {
             "label": label,
             "name": COARSE_NAMES[label],
             "confidence": round(proba[label], 4),
             "p_confused": round(p_confused, 4),
             "proba": {k: round(v, 4) for k, v in proba.items()},
+            "top2": [[letter, round(p, 4)] for letter, p in ranked],
+            "fine_label": None,
+            "fine_name": None,
         }
+        fine = probe.predict_fine(user_input)
+        if fine is not None:
+            fine_label, _ = fine
+            result["fine_label"] = fine_label
+            result["fine_name"] = fine_label
+        return result
     except Exception:  # noqa: BLE001 - classification is best-effort
         return None
 
 
-def route_with_intent(user_input, confused_threshold=None):
+def classify_tool(user_input):
+    """Return {label, confidence} from the tool-routing probe, or None."""
+    probe = _get_probe()
+    if probe is None:
+        return None
+    try:
+        predicted = probe.predict_tool(user_input)
+        if predicted is None:
+            return None
+        label, proba = predicted
+        return {"label": label, "confidence": round(proba[label], 4)}
+    except Exception:  # noqa: BLE001 - classification is best-effort
+        return None
+
+
+def _dispatch_probe(label, user_input):
+    """Run the tool the probe picked. Return (tool, result) or (None, None)."""
+    try:
+        if label == "math":
+            result = _wolfram(user_input)
+            return ("math", result) if result else (None, None)
+        if label == "web":
+            result = _web(user_input)
+            return ("web", result) if result else (None, None)
+        if label == "faq":
+            result = _faq(user_input)
+            return ("faq", result) if result else (None, None)
+        return None, None
+    except Exception:  # noqa: BLE001 - probe routing must not break chat
+        return None, None
+
+
+def route_with_intent(user_input, confused_threshold=None, tool_threshold=None):
     """Return (tool_name, result, intent) where intent is classify_intent() or None.
 
-    Escalation: if no tool fired and p_confused >= threshold, try web search.
+    Order: tag/keyword routing first (high precision), then the tool probe on
+    the residue, then confused escalation to web search.
     """
-    from hermitlm.settings import CONFUSED_THRESHOLD
+    from hermitlm.settings import CONFUSED_THRESHOLD, TOOL_THRESHOLD
 
     tool, result = route(user_input)
     intent = classify_intent(user_input)
+    if tool is None:
+        decision = classify_tool(user_input)
+        threshold = TOOL_THRESHOLD if tool_threshold is None else tool_threshold
+        if decision is not None and decision["confidence"] >= threshold:
+            probe_tool, probe_result = _dispatch_probe(decision["label"], user_input)
+            if probe_tool:
+                return probe_tool, probe_result, intent
     if tool is None and intent is not None:
         threshold = CONFUSED_THRESHOLD if confused_threshold is None else confused_threshold
         if intent["p_confused"] >= threshold:

@@ -18,6 +18,7 @@ import torch
 
 from hermitlm.tools.decision_model import (
     COARSE_NAMES,
+    FINE21_ORDER,
     FINE_TO_COARSE,
     OPTION_LETTERS,
     DecisionModel,
@@ -120,12 +121,14 @@ def run_eval(
         import torch.nn.functional as F
 
         model = ProbeDecisionModel(checkpoint, tokenizer_path, probe_path, device)
-        raw7, rawb = [], []
+        raw7, rawb, raw21 = [], [], []
         with torch.no_grad():
             for r in rows:
                 h = model._hidden(r["input"])
                 raw7.append(model.head7(h.unsqueeze(0))[0])
                 rawb.append(model.head_bin(h.unsqueeze(0))[0])
+                if model.head21 is not None:
+                    raw21.append(model.head21(h.unsqueeze(0))[0])
         raw7 = torch.stack(raw7)
         rawb = torch.stack(rawb)
         y_all = torch.tensor([OPTION_LETTERS.index(FINE_TO_COARSE[r["type"]]) for r in rows])
@@ -167,6 +170,34 @@ def run_eval(
             "support": sum(yc),
             "temperature": model.temperature_bin,
         }
+        if raw21:
+            raw21_t = torch.stack(raw21)
+            y21 = torch.tensor([FINE21_ORDER.index(r["type"]) for r in rows])
+            best_t21, best_nll21 = 1.0, float("inf")
+            for t in [0.3, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0]:
+                nll = F.cross_entropy(raw21_t[:n_cal] / t, y21[:n_cal]).item()
+                if nll < best_nll21:
+                    best_nll21, best_t21 = nll, t
+            pred21 = raw21_t[n_cal:].argmax(-1).tolist()
+            true21 = y21[n_cal:].tolist()
+            acc21 = sum(1 for t, p in zip(true21, pred21) if t == p) / len(true21)
+            f1s = []
+            per_fine = {}
+            for i, fine in enumerate(FINE21_ORDER):
+                tp = sum(1 for t, p in zip(true21, pred21) if t == p == i)
+                fp = sum(1 for t, p in zip(true21, pred21) if t != i == p)
+                fn = sum(1 for t, p in zip(true21, pred21) if t == i != p)
+                prec = tp / (tp + fp) if tp + fp else 0.0
+                rec = tp / (tp + fn) if tp + fn else 0.0
+                f1 = 2 * prec * rec / (prec + rec) if prec + rec else 0.0
+                f1s.append(f1)
+                per_fine[fine] = {"f1": round(f1, 4), "support": sum(1 for t in true21 if t == i)}
+            report["fine21"] = {
+                "temperature": best_t21,
+                "accuracy": round(acc21, 4),
+                "macro_f1": round(sum(f1s) / len(f1s), 4),
+                "per_fine": per_fine,
+            }
         report["calibrated"] = report["probed"]
     else:
         model = DecisionModel(checkpoint, tokenizer_path, device)
@@ -215,7 +246,7 @@ def run_eval(
         )
         lines.append("")
     for key in report:
-        if key in ("grid", "confused_detector"):
+        if key in ("grid", "confused_detector", "fine21"):
             continue
         s = report[key]
         lines.append(f"## {key} (T={s['temperature']}, n={s['n']})")
@@ -231,6 +262,17 @@ def run_eval(
         lines.append("| --- | --- | --- | --- |")
         for b in s["bins"]:
             lines.append(f"| {b['bin']} | {b['count']} | {b['confidence']} | {b['accuracy']} |")
+        lines.append("")
+    if "fine21" in report:
+        f21 = report["fine21"]
+        lines.append(f"## fine21 (T={f21['temperature']})")
+        lines.append(f"accuracy={f21['accuracy']} macro_f1={f21['macro_f1']}")
+        lines.append("")
+        lines.append("| fine type | f1 | support |")
+        lines.append("| --- | --- | --- |")
+        for fine in FINE21_ORDER:
+            c = f21["per_fine"][fine]
+            lines.append(f"| {fine} | {c['f1']} | {c['support']} |")
         lines.append("")
     with open(os.path.join(out_dir, "report.md"), "w") as f:
         f.write("\n".join(lines))

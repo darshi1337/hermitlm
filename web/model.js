@@ -2,6 +2,8 @@
 // mirroring HermitLM.generate() / HermitInference.chat() in
 // hermitlm/training/model.py and hermitlm/runtime/inference.py.
 
+// Bump this when model artifacts change, or browsers keep serving the old one.
+const CACHE_NAME = "hermit-assets-v2";
 const PAD_ID = 0;
 const BOS_ID = 1;
 const EOS_ID = 2;
@@ -70,8 +72,68 @@ export class HermitModel {
     this.session = session;
   }
 
+  // Cache-first fetch. Repeat visits skip the ~9MB download entirely.
+  // Reports byte progress so the status pill shows where loading stalls.
+  static async fetchBuffer(url, { onProgress } = {}) {
+    const report = (done, total) => {
+      if (onProgress) onProgress(done, total);
+    };
+    const readWithProgress = async (res) => {
+      const total = Number(res.headers.get("content-length")) || 0;
+      if (!res.body || !res.body.getReader) {
+        const buf = await res.arrayBuffer();
+        report(buf.byteLength, total || buf.byteLength);
+        return buf;
+      }
+      const reader = res.body.getReader();
+      const chunks = [];
+      let done = 0;
+      for (;;) {
+        const { done: finished, value } = await reader.read();
+        if (finished) break;
+        chunks.push(value);
+        done += value.length;
+        report(done, total);
+      }
+      const buf = new Uint8Array(done);
+      let offset = 0;
+      for (const chunk of chunks) {
+        buf.set(chunk, offset);
+        offset += chunk.length;
+      }
+      return buf.buffer;
+    };
+    try {
+      const cache = await caches.open(CACHE_NAME);
+      const hit = await cache.match(url);
+      if (hit) {
+        const buf = await hit.arrayBuffer();
+        report(buf.byteLength, buf.byteLength);
+        return buf;
+      }
+      const net = await fetch(url, { signal: AbortSignal.timeout(120000) });
+      if (!net.ok) throw new Error(`fetch failed: ${url}`);
+      await cache.put(url, net.clone());
+      return await readWithProgress(net);
+    } catch (e) {
+      // No Cache API (private mode, file://) or a bad entry: plain fetch.
+      const net = await fetch(url, { signal: AbortSignal.timeout(120000) });
+      if (!net.ok) throw new Error(`fetch failed: ${url}`);
+      return await readWithProgress(net);
+    }
+  }
+
   static async load(modelUrl, { onProgress } = {}) {
-    const session = await ort.InferenceSession.create(modelUrl, {
+    const data = await HermitModel.fetchBuffer(modelUrl, {
+      onProgress: onProgress
+        ? (done, total) =>
+            onProgress(
+              total > 0 ? `model ${(done / 1e6).toFixed(1)}/${(total / 1e6).toFixed(1)}MB` : `model ${(done / 1e6).toFixed(1)}MB`
+            )
+        : undefined,
+    });
+    if (onProgress) onProgress("starting model");
+    const session = await ort.InferenceSession.create(data, {
       executionProviders: ["wasm"],
     });
     if (onProgress) onProgress("model ready");

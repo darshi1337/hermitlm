@@ -47,6 +47,9 @@ jobs:
       - name: Export probe head to JSON
         run: python scripts/export_probe.py --output web/probe.json
 
+      - name: Fetch vendored onnxruntime assets
+        run: python scripts/fetch_vendor.py --output-dir web/vendor
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3

@@ -18,6 +18,7 @@ train_9000.py
 web/model.onnx
 web/model.quant.onnx
 web/tokenizer.json
+web/vendor/
 eval_out/
 logs/
 .vscode/

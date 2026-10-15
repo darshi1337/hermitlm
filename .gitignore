@@ -13,7 +13,13 @@ __pycache__/
 .ruff_cache/
 *.pyc
 *.log
-.env
+.env*
+!.env.example
+*.token
+*hf_token*
+.huggingface/
+*.safetensors
+*.gguf
 train_9000.py
 web/model.onnx
 web/model.quant.onnx

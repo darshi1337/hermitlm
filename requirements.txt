@@ -6,3 +6,4 @@ fastapi
 uvicorn
 pydantic
 ddgs
+huggingface_hub

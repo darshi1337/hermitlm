@@ -218,13 +218,37 @@ The UI streams tokens as they generate and offers temperature/top-K,
 `.github/workflows/deploy.yml` exports the model and publishes
 `web/` to GitHub Pages on every push to `main`.
 
+## Hugging Face
+
+Model repo: `darshi1337/hermitlm-8M`. Dataset repo: `darshi1337/hermitlm-100k-generic`.
+
+The model repo holds 8 files: `best_model.pt`, `config.json`, `tokenizer.json`, `model.onnx`, `model.quant.onnx`, `decision_probe.pt`, `decision_tool_probe.pt`, and `README.md` (model card).
+
+Download a published repo:
+
+```python
+from huggingface_hub import snapshot_download
+repo = snapshot_download("darshi1337/hermitlm-8M")
+```
+
+Upload a new build (maintainers only):
+
+```bash
+pip install huggingface_hub
+export HF_TOKEN=<write token for darshi1337/hermitlm-8M>
+python scripts/push_hf.py --repo darshi1337/hermitlm-8M --dry-run
+python scripts/push_hf.py --repo darshi1337/hermitlm-8M
+```
+
+Status on 2026-10-15: the repo holds all 8 files (78.4 MB total). The model card is live.
+
 ## Development
 
 ```bash
 conda create -n hermit -c pytorch -c conda-forge python=3.11 cpuonly pytorch tokenizers onnxruntime
 conda activate hermit
 pip install -e . -r requirements.txt
-pytest tests/          # 31 passed
+pytest tests/          # 40 passed
 ruff check .           # clean
 basedpyright           # clean (basic mode, see pyrightconfig.json)
 ```

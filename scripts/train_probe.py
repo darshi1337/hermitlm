@@ -23,6 +23,8 @@ import torch.nn.functional as F
 from tokenizers import Tokenizer
 
 from hermitlm.config import HermitConfig
+from hermitlm.tools.artifacts import artifact_metadata
+from hermitlm.tools.calibration import fit_temperature
 from hermitlm.tools.decision_model import FINE21_ORDER, FINE_TO_COARSE, OPTION_LETTERS
 from hermitlm.training.model import HermitLM
 
@@ -51,20 +53,6 @@ def extract_hidden(
     return torch.cat(feats)
 
 
-def fit_temperature(logits: torch.Tensor, targets: torch.Tensor) -> float:
-    best_t, best_nll = 1.0, float("inf")
-    for t in [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 5.0]:
-        nll = F.cross_entropy(logits / t, targets).item()
-        if nll < best_nll:
-            best_nll, best_t = nll, t
-    # refine around best
-    for t in [best_t * m for m in (0.8, 0.9, 1.1, 1.2)]:
-        nll = F.cross_entropy(logits / t, targets).item()
-        if nll < best_nll:
-            best_nll, best_t = nll, t
-    return best_t
-
-
 def train_head(
     feats: torch.Tensor, targets: torch.Tensor, n_classes: int, epochs: int, seed: int
 ) -> tuple[torch.nn.Linear, float]:
@@ -88,7 +76,7 @@ def train_head(
             opt.step()
     head.eval()
     with torch.no_grad():
-        temperature = fit_temperature(head(Xva), yva)
+        temperature = fit_temperature(head(Xva).detach().double(), yva)
         pred = head(Xva).argmax(-1)
         acc = (pred == yva).float().mean().item()
     print(f"val acc={acc:.4f} T={temperature:.3f} (n_val={len(va)})")
@@ -181,6 +169,7 @@ def main() -> None:
             "options": OPTION_LETTERS,
             "fine_options": FINE21_ORDER,
             "base_checkpoint": args.checkpoint,
+            **artifact_metadata(args.checkpoint, args.tokenizer),
         },
         args.out,
     )

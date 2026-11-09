@@ -19,6 +19,7 @@ from tokenizers import Tokenizer
 from train_probe import extract_hidden, train_head
 
 from hermitlm.config import HermitConfig
+from hermitlm.tools.artifacts import artifact_metadata
 from hermitlm.training.model import HermitLM
 
 TOOL_CLASSES = ["math", "web", "faq", "chat"]
@@ -93,6 +94,7 @@ def main() -> None:
             "d_model": feats.size(1),
             "eval_accuracy": acc,
             "base_checkpoint": args.checkpoint,
+            **artifact_metadata(args.checkpoint, args.tokenizer),
         },
         args.out,
     )

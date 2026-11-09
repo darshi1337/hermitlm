@@ -1,8 +1,9 @@
 """Zero-shot eval + temperature calibration for the decision model.
 
 Mirrors the eval from the article: accuracy, per-class precision/recall/F1, and a
-confidence-vs-accuracy bin table. Then a grid search over temperature T
-(minimizing NLL) fixes the expected overconfidence.
+confidence-vs-accuracy bin table, plus ECE/NLL with 95% bootstrap CIs. A
+temperature T is fitted on a disjoint calibration split by minimising NLL over
+log T (binary heads use Platt-smoothed targets) and applied to the test split.
 
 Usage:
     conda run -n hermit python scripts/eval_decision.py \
@@ -11,11 +12,11 @@ Usage:
 
 import argparse
 import json
-import math
 import os
 
 import torch
 
+from hermitlm.tools.calibration import InsufficientDataError, fit_temperature
 from hermitlm.tools.decision_model import (
     COARSE_NAMES,
     FINE21_ORDER,
@@ -24,6 +25,14 @@ from hermitlm.tools.decision_model import (
     DecisionModel,
     ProbeDecisionModel,
     format_prompt,
+)
+from hermitlm.tools.metrics import (
+    accuracy,
+    bootstrap_ci,
+    ece,
+    macro_f1,
+    nll,
+    paired_bootstrap_diff,
 )
 
 N_BINS = 10
@@ -78,25 +87,124 @@ def _bins(confs: list[float], corrects: list[bool]) -> list[dict]:
     return table
 
 
+def _matrix(probas: list[dict[str, float]]) -> torch.Tensor:
+    return torch.tensor(
+        [[p[letter] for letter in OPTION_LETTERS] for p in probas], dtype=torch.float64
+    )
+
+
 def summarize(
-    y_true: list[str], y_pred: list[str], probas: list[dict[str, float]], temperature: float
+    y_true: list[str],
+    y_pred: list[str],
+    probas: list[dict[str, float]],
+    temperature: float,
+    *,
+    n_boot: int = 0,
+    seed: int = 0,
 ) -> dict:
     n = len(y_true)
-    corrects = [t == p for t, p in zip(y_true, y_pred)]
+    if n == 0:
+        return {"temperature": temperature, "n": 0}
+    targets = torch.tensor([OPTION_LETTERS.index(t) for t in y_true])
+    preds = torch.tensor([OPTION_LETTERS.index(p) for p in y_pred])
+    probs = _matrix(probas)
+    n_classes = len(OPTION_LETTERS)
     confs = [probas[i][y_pred[i]] for i in range(n)]
-    nll = -sum(math.log(max(probas[i][y_true[i]], 1e-12)) for i in range(n)) / n
+    corrects = [t == p for t, p in zip(y_true, y_pred)]
     ece_bins = _bins(confs, corrects)
-    ece = sum(b["count"] / n * abs(b["confidence"] - b["accuracy"]) for b in ece_bins)
-    # out-of-scope detector: confused items recalled into coarse 'g' (mind)
-    return {
+
+    result = {
         "temperature": temperature,
         "n": n,
-        "accuracy": round(sum(corrects) / n, 4),
-        "nll": round(nll, 4),
-        "ece": round(ece, 4),
-        "macro_f1": round(sum(v["f1"] for v in _prf(y_true, y_pred).values()) / len(OPTION_LETTERS), 4),
+        "accuracy": round(accuracy(probs, targets), 4),
+        "nll": round(nll(probs, targets), 4),
+        "ece": round(ece(probs, targets, N_BINS), 4),
+        "macro_f1": round(macro_f1(preds, targets, n_classes), 4),
         "per_class": _prf(y_true, y_pred),
         "bins": ece_bins,
+    }
+    if n_boot > 0 and n >= 2:
+        acc_ci = bootstrap_ci(lambda i: accuracy(probs[i], targets[i]), n, n_boot=n_boot, seed=seed)
+        nll_ci = bootstrap_ci(lambda i: nll(probs[i], targets[i]), n, n_boot=n_boot, seed=seed + 1)
+        ece_ci = bootstrap_ci(lambda i: ece(probs[i], targets[i], N_BINS), n, n_boot=n_boot, seed=seed + 2)
+        f1_ci = bootstrap_ci(
+            lambda i: macro_f1(preds[i], targets[i], n_classes), n, n_boot=n_boot, seed=seed + 3
+        )
+        result["accuracy_ci"] = [round(v, 4) for v in acc_ci]
+        result["nll_ci"] = [round(v, 4) for v in nll_ci]
+        result["ece_ci"] = [round(v, 4) for v in ece_ci]
+        result["macro_f1_ci"] = [round(v, 4) for v in f1_ci]
+    return result
+
+
+def paired_report(
+    uncalibrated: list[dict[str, float]],
+    calibrated: list[dict[str, float]],
+    y_true: list[str],
+    *,
+    n_boot: int,
+    seed: int,
+) -> dict:
+    """Paired bootstrap of calibrated-minus-uncalibrated per metric."""
+    if not y_true:
+        return {}
+    targets = torch.tensor([OPTION_LETTERS.index(t) for t in y_true])
+    n_classes = len(OPTION_LETTERS)
+    a = _matrix(uncalibrated)
+    b = _matrix(calibrated)
+    n = len(y_true)
+    specs = [
+        ("accuracy", lambda p, i: accuracy(p[i], targets[i])),
+        ("nll", lambda p, i: nll(p[i], targets[i])),
+        ("ece", lambda p, i: ece(p[i], targets[i], N_BINS)),
+        (
+            "macro_f1",
+            lambda p, i: macro_f1(p[i].argmax(-1), targets[i], n_classes),
+        ),
+    ]
+    out = {}
+    for offset, (name, stat) in enumerate(specs):
+        out[name] = paired_bootstrap_diff(
+            lambda i, stat=stat: stat(a, i),
+            lambda i, stat=stat: stat(b, i),
+            n,
+            n_boot=max(1, n_boot),
+            seed=seed + offset,
+        )
+        out[name]["diff"] = round(out[name]["diff"], 4)
+        out[name]["ci"] = [round(v, 4) for v in out[name]["ci"]]
+    return out
+
+
+def _fit_or_default(logits: torch.Tensor, targets: torch.Tensor, fallback: float) -> float:
+    try:
+        return fit_temperature(logits, targets)
+    except InsufficientDataError:
+        return fallback
+
+
+def _confused_ci(pb: torch.Tensor, labels: list[int], threshold: float, n_boot: int, seed: int) -> dict:
+    if n_boot <= 0 or len(labels) < 2:
+        return {}
+    y = torch.tensor(labels)
+    preds = (pb >= threshold).long()
+    n = len(labels)
+
+    def precision(idx: torch.Tensor) -> float:
+        p, t = preds[idx], y[idx]
+        tp = int(((p == 1) & (t == 1)).sum())
+        fp = int(((p == 1) & (t == 0)).sum())
+        return tp / (tp + fp) if tp + fp else 0.0
+
+    def recall(idx: torch.Tensor) -> float:
+        p, t = preds[idx], y[idx]
+        tp = int(((p == 1) & (t == 1)).sum())
+        fn = int(((p == 0) & (t == 1)).sum())
+        return tp / (tp + fn) if tp + fn else 0.0
+
+    return {
+        "precision_ci": [round(v, 4) for v in bootstrap_ci(precision, n, n_boot=n_boot, seed=seed)],
+        "recall_ci": [round(v, 4) for v in bootstrap_ci(recall, n, n_boot=n_boot, seed=seed + 1)],
     }
 
 
@@ -111,15 +219,18 @@ def run_eval(
     method: str = "logit",
     probe_path: str = "checkpoints/decision_probe.pt",
     cal_n: int = 1000,
+    bootstrap: int = 1000,
+    seed: int = 0,
 ) -> dict:
     os.makedirs(out_dir, exist_ok=True)
     rows = _load_rows(eval_path, max_n)
+    if len(rows) < 2:
+        raise ValueError("need at least two eval rows")
     y_true = [FINE_TO_COARSE[r["type"]] for r in rows]
     y_confused = [1 if r["type"] == "confused" else 0 for r in rows]
+    n_cal = max(1, min(cal_n, len(rows) // 2))
 
     if method == "probe":
-        import torch.nn.functional as F
-
         model = ProbeDecisionModel(checkpoint, tokenizer_path, probe_path, device)
         raw7, rawb, raw21 = [], [], []
         with torch.no_grad():
@@ -133,31 +244,41 @@ def run_eval(
         rawb = torch.stack(rawb)
         y_all = torch.tensor([OPTION_LETTERS.index(FINE_TO_COARSE[r["type"]]) for r in rows])
         c_all = torch.tensor(y_confused)
-        n_cal = min(cal_n, len(rows) // 2)
-        # fit temperature (min NLL) and binary threshold (max F1) on cal half
-        best_t, best_nll = 1.0, float("inf")
-        for t in [0.3, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 5.0]:
-            nll = F.cross_entropy(raw7[:n_cal] / t, y_all[:n_cal]).item()
-            if nll < best_nll:
-                best_nll, best_t = nll, t
-        cal_pb = torch.softmax(rawb[:n_cal] / model.temperature_bin, dim=-1)[:, 1]
+        best_t = _fit_or_default(raw7[:n_cal], y_all[:n_cal], float(model.temperature7))
+        best_t_bin = _fit_or_default(rawb[:n_cal], c_all[:n_cal], float(model.temperature_bin))
+
+        # threshold for the binary head, chosen on the calibration split
+        cal_pb = torch.softmax(rawb[:n_cal] / best_t_bin, dim=-1)[:, 1]
+        c_cal = c_all[:n_cal]
         best_thr, best_f1 = 0.5, -1.0
         for thr in [0.3, 0.5, 0.7, 0.8, 0.9, 0.95]:
             pr = (cal_pb >= thr).long()
-            tp = ((pr == 1) & (c_all[:n_cal] == 1)).sum().item()
-            fp = ((pr == 1) & (c_all[:n_cal] == 0)).sum().item()
-            fn = ((pr == 0) & (c_all[:n_cal] == 1)).sum().item()
+            tp = int(((pr == 1) & (c_cal == 1)).sum())
+            fp = int(((pr == 1) & (c_cal == 0)).sum())
+            fn = int(((pr == 0) & (c_cal == 1)).sum())
             f1 = 2 * tp / (2 * tp + fp + fn) if tp else 0.0
             if f1 > best_f1:
                 best_f1, best_thr = f1, thr
-        # report on disjoint test half
+
+        # report on the disjoint test half
         probas_t = torch.softmax(raw7[n_cal:] / best_t, dim=-1).tolist()
         probas = [{letter: float(p) for letter, p in zip(OPTION_LETTERS, row)} for row in probas_t]
-        y_true = [OPTION_LETTERS[i] for i in y_all[n_cal:].tolist()]
+        y_test = y_true[n_cal:]
         y_pred = [max(OPTION_LETTERS, key=lambda letter: p[letter]) for p in probas]
-        report = {"probed": summarize(y_true, y_pred, probas, best_t)}
+        report = {
+            "probed": summarize(y_test, y_pred, probas, best_t, n_boot=bootstrap, seed=seed),
+            "cal_n": n_cal,
+        }
         report["probed"]["cal_n"] = n_cal
-        test_pb = torch.softmax(rawb[n_cal:] / model.temperature_bin, dim=-1)[:, 1].tolist()
+        uncal = torch.softmax(raw7[n_cal:], dim=-1).tolist()
+        uncal_probas = [
+            {letter: float(p) for letter, p in zip(OPTION_LETTERS, row)} for row in uncal
+        ]
+        report["paired"] = paired_report(
+            uncal_probas, probas, y_test, n_boot=bootstrap, seed=seed + 10
+        )
+
+        test_pb = torch.softmax(rawb[n_cal:] / best_t_bin, dim=-1)[:, 1]
         bin_pred = [1 if p >= best_thr else 0 for p in test_pb]
         yc = c_all[n_cal:].tolist()
         tp = sum(1 for t, p in zip(yc, bin_pred) if t == p == 1)
@@ -168,16 +289,18 @@ def run_eval(
             "precision": round(tp / (tp + fp), 4) if tp + fp else 0.0,
             "recall": round(tp / (tp + fn), 4) if tp + fn else 0.0,
             "support": sum(yc),
-            "temperature": model.temperature_bin,
+            "temperature": best_t_bin,
         }
+        report["confused_detector"].update(
+            _confused_ci(test_pb, yc, best_thr, bootstrap, seed + 20)
+        )
+
         if raw21:
             raw21_t = torch.stack(raw21)
             y21 = torch.tensor([FINE21_ORDER.index(r["type"]) for r in rows])
-            best_t21, best_nll21 = 1.0, float("inf")
-            for t in [0.3, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0]:
-                nll = F.cross_entropy(raw21_t[:n_cal] / t, y21[:n_cal]).item()
-                if nll < best_nll21:
-                    best_nll21, best_t21 = nll, t
+            best_t21 = _fit_or_default(
+                raw21_t[:n_cal], y21[:n_cal], float(model.temperature21)
+            )
             pred21 = raw21_t[n_cal:].argmax(-1).tolist()
             true21 = y21[n_cal:].tolist()
             acc21 = sum(1 for t, p in zip(true21, pred21) if t == p) / len(true21)
@@ -201,20 +324,31 @@ def run_eval(
         report["calibrated"] = report["probed"]
     else:
         model = DecisionModel(checkpoint, tokenizer_path, device)
-        # Collect base (T=1) probas one time. Rescale them analytically for the grid.
-        base_probas: list[dict[str, float]] = []
+        # Collect base (T=1) logits one time.
+        raw_logits: list[dict[str, float]] = []
         with torch.no_grad():
             for r in rows:
                 ids = model.tokenizer.encode(format_prompt(r["input"])).ids[-model.config.max_seq_len :]
                 idx = torch.tensor([ids], dtype=torch.long, device=model.device)
                 logits, _ = model.model(idx)
                 gathered = logits[0, -1, torch.tensor(model.option_ids)].float()
-                base_probas.append({letter: float(v) for letter, v in zip(OPTION_LETTERS, gathered.tolist())})
+                raw_logits.append({letter: float(v) for letter, v in zip(OPTION_LETTERS, gathered.tolist())})
 
-        def probas_at(t: float) -> list[dict[str, float]]:
+        logits_matrix = torch.tensor(
+            [[raw[letter] for letter in OPTION_LETTERS] for raw in raw_logits],
+            dtype=torch.float64,
+        )
+        targets = torch.tensor([OPTION_LETTERS.index(t) for t in y_true])
+        best_t = _fit_or_default(logits_matrix[:n_cal], targets[:n_cal], 1.0)
+        if temperatures:
+            # explicit overrides keep the old behaviour for the grid sweep
+            best_t = min(temperatures, key=lambda t: nll(
+                torch.softmax(logits_matrix[:n_cal] / t, dim=-1), targets[:n_cal]
+            ))
+
+        def probas_at(t: float, part: slice) -> list[dict[str, float]]:
             out = []
-            for raw in base_probas:
-                logits = torch.tensor([raw[letter] for letter in OPTION_LETTERS])
+            for logits in logits_matrix[part]:
                 scaled = torch.softmax(logits / t, dim=-1).tolist()
                 out.append({letter: float(p) for letter, p in zip(OPTION_LETTERS, scaled)})
             return out
@@ -222,35 +356,47 @@ def run_eval(
         def preds_of(probas: list[dict[str, float]]) -> list[str]:
             return [max(OPTION_LETTERS, key=lambda letter: p[letter]) for p in probas]
 
-        grid = temperatures or [0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 7.0, 10.0]
-        base = probas_at(1.0)
-        report = {"uncalibrated": summarize(y_true, preds_of(base), base, 1.0), "grid": []}
-        best = report["uncalibrated"]
-        for t in grid:
-            p = probas_at(t)
-            s = summarize(y_true, preds_of(p), p, t)
-            report["grid"].append({"temperature": t, "accuracy": s["accuracy"], "nll": s["nll"], "ece": s["ece"]})
-            if s["nll"] < best["nll"]:
-                best = s
-        report["calibrated"] = best
+        test_part = slice(n_cal, None)
+        y_test = y_true[n_cal:]
+        base = probas_at(1.0, test_part)
+        calibrated = probas_at(best_t, test_part)
+        report = {
+            "uncalibrated": summarize(
+                y_test, preds_of(base), base, 1.0, n_boot=bootstrap, seed=seed
+            ),
+            "calibrated": summarize(
+                y_test, preds_of(calibrated), calibrated, best_t, n_boot=bootstrap, seed=seed + 1
+            ),
+            "paired": paired_report(base, calibrated, y_test, n_boot=bootstrap, seed=seed + 2),
+            "cal_n": n_cal,
+        }
 
     with open(os.path.join(out_dir, "report.json"), "w") as f:
         json.dump(report, f, indent=2)
 
     lines = [f"# Decision-model eval ({method})", ""]
+    lines.append(f"calibration split: {n_cal} rows; test split: {len(rows) - n_cal} rows")
+    lines.append("")
     if "confused_detector" in report:
         cd = report["confused_detector"]
         lines.append(
             f"confused detector @{cd['threshold']}: precision={cd['precision']} recall={cd['recall']} "
             f"support={cd['support']} (T={cd['temperature']})"
         )
+        if "precision_ci" in cd:
+            lines.append(f"precision 95% CI={cd['precision_ci']} recall 95% CI={cd['recall_ci']}")
         lines.append("")
     for key in report:
-        if key in ("grid", "confused_detector", "fine21"):
+        if key in ("grid", "paired", "confused_detector", "fine21", "calibrated", "cal_n"):
             continue
         s = report[key]
         lines.append(f"## {key} (T={s['temperature']}, n={s['n']})")
         lines.append(f"accuracy={s['accuracy']} nll={s['nll']} ece={s['ece']} macro_f1={s['macro_f1']}")
+        if "accuracy_ci" in s:
+            lines.append(
+                f"95% CI: accuracy={s['accuracy_ci']} nll={s['nll_ci']} "
+                f"ece={s['ece_ci']} macro_f1={s['macro_f1_ci']}"
+            )
         lines.append("")
         lines.append("| opt | name | prec | rec | f1 | support |")
         lines.append("| --- | --- | --- | --- | --- | --- |")
@@ -262,6 +408,14 @@ def run_eval(
         lines.append("| --- | --- | --- | --- |")
         for b in s["bins"]:
             lines.append(f"| {b['bin']} | {b['count']} | {b['confidence']} | {b['accuracy']} |")
+        lines.append("")
+    if report.get("paired"):
+        lines.append("## paired: calibrated - uncalibrated")
+        lines.append("")
+        lines.append("| metric | diff | 95% CI |")
+        lines.append("| --- | --- | --- |")
+        for metric, res in report["paired"].items():
+            lines.append(f"| {metric} | {res['diff']} | {res['ci']} |")
         lines.append("")
     if "fine21" in report:
         f21 = report["fine21"]
@@ -291,5 +445,19 @@ if __name__ == "__main__":
     parser.add_argument("--method", choices=["logit", "probe"], default="logit")
     parser.add_argument("--probe", default="checkpoints/decision_probe.pt")
     parser.add_argument("--cal-n", type=int, default=1000)
+    parser.add_argument("--bootstrap", type=int, default=1000)
+    parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
-    run_eval(args.checkpoint, args.tokenizer, args.eval, args.max_n, args.device, out_dir=args.out_dir, method=args.method, probe_path=args.probe, cal_n=args.cal_n)
+    run_eval(
+        args.checkpoint,
+        args.tokenizer,
+        args.eval,
+        args.max_n,
+        args.device,
+        out_dir=args.out_dir,
+        method=args.method,
+        probe_path=args.probe,
+        cal_n=args.cal_n,
+        bootstrap=args.bootstrap,
+        seed=args.seed,
+    )

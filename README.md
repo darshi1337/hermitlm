@@ -8,6 +8,9 @@
     <img alt="Model" src="https://img.shields.io/badge/Model-hermitlm--8M-b65f36">
   </a>
   <img alt="License" src="https://img.shields.io/badge/License-MIT-3fa34d">
+  <a href="https://hub.xerj.org/contributors/darshi1337">
+    <img alt="XERJ Corpus Hub contributor" src="https://hub.xerj.org/contributors/darshi1337/badge.svg">
+  </a>
 </p>
 
 <p align="center">
@@ -65,6 +68,7 @@ Small causal transformer. Learned positions, standard attention, LayerNorm, weig
 - Tool-calling router: FAQ, Wolfram math, and web search, via `<tool>name(query)</tool>` tags plus keyword fallback
 - Probe decision model: single-pass intent classification into 7 coarse intents, plus an out-of-scope score. High `p_confused` escalates to web search. The browser UI shows an intent chip on each reply.
 - Fine-grained 21-way intent head and tool-routing probe (math/web/faq/chat) on the same frozen features.
+- Calibrated heads: bounded temperature search with Platt-smoothed binary targets, bootstrap CIs, and hash-checked head files.
 - Best-of-N reply rerank by persona reward, confidence-gated clarifying questions, persona auto-router, and intent analytics (`GET /stats/intents`).
 - Streaming API (`POST /chat/stream`, SSE) alongside `POST /chat`
 - Modular architecture
@@ -139,6 +143,14 @@ plus a confused-vs-rest out-of-scope head.
 Held-out (`data/eval.jsonl`, n=4000, temperature fitted on a disjoint 1000-row split):
 accuracy 1.0, macro F1 1.0, NLL 0.0, ECE 0.0. The confused detector reaches precision 1.0 at recall 1.0.
 
+Temperatures come from a bounded golden-section search over log T, not a coarse grid
+(`hermitlm/tools/calibration.py`). Binary heads use Platt-smoothed targets, which stops
+near-separable scores from collapsing to 0/1 confidence. `scripts/eval_decision.py` fits T on
+a disjoint calibration split and reports 95% bootstrap CIs plus a paired
+calibrated-minus-uncalibrated table. Head files carry schema version 2 and SHA-256 hashes of
+the checkpoint and tokenizer. Loading a head after a retrain raises an error instead of
+scoring with stale weights.
+
 The 21-way head (`FINE21_ORDER` in `hermitlm/tools/decision_model.py`) reaches accuracy 0.998
 and macro F1 0.997 on the same split. Both numbers flatter the model. The persona data is
 rigidly templated, so template eval is near trivial. On 20 hand-written natural paraphrases the
@@ -173,7 +185,7 @@ until the user picks a mode by hand.
 
 ```bash
 conda run -n hermit python scripts/train_probe.py --per-class 1500 --epochs 30 --out checkpoints/decision_probe.pt
-conda run -n hermit python scripts/eval_decision.py --method probe --max-n 5000 --cal-n 1000 --out-dir eval_out/decision_probe
+conda run -n hermit python scripts/eval_decision.py --method probe --max-n 5000 --cal-n 1000 --bootstrap 1000 --out-dir eval_out/decision_probe
 conda run -n hermit python scripts/export_probe.py --output web/probe.json   # also runs in deploy CI
 ```
 
@@ -248,7 +260,7 @@ Status on 2026-10-15: the repo holds all 8 files (78.4 MB total). The model card
 conda create -n hermit -c pytorch -c conda-forge python=3.11 cpuonly pytorch tokenizers onnxruntime
 conda activate hermit
 pip install -e . -r requirements.txt
-pytest tests/          # 40 passed
+pytest tests/          # 55 passed
 ruff check .           # clean
 basedpyright           # clean (basic mode, see pyrightconfig.json)
 ```

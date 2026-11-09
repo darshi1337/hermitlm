@@ -27,6 +27,7 @@ web/tokenizer.json
 web/vendor/
 eval_out/
 logs/
+docs/calibration-improvements.md
 .vscode/
 .zed/
 .DS_Store

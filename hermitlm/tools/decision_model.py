@@ -21,6 +21,7 @@ import torch.nn.functional as F
 from tokenizers import Tokenizer
 
 from hermitlm.config import HermitConfig
+from hermitlm.tools.artifacts import verify_artifact
 from hermitlm.training.model import HermitLM
 
 # Coarse intent mapping: 7 balanced buckets covering all 21 fine types.
@@ -184,6 +185,9 @@ class ProbeDecisionModel:
         self.model.load_state_dict(ckpt["model_state_dict"])
         self.model.eval()
         probe = torch.load(probe_path, map_location=self.device, weights_only=True)
+        verify_artifact(probe, checkpoint_path, tokenizer_path)
+        self.checkpoint_path = checkpoint_path
+        self.tokenizer_path = tokenizer_path
         d_model = probe["d_model"]
         self.head7 = nn.Linear(d_model, len(OPTION_LETTERS)).to(self.device)
         self.head7.load_state_dict(probe["head7"])
@@ -241,6 +245,7 @@ class ProbeDecisionModel:
 
         try:
             tool = torch.load(tool_probe_path, map_location=self.device, weights_only=True)
+            verify_artifact(tool, self.checkpoint_path, self.tokenizer_path)
             self.tool_head = nn.Linear(tool["d_model"], len(TOOL_CLASSES)).to(self.device)
             self.tool_head.load_state_dict(tool["head"])
             self.tool_head.eval()
@@ -290,6 +295,9 @@ def export_probe(probe_path: str, output_path: str) -> dict:
         }
         data["temperature21"] = float(probe.get("temperature21", 1.0))
         data["fine_options"] = FINE21_ORDER
+    for key in ("schema_version", "checkpoint_sha256", "tokenizer_sha256"):
+        if key in probe:
+            data[key] = probe[key]
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(data))

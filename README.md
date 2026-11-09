@@ -260,7 +260,7 @@ Status on 2026-10-15: the repo holds all 8 files (78.4 MB total). The model card
 conda create -n hermit -c pytorch -c conda-forge python=3.11 cpuonly pytorch tokenizers onnxruntime
 conda activate hermit
 pip install -e . -r requirements.txt
-pytest tests/          # 55 passed
+pytest tests/          # 56 passed, 1 skipped
 ruff check .           # clean
 basedpyright           # clean (basic mode, see pyrightconfig.json)
 ```

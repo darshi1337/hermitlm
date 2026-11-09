@@ -214,7 +214,8 @@ POST /chat {"user_id": "demo", "message": "hello crab"}
 
 The chat UI in `web/` runs the model entirely client-side. `scripts/export_onnx.py` exports
 `checkpoints/best_model.pt` to ONNX. `scripts/quantize_onnx.py` produces the uint8 `model.quant.onnx`.
-The page tries the quantized model first and falls back to `model.onnx`.
+The page tries the quantized model first. Deploy drops the full fp32 `model.onnx` from the
+Pages artifact (deploy.yml), so only the ~9MB quantized artifact ships.
 
 The page uses onnxruntime-web plus a from-scratch byte-level BPE tokenizer. The tokenizer reads
 `data/tokenizer.json` directly. The page generates responses in

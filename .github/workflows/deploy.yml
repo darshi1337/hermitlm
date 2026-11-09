@@ -44,6 +44,13 @@ jobs:
       - name: Quantize model for the web
         run: python scripts/quantize_onnx.py --input web/model.onnx --output web/model.quant.onnx
 
+      # The page loads the quantized artifact and only falls back to the
+      # full fp32 graph on failure. Dropping it from the Pages artifact cuts
+      # the upload from ~42MB to ~6MB, which is what makes the deployment
+      # finish inside the action timeout instead of stalling in syncing_files.
+      - name: Drop the full fp32 model from the Pages artifact
+        run: rm web/model.onnx
+
       - name: Export probe head to JSON
         run: python scripts/export_probe.py --output web/probe.json
 
@@ -59,6 +66,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -66,3 +74,5 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          timeout: 1200000

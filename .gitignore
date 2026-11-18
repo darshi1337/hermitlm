@@ -2,15 +2,34 @@ data/*
 !data/tokenizer.json
 !data/tool_train.jsonl
 !data/tool_eval.jsonl
+# local runtime state / generated training data
+data/hermit.db*
+data/train.jsonl
+data/eval.jsonl
+data/train_openai.jsonl
+data/eval_openai.jsonl
 checkpoints/*
 !checkpoints/best_model.pt
 !checkpoints/config.json
 !checkpoints/decision_probe.pt
 !checkpoints/decision_tool_probe.pt
+# intermediate / optional-stage checkpoints
+checkpoints/step_*.pt
+checkpoints/final_model.pt
+checkpoints/ppo/
+checkpoints/dpo/
 hermitlm.egg-info/
 __pycache__/
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+.venv/
+venv/
+*.tmp
+~$*
 *.pyc
 *.log
 .env*

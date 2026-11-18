@@ -58,18 +58,18 @@
 {"input": "is hermitlm your name", "label": "faq"}
 {"input": "who is in charge here", "label": "faq"}
 {"input": "do you dream", "label": "faq"}
-{"input": "hello crab", "label": "chat"}
-{"input": "are you hungry", "label": "chat"}
+{"input": "hi there, little crab", "label": "chat"}
+{"input": "is anyone still hungry down there", "label": "chat"}
 {"input": "the water feels cold today", "label": "chat"}
 {"input": "goodnight, see you tomorrow", "label": "chat"}
-{"input": "you are moving fast", "label": "chat"}
+{"input": "the crab is waving both claws at me", "label": "chat"}
 {"input": "was that loud just now", "label": "chat"}
 {"input": "i feel a bit lonely", "label": "chat"}
 {"input": "look at the bubbles rising", "label": "chat"}
 {"input": "is the glass clean", "label": "chat"}
 {"input": "it is dark in here", "label": "chat"}
 {"input": "time to eat something tasty", "label": "chat"}
-{"input": "how are you feeling", "label": "chat"}
+{"input": "i left a tiny shell by the filter", "label": "chat"}
 {"input": "the light just changed", "label": "chat"}
 {"input": "can you see outside the tank", "label": "chat"}
 {"input": "that noise scared me, sorry", "label": "chat"}

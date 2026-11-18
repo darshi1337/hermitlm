@@ -1,6 +1,6 @@
 {
   "model": {
-    "vocab_size": 2831,
+    "vocab_size": 2857,
     "max_seq_len": 512,
     "d_model": 320,
     "n_layers": 6,
@@ -21,7 +21,7 @@
     "grad_clip": 1.0,
     "eval_interval": 200,
     "save_interval": 1000,
-    "device": "auto",
+    "device": "xpu",
     "seed": 42,
     "data_dir": "data",
     "output_dir": "checkpoints"

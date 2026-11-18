@@ -78,6 +78,14 @@ Small causal transformer. Learned positions, standard attention, LayerNorm, weig
 
 ## Training
 
+Training and probe fitting default to the **Intel Arc GPU** via PyTorch's XPU backend (`HERMIT_TRAIN_DEVICE=xpu`). On an NVIDIA machine set `HERMIT_TRAIN_DEVICE=cuda`; use `=cpu` only for debugging. They fail loudly if the requested accelerator is unavailable. Install the matching wheel with `pip install torch --index-url https://download.pytorch.org/whl/xpu`. Data generation (`prepare_data.py`, `build_tool_data.py`) and ONNX export stay on CPU.
+
+On a CUDA machine, the full pipeline can be rerun with:
+
+```bash
+bash scripts/retrain_all.sh
+```
+
 Three stages:
 
 1. **SFT** (`scripts/train.sh` → `hermitlm/training/train.py`): next-token prediction on `data/train.jsonl`, produces `checkpoints/best_model.pt`.
@@ -104,7 +112,7 @@ Latest comparison (persona measured over 10 sampled generations, so ±0.05 noise
 
 | Checkpoint | Perplexity | Persona reward |
 | --- | --- | --- |
-| SFT (`best_model.pt`) | 1.929 | 0.516 |
+| SFT (`best_model.pt`) | 1.928 | 0.566 |
 | PPO (`ppo_final.pt`) | 1.992 | **0.648** |
 | DPO (`dpo_final.pt`, margin filter) | 1.930 | 0.449 |
 
@@ -151,8 +159,8 @@ calibrated-minus-uncalibrated table. Head files carry schema version 2 and SHA-2
 the checkpoint and tokenizer. Loading a head after a retrain raises an error instead of
 scoring with stale weights.
 
-The 21-way head (`FINE21_ORDER` in `hermitlm/tools/decision_model.py`) reaches accuracy 0.998
-and macro F1 0.997 on the same split. Both numbers flatter the model. The persona data is
+The 21-way head (`FINE21_ORDER` in `hermitlm/tools/decision_model.py`) reaches accuracy 0.9955
+and macro F1 0.9929 on the same split. Both numbers flatter the model. The persona data is
 rigidly templated, so template eval is near trivial. On 20 hand-written natural paraphrases the
 7-way head scores 14/20. Misses collapse into `f` (condition) at full confidence. Plain paraphrase
 coverage is the next data gap, not a bigger head.
@@ -166,7 +174,8 @@ only that way. Left padding silently shifts positions and once cost 30 points of
 queries) to `data/tool_train.jsonl` / `data/tool_eval.jsonl`. `scripts/train_tool_probe.py` trains
 a 4-way head (math/web/faq/chat) into `checkpoints/decision_tool_probe.pt`. Routing order is
 tag, then keywords (93% precise when they fire), then the probe on the residue, then confused
-escalation. Scores on the 80 hand-authored eval queries: keywords 0.59, probe 0.66, combined 0.73.
+escalation. Scores on the 80 hand-authored eval queries after the latest retrain: probe 0.6125
+(math 0.90, web 0.15, faq 0.80, chat 0.60).
 
 ## Reply quality and analytics
 
@@ -178,8 +187,9 @@ keeps the best by persona reward. Lower the value to 1 for less latency.
 confidence lands below the threshold without confusion, the API asks which of the top two
 intents the user means instead of guessing.
 - Persona auto-router. Coarse intent maps to UI persona mode (needs to hungry, sense to guard,
-body and condition to sleepy). The API returns it and prefixes the prompt. The web UI applies it
-until the user picks a mode by hand.
+body and condition to sleepy). The API returns the persona and prefixes the prompt with
+`[mode crab]`, which the current checkpoint was trained on via
+`generate_data.add_persona_variants()`. Set `HERMIT_PERSONA_PROMPT=0` to disable it.
 - Analytics. Every reply logs its verdict to `intent_log` in `data/hermit.db`.
 `GET /stats/intents` returns totals by label and tool plus the confused rate.
 
@@ -219,7 +229,8 @@ Pages artifact (deploy.yml), so only the ~9MB quantized artifact ships.
 
 The page uses onnxruntime-web plus a from-scratch byte-level BPE tokenizer. The tokenizer reads
 `data/tokenizer.json` directly. The page generates responses in
- the browser with no backend.
+ the browser with no backend. A generated `web/asset-manifest.json` keys the browser Cache API
+by the quantized model's SHA-256, so new deploys cannot pair stale cached weights with a fresh probe.
 
 The UI streams tokens as they generate and offers temperature/top-K,
  persona modes (normal/sleepy/hungry/guard-crab), a stop button, and speech synthesis.
@@ -261,14 +272,15 @@ Status on 2026-10-15: the repo holds all 8 files (78.4 MB total). The model card
 conda create -n hermit -c pytorch -c conda-forge python=3.11 cpuonly pytorch tokenizers onnxruntime
 conda activate hermit
 pip install -e . -r requirements.txt
-pytest tests/          # 56 passed, 1 skipped
+pytest tests/          # 65 passed, 2 skipped
 ruff check .           # clean
-basedpyright           # clean (basic mode, see pyrightconfig.json)
+# optional local type check (not part of CI): basedpyright
 ```
 
 Copy `.env` from the documented keys (`HERMIT_CHECKPOINT`, `HERMIT_TOKENIZER`, `HERMIT_DEVICE`,
 `HERMIT_PROBE`, `HERMIT_CONFUSED_THRESHOLD`, `HERMIT_TOOL_PROBE`, `HERMIT_TOOL_THRESHOLD`,
-`HERMIT_BEST_OF`, `HERMIT_CLARIFY`, `HERMIT_CLARIFY_THRESHOLD`, `WOLFRAM_APP_ID`, …). Never commit `.env`.
+`HERMIT_BEST_OF`, `HERMIT_CLARIFY`, `HERMIT_CLARIFY_THRESHOLD`, `HERMIT_PERSONA_PROMPT`,
+`WOLFRAM_APP_ID`, …). Never commit `.env`.
 
 ## License
 

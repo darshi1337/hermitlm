@@ -6,6 +6,10 @@ import argparse
 import os
 import sys
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 DATASET_CARD = """---
 license: mit
 language: en

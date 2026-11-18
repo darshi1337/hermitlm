@@ -2,8 +2,21 @@
 // mirroring HermitLM.generate() / HermitInference.chat() in
 // hermitlm/training/model.py and hermitlm/runtime/inference.py.
 
-// Bump this when model artifacts change, or browsers keep serving the old one.
-const CACHE_NAME = "hermit-assets-v2";
+// Cache keys are derived from the asset manifest hash, so a new deploy
+// automatically invalidates the old model without a manual version bump.
+const DEFAULT_ASSET_VERSION = "v2";
+
+export async function fetchAssetVersion() {
+  try {
+    const res = await fetch("./asset-manifest.json", { cache: "no-store" });
+    if (!res.ok) return DEFAULT_ASSET_VERSION;
+    const manifest = await res.json();
+    return (manifest["model.quant.onnx"] || {}).sha256 || DEFAULT_ASSET_VERSION;
+  } catch (e) {
+    return DEFAULT_ASSET_VERSION;
+  }
+}
+
 const PAD_ID = 0;
 const BOS_ID = 1;
 const EOS_ID = 2;
@@ -12,50 +25,67 @@ const MAX_SEQ_LEN = 512;
 function sampleNext(logits, temperature, topK, topP = 0.95) {
   const n = logits.length;
   const scaled = new Float32Array(n);
-  for (let i = 0; i < n; i++) scaled[i] = logits[i] / temperature;
-
-  // top-K pre-filter
-  let threshold = -Infinity;
-  if (topK > 0 && topK < n) {
-    const sorted = Array.from(scaled).sort((a, b) => b - a);
-    threshold = sorted[topK - 1];
-  }
-
-  // softmax over survivors
   let maxLogit = -Infinity;
   for (let i = 0; i < n; i++) {
-    if (scaled[i] >= threshold && scaled[i] > maxLogit) maxLogit = scaled[i];
+    const v = logits[i] / temperature;
+    scaled[i] = v;
+    if (v > maxLogit) maxLogit = v;
   }
 
+  // top-K threshold using a bounded insertion table (topK is small).
+  // Sorting the full ~3k vocabulary twice per token was pure overhead.
+  let threshold = -Infinity;
+  const k = topK > 0 ? Math.min(topK, n) : 0;
+  if (k > 0) {
+    const best = new Float32Array(k);
+    best.fill(-Infinity);
+    let count = 0;
+    for (let i = 0; i < n; i++) {
+      const v = scaled[i];
+      if (count === k && v <= threshold) continue;
+      let pos = count < k ? count++ : k - 1;
+      while (pos > 0 && best[pos - 1] < v) {
+        best[pos] = best[pos - 1];
+        pos--;
+      }
+      best[pos] = v;
+      threshold = best[k - 1];
+    }
+  }
+
+  // softmax over survivors only; keep their indices for the nucleus filter
   const probs = new Float32Array(n);
+  const candidates = [];
   let sum = 0;
   for (let i = 0; i < n; i++) {
     if (scaled[i] < threshold) continue;
     const p = Math.exp(scaled[i] - maxLogit);
     probs[i] = p;
+    candidates.push(i);
     sum += p;
   }
-  for (let i = 0; i < n; i++) probs[i] /= sum;
+  for (const i of candidates) probs[i] /= sum;
 
-  // top-P (nucleus) filter on normalized probs
-  if (topP < 1.0) {
-    const order = Array.from(probs.keys()).sort((a, b) => probs[b] - probs[a]);
+  // top-P (nucleus) filter on normalized probs; sort only the survivors
+  if (topP < 1.0 && candidates.length > 1) {
+    candidates.sort((a, b) => probs[b] - probs[a]);
     let cum = 0;
-    let cutoff = n;
-    for (let k = 0; k < order.length; k++) {
-      cum += probs[order[k]];
+    let cutoff = candidates.length;
+    for (let j = 0; j < candidates.length; j++) {
+      cum += probs[candidates[j]];
       if (cum >= topP) {
-        cutoff = k + 1;
+        cutoff = Math.max(1, j + 1);
         break;
       }
     }
-    const allowed = new Set(order.slice(0, Math.max(1, cutoff)));
+    const allowed = new Uint8Array(n);
+    for (let j = 0; j < cutoff; j++) allowed[candidates[j]] = 1;
     let renorm = 0;
-    for (let i = 0; i < n; i++) {
-      if (!allowed.has(i)) probs[i] = 0;
-      renorm += probs[i];
+    for (const i of candidates) {
+      if (!allowed[i]) probs[i] = 0;
+      else renorm += probs[i];
     }
-    for (let i = 0; i < n; i++) probs[i] /= renorm;
+    for (const i of candidates) probs[i] /= renorm;
     sum = 1;
   }
 
@@ -74,7 +104,8 @@ export class HermitModel {
 
   // Cache-first fetch. Repeat visits skip the ~9MB download entirely.
   // Reports byte progress so the status pill shows where loading stalls.
-  static async fetchBuffer(url, { onProgress } = {}) {
+  static async fetchBuffer(url, { onProgress, version = DEFAULT_ASSET_VERSION } = {}) {
+    const cacheName = `hermit-assets-${version}`;
     const report = (done, total) => {
       if (onProgress) onProgress(done, total);
     };
@@ -104,7 +135,7 @@ export class HermitModel {
       return buf.buffer;
     };
     try {
-      const cache = await caches.open(CACHE_NAME);
+      const cache = await caches.open(cacheName);
       const hit = await cache.match(url);
       if (hit) {
         const buf = await hit.arrayBuffer();
@@ -123,8 +154,9 @@ export class HermitModel {
     }
   }
 
-  static async load(modelUrl, { onProgress } = {}) {
+  static async load(modelUrl, { onProgress, version } = {}) {
     const data = await HermitModel.fetchBuffer(modelUrl, {
+      version,
       onProgress: onProgress
         ? (done, total) =>
             onProgress(

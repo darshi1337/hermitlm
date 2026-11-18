@@ -2,6 +2,7 @@ import os
 
 import pytest
 
+import hermitlm.tools.memory as memory_mod
 from hermitlm.tools import router
 
 HAS_ARTIFACTS = all(
@@ -84,6 +85,8 @@ def test_clarify_gate_fires_on_low_confidence(monkeypatch, tmp_path):
     from hermitlm.tools import db
 
     monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setattr("hermitlm.tools.memory.DB_PATH", str(tmp_path / "memory.db"))
+    memory_mod.init_memory_db()
     db.init_db()
     monkeypatch.setattr(api, "CLARIFY", True)
     monkeypatch.setattr(api, "CLARIFY_THRESHOLD", 0.75)
@@ -105,6 +108,8 @@ def test_persona_and_stats(monkeypatch, tmp_path):
     from hermitlm.tools import db
 
     monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setattr("hermitlm.tools.memory.DB_PATH", str(tmp_path / "memory.db"))
+    memory_mod.init_memory_db()
     db.init_db()
     monkeypatch.setattr(api, "CLARIFY", False)
     monkeypatch.setattr(api, "BEST_OF", 1)
@@ -126,6 +131,8 @@ def test_tool_reply_includes_persona(monkeypatch, tmp_path):
     from hermitlm.tools import db
 
     monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setattr("hermitlm.tools.memory.DB_PATH", str(tmp_path / "memory.db"))
+    memory_mod.init_memory_db()
     db.init_db()
     from fastapi.testclient import TestClient
 
@@ -144,3 +151,51 @@ def test_best_of_n_picks_best_reward():
     best, scores = engine.best_of_n("hello crab", n=2, max_tokens=5)
     assert isinstance(best, str) and best
     assert len(scores) == 2
+
+
+def test_math_reply_uses_crab_intro(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+
+    from hermitlm.runtime import api
+    from hermitlm.tools import db, router
+
+    monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setattr("hermitlm.tools.memory.DB_PATH", str(tmp_path / "memory.db"))
+    memory_mod.init_memory_db()
+    db.init_db()
+    monkeypatch.setattr(router, "_faq", lambda q: None)
+    monkeypatch.setattr(router, "_wolfram", lambda q: "4")
+    monkeypatch.setattr(api.random, "choice", lambda seq: seq[0])
+
+    client = TestClient(api.app)
+    r = client.post("/chat", json={"user_id": "t", "message": "solve 2+2"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["tool"] == "math"
+    assert body["response"] == f"{api.MATH_INTROS[0]}: 4"
+    assert len(api.MATH_INTROS) > 1
+
+
+def test_chat_stream_tool_result_is_valid_sse(monkeypatch, tmp_path):
+    import sqlite3
+
+    from fastapi.testclient import TestClient
+
+    from hermitlm.runtime import api
+    from hermitlm.tools import db, router
+
+    monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setattr("hermitlm.tools.memory.DB_PATH", str(tmp_path / "memory.db"))
+    memory_mod.init_memory_db()
+    db.init_db()
+    monkeypatch.setattr(router, "_faq", lambda q: "line one\nline two")
+
+    client = TestClient(api.app)
+    r = client.post("/chat/stream", json={"user_id": "t", "message": "who made you"})
+    assert r.status_code == 200
+    events = [chunk for chunk in r.text.split("\n\n") if chunk.strip()]
+    assert events == ["data: line one", "data: line two", "data: [DONE]"]
+
+    with sqlite3.connect(str(tmp_path / "test.db")) as conn:
+        count = conn.execute("SELECT COUNT(*) FROM conversations").fetchone()[0]
+    assert count == 1

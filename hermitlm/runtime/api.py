@@ -1,4 +1,5 @@
 import os
+import random
 
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -14,14 +15,26 @@ from hermitlm.settings import (
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_K,
     DEVICE,
+    PERSONA_PROMPT,
     TOKENIZER_PATH,
 )
 from hermitlm.tools.db import init_db, insert_conversation, insert_intent, intent_stats
 from hermitlm.tools.decision_model import COARSE_NAMES, INTENT_PERSONA
-from hermitlm.tools.memory import get_memory, init_memory_db, save_memory
+from hermitlm.tools.memory import extract_fact, get_memory, init_memory_db, save_memory
 from hermitlm.tools.router import route_with_intent
 
 app = FastAPI(title="HermitLM API")
+
+MATH_INTROS = [
+    "aah math! i hate it. still here is the answer from wolfram",
+    "ugh, numbers. i'd rather count bubbles, but wolfram says",
+    "math detected. claws confused. wolfram to the rescue",
+    "i dislike math almost as much as dry sand. here's wolfram's answer",
+    "fine, fine. i asked wolfram so you don't have to",
+    "my shell can't do algebra. wolfram can, apparently",
+    "math! *shudders*. here, take wolfram's answer",
+    "i hate sums. but here's what wolfram dug up",
+]
 
 
 init_db()
@@ -79,74 +92,44 @@ def stats_intents():
     return intent_stats()
 
 
-@app.post("/chat", response_model=ChatResponse)
-def chat(req: ChatRequest):
-    user_input = req.message.strip()
-
-    if not user_input:
-        raise HTTPException(
-            status_code=400,
-            detail="message cannot be empty"
-        )
-
+def _respond(user_input, req):
+    """Shared response pipeline for /chat and /chat/stream."""
     q = user_input.lower()
 
     _tool, tool_result, intent = route_with_intent(user_input)
     response = tool_result
+    if response is not None and _tool in ("math", "wolfram"):
+        response = f"{random.choice(MATH_INTROS)}: {response}"
     persona = INTENT_PERSONA.get((intent or {}).get("label", ""), "") or None
 
-    if response is None and "my name is " in q:
-        idx = q.find("my name is ")
-        name = user_input[idx + len("my name is "):].strip()
-
-        save_memory(req.user_id, "name", name)
-
-        response = (
-            f"Understood. I will remember that your name is {name}. Also, name is Hermit."
-        )
-
-    if response is None and "i like " in q:
-        idx = q.find("i like ")
-        like = user_input[idx + len("i like "):].strip()
-
-        save_memory(req.user_id, "likes", like)
-
-        response = (
-            f"I will remember that you like {like}."
-        )
-
-    if response is None and "i am from " in q:
-        idx = q.find("i am from ")
-        place = user_input[idx + len("i am from "):].strip()
-
-        save_memory(req.user_id, "location", place)
-
-        response = (
-            f"Noted. You are from {place}."
-        )
+    fact = extract_fact(user_input)
+    if response is None and fact:
+        key, value = fact
+        save_memory(req.user_id, key, value)
+        response = {
+            "name": (
+                f"Understood. I will remember that your name is {value}. "
+                "Also, name is Hermit."
+            ),
+            "likes": f"I will remember that you like {value}.",
+            "location": f"Noted. You are from {value}.",
+        }[key]
 
     if response is None:
-
         if "what is my name" in q or "who am i" in q:
             name = get_memory(req.user_id, "name")
-
             if name:
                 response = f"Your name is {name}."
-
         elif "what do i like" in q:
             like = get_memory(req.user_id, "likes")
-
             if like:
                 response = f"You told me you like {like}."
-
         elif "where am i from" in q:
             place = get_memory(req.user_id, "location")
-
             if place:
                 response = f"You told me you're from {place}."
 
     if response is None:
-
         memory_parts = []
 
         name = get_memory(req.user_id, "name")
@@ -155,21 +138,15 @@ def chat(req: ChatRequest):
 
         if name:
             memory_parts.append(f"user name is {name}")
-
         if likes:
             memory_parts.append(f"user likes {likes}")
-
         if location:
             memory_parts.append(f"user is from {location}")
 
-        memory_context = ""
-
-        if memory_parts:
-            memory_context = ". ".join(memory_parts) + ". "
+        memory_context = ". ".join(memory_parts) + ". " if memory_parts else ""
 
         if (
-            response is None
-            and _tool is None
+            _tool is None
             and CLARIFY
             and intent is not None
             and intent["confidence"] < CLARIFY_THRESHOLD
@@ -185,7 +162,7 @@ def chat(req: ChatRequest):
         prompt = memory_context + user_input
 
         if response is None:
-            if persona:
+            if persona and PERSONA_PROMPT:
                 prompt = f"[{persona} crab] " + prompt
 
             response, _scores = engine.best_of_n(
@@ -196,6 +173,10 @@ def chat(req: ChatRequest):
                 max_tokens=req.max_tokens,
             )
 
+    return response, _tool, intent, persona
+
+
+def _log_turn(req, user_input, response, tool, intent):
     insert_conversation(
         user_id=req.user_id,
         username="api",
@@ -203,11 +184,21 @@ def chat(req: ChatRequest):
         bot_response=response,
         channel_id="api",
     )
-    insert_intent(user_input, intent, _tool)
+    insert_intent(user_input, intent, tool)
+
+
+@app.post("/chat", response_model=ChatResponse)
+def chat(req: ChatRequest):
+    user_input = req.message.strip()
+    if not user_input:
+        raise HTTPException(status_code=400, detail="message cannot be empty")
+
+    response, tool, intent, persona = _respond(user_input, req)
+    _log_turn(req, user_input, response, tool, intent)
 
     return ChatResponse(
         response=response,
-        tool=_tool,
+        tool=tool,
         intent=IntentResponse(**{k: intent[k] for k in ("label", "name", "confidence", "p_confused")}) if intent else None,
         persona=persona,
     )
@@ -217,19 +208,27 @@ def chat(req: ChatRequest):
 def chat_stream(req: ChatRequest):
     from fastapi.responses import StreamingResponse
 
-    _tool, tool_result, _intent = route_with_intent(req.message.strip())
-    insert_intent(req.message.strip(), _intent, _tool)
-    if tool_result:
-        def _gen():
-            yield f"data: {tool_result}\n\n"
-        return StreamingResponse(_gen(), media_type="text/event-stream")
-    text = engine.chat(req.message.strip(), temperature=req.temperature, top_k=req.top_k, max_tokens=req.max_tokens)
-    # naive word streaming (true token streaming needs generate() yields; client already streams ONNX)
-    def _gen2(t=text):
-        for w in t.split():
-            yield f"data: {w} \n\n"
+    user_input = req.message.strip()
+    if not user_input:
+        raise HTTPException(status_code=400, detail="message cannot be empty")
+
+    response, tool, intent, _persona = _respond(user_input, req)
+    _log_turn(req, user_input, response, tool, intent)
+
+    def _gen():
+        if tool:
+            # Tool results are often multi-line. Every line must get its own
+            # `data:` prefix or the SSE framing is corrupted.
+            for line in response.splitlines() or [""]:
+                yield f"data: {line}\n\n"
+        else:
+            # Naive word streaming (true token streaming needs generate()
+            # to yield; the local web UI already streams ONNX tokens).
+            for w in response.split():
+                yield f"data: {w} \n\n"
         yield "data: [DONE]\n\n"
-    return StreamingResponse(_gen2(), media_type="text/event-stream")
+
+    return StreamingResponse(_gen(), media_type="text/event-stream; charset=utf-8")
 
 
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")

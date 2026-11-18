@@ -286,7 +286,7 @@
 
 <script type="module">
 import { BPETokenizer } from "./tokenizer.js";
-import { HermitModel } from "./model.js";
+import { HermitModel, fetchAssetVersion } from "./model.js";
 import { classifyIntent, classifyFine, CONFUSED_THRESHOLD, CLARIFY_THRESHOLD } from "./intent.js";
 import { localMath } from "./math.js";
 
@@ -306,6 +306,7 @@ const charcount = document.getElementById("charcount");
 const micBtn = document.getElementById("mic");
 let stopFlag = false;
 let generating = false;
+let busy = false;
 let lastUserText = "";
 let manualPersona = false;
 stopBtn.addEventListener("click", () => (stopFlag = true));
@@ -320,6 +321,17 @@ personaEl.addEventListener("change", () => { manualPersona = true; syncPersonaBa
 // Probe intent to persona mode. Mirrors INTENT_PERSONA in
 // hermitlm/tools/decision_model.py. Auto-applies only until the user picks one.
 const INTENT_PERSONA = { a: "", b: "hungry", c: "", d: "guard", e: "sleepy", f: "sleepy", g: "" };
+
+const MATH_INTROS = [
+  "aah math! i hate it. still here is the answer from wolfram",
+  "ugh, numbers. i'd rather count bubbles, but wolfram says",
+  "math detected. claws confused. wolfram to the rescue",
+  "i dislike math almost as much as dry sand. here's wolfram's answer",
+  "fine, fine. i asked wolfram so you don't have to",
+  "my shell can't do algebra. wolfram can, apparently",
+  "math! *shudders*. here, take wolfram's answer",
+  "i hate sums. but here's what wolfram dug up",
+];
 
 /* voice input */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -575,13 +587,16 @@ async function init() {
   try {
     setStatus("runtime…", "loading");
     await ensureOrt();
+    const version = await fetchAssetVersion();
     setStatus("tokenizer…", "loading");
     [tokenizer, model] = await Promise.all([
-      BPETokenizer.load("./tokenizer.json"),
+      BPETokenizer.load(`./tokenizer.json?v=${version}`),
       HermitModel.load("./model.quant.onnx", {
+        version,
         onProgress: (msg) => setStatus(msg, "loading"),
       }).catch(() =>
         HermitModel.load("./model.onnx", {
+          version,
           onProgress: (msg) => setStatus(msg, "loading"),
         })
       ),
@@ -589,7 +604,7 @@ async function init() {
 
     setStatus("probe…", "loading");
     try {
-      const res = await fetch("./probe.json");
+      const res = await fetch(`./probe.json?v=${version}`, { cache: "no-store" });
       if (res.ok) probe = await res.json();
     } catch (e) { console.warn("probe unavailable", e); }
 
@@ -613,134 +628,149 @@ window.addEventListener("error", (e) => {
 });
 
 async function send(message, opts = {}) {
-  if (generating) {
-    stopFlag = true;
+  if (busy) {
+    // A second submit while classifying/generating stops generation but
+    // never starts an overlapping request.
+    if (generating) stopFlag = true;
     return;
   }
-  lastUserText = message;
-  if (opts.forcePersona !== undefined) {
-    personaEl.value = opts.forcePersona || "";
-    syncPersonaBadge();
-  }
-  addBubble("user", message);
-  input.value = "";
-  autoresize();
-  syncCharcount();
-
-  // Probe decision model: classify the raw message first (persona framing
-  // does not change intent), then auto-apply the persona to generation.
-  const rawIds = tokenizer.encode(model.formatPrompt(message));
-  let intent = null, fine = null;
-  try {
-    const hidden = await model.classify(rawIds);
-    if (hidden && probe) {
-      intent = classifyIntent(hidden, probe);
-      fine = classifyFine(hidden, probe);
-    }
-  } catch (e) { console.warn("intent failed", e); }
-  const intentText = intent
-    ? `intent: ${intent.name}${fine ? " · " + fine.fine : ""} · ${(intent.confidence * 100).toFixed(0)}%`
-    : "";
-  if (intent && !manualPersona) {
-    personaEl.value = INTENT_PERSONA[intent.label] || "";
-    syncPersonaBadge();
-  }
-  updateSessionStats(intent);
-  const persona = personaEl.value ? `[${personaEl.value} crab] ` : "";
-  const prompt = model.formatPrompt(persona + message);
-  const promptIds = tokenizer.encode(prompt);
-
-  // Confidence gate: ask which of the top two intents the user means.
-  if (intent && !opts.fromClarify && intent.confidence < CLARIFY_THRESHOLD && intent.p_confused < CONFUSED_THRESHOLD) {
-    const [first, second] = intent.top2;
-    const bubble = addBubble("bot", `Quick check before I scuttle ahead: is this about ${probe.names[first[0]]} or ${probe.names[second[0]]}?`);
-    const msg = bubble.parentElement;
-    for (const [letter] of intent.top2) {
-      const chip = document.createElement("button");
-      chip.type = "button";
-      chip.className = "retry-chip";
-      chip.textContent = probe.names[letter];
-      chip.addEventListener("click", () => {
-        chip.disabled = true;
-        send(lastUserText, { fromClarify: true, forcePersona: INTENT_PERSONA[letter] || "" });
-      });
-      msg.appendChild(chip);
-    }
-    if (bubble.meta && intentText) bubble.meta.textContent = intentText;
-    saveHistory();
-    return;
-  }
-
-  // Local tools run first and need no model: math solver.
-  const mathAnswer = localMath(message);
-  if (mathAnswer) {
-    const b = addBubble("bot", mathAnswer);
-    if (b.meta) b.meta.textContent = ["computed locally · crab arithmetic", intentText].filter(Boolean).join(" · ");
-    saveHistory();
-    return;
-  }
+  busy = true;
   input.disabled = true;
-
-  const pending = addBubble("bot", "", { pending: true });
-  if (pending.meta && intentText) pending.meta.textContent = intentText;
-  generating = true;
-  sendBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`;
-  const t0 = performance.now();
-
+  sendBtn.disabled = true;
   try {
-    const generatedIds = [];
-    stopFlag = false;
-    for await (const id of model.generate(promptIds, {
-      maxNewTokens: 80,
-      temperature: parseFloat(tempEl.value) || 0.6,
-      topK: parseInt(topkEl.value) || 20,
-    })) {
-      if (stopFlag) break;
-      generatedIds.push(id);
-      const partial = tokenizer.decode(generatedIds).trim();
-      if (partial) {
-        renderRich(pending, partial);
-        pin();
+    lastUserText = message;
+    if (opts.forcePersona !== undefined) {
+      personaEl.value = opts.forcePersona || "";
+      syncPersonaBadge();
+    }
+    addBubble("user", message);
+    input.value = "";
+    autoresize();
+    syncCharcount();
+
+    // Probe decision model: classify the raw message first (persona framing
+    // does not change intent), then auto-apply the persona to generation.
+    const rawIds = tokenizer.encode(model.formatPrompt(message));
+    let intent = null, fine = null;
+    try {
+      const hidden = await model.classify(rawIds);
+      if (hidden && probe) {
+        intent = classifyIntent(hidden, probe);
+        fine = classifyFine(hidden, probe);
       }
+    } catch (e) { console.warn("intent failed", e); }
+    const intentText = intent
+      ? `intent: ${intent.name}${fine ? " · " + fine.fine : ""} · ${(intent.confidence * 100).toFixed(0)}%`
+      : "";
+    if (intent && !manualPersona) {
+      personaEl.value = INTENT_PERSONA[intent.label] || "";
+      syncPersonaBadge();
+    }
+    updateSessionStats(intent);
+    // The shipped ONNX model was trained without [mode crab] prefixes, so
+    // persona selection is display-only unless the model is retrained with
+    // generate_data.add_persona_variants() and this flag is enabled.
+    const PERSONA_PROMPT = true;
+    const persona = PERSONA_PROMPT && personaEl.value ? `[${personaEl.value} crab] ` : "";
+    const prompt = model.formatPrompt(persona + message);
+    const promptIds = tokenizer.encode(prompt);
+
+    // Confidence gate: ask which of the top two intents the user means.
+    if (intent && !opts.fromClarify && intent.confidence < CLARIFY_THRESHOLD && intent.p_confused < CONFUSED_THRESHOLD) {
+      const [first, second] = intent.top2;
+      const bubble = addBubble("bot", `Quick check before I scuttle ahead: is this about ${probe.names[first[0]]} or ${probe.names[second[0]]}?`);
+      const msg = bubble.parentElement;
+      for (const [letter] of intent.top2) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "retry-chip";
+        chip.textContent = probe.names[letter];
+        chip.addEventListener("click", () => {
+          chip.disabled = true;
+          send(lastUserText, { fromClarify: true, forcePersona: INTENT_PERSONA[letter] || "" });
+        });
+        msg.appendChild(chip);
+      }
+      if (bubble.meta && intentText) bubble.meta.textContent = intentText;
+      saveHistory();
+      return;
     }
 
-    const text = tokenizer.decode(generatedIds).trim() || "(no response)";
-    renderRich(pending, text);
-    const secs = (performance.now() - t0) / 1000;
-    const clock = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    if (pending.meta && generatedIds.length > 0) {
-      pending.meta.textContent = [intentText, `${generatedIds.length} tokens · ${(generatedIds.length / secs).toFixed(1)} tok/s · ${clock}`].filter(Boolean).join(" · ");
+    // Local tools run first and need no model: math solver.
+    const mathAnswer = localMath(message);
+    if (mathAnswer) {
+      const b = addBubble(
+      "bot",
+      `${MATH_INTROS[Math.floor(Math.random() * MATH_INTROS.length)]}: ${mathAnswer}`
+    );
+      if (b.meta) b.meta.textContent = ["computed locally · crab arithmetic", intentText].filter(Boolean).join(" · ");
+      saveHistory();
+      return;
     }
-    // Out-of-scope escalation: the static site has no backend search, so link to a web search.
-    if (intent && intent.p_confused >= CONFUSED_THRESHOLD) {
-      const link = document.createElement("a");
-      link.className = "search-chip";
-      link.textContent = "crab doesn't know — search the web ↗";
-      link.href = "https://duckduckgo.com/?q=" + encodeURIComponent(message);
-      link.target = "_blank";
-      link.rel = "noopener";
-      pending.after(link);
-    }
+    const pending = addBubble("bot", "", { pending: true });
+    if (pending.meta && intentText) pending.meta.textContent = intentText;
+    generating = true;
+    sendBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`;
+    const t0 = performance.now();
 
-    if (text !== "(no response)" && voiceCheckbox.checked) speak(text);
-    saveHistory();
-  } catch (e) {
-    console.error(e);
-    pending.textContent = "Generation failed: " + e.message;
-    pending.classList.add("error");
-    const retry = document.createElement("button");
-    retry.type = "button";
-    retry.className = "retry-chip";
-    retry.textContent = "↻ Retry";
-    retry.addEventListener("click", () => {
-      pending.closest(".row").remove();
-      if (lastUserText) send(lastUserText);
-    });
-    pending.after(retry);
+    try {
+      const generatedIds = [];
+      stopFlag = false;
+      for await (const id of model.generate(promptIds, {
+        maxNewTokens: 80,
+        temperature: parseFloat(tempEl.value) || 0.6,
+        topK: parseInt(topkEl.value) || 20,
+      })) {
+        if (stopFlag) break;
+        generatedIds.push(id);
+        const partial = tokenizer.decode(generatedIds).trim();
+        if (partial) {
+          renderRich(pending, partial);
+          pin();
+        }
+      }
+
+      const text = tokenizer.decode(generatedIds).trim() || "(no response)";
+      renderRich(pending, text);
+      const secs = (performance.now() - t0) / 1000;
+      const clock = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      if (pending.meta && generatedIds.length > 0) {
+        pending.meta.textContent = [intentText, `${generatedIds.length} tokens · ${(generatedIds.length / secs).toFixed(1)} tok/s · ${clock}`].filter(Boolean).join(" · ");
+      }
+      // Out-of-scope escalation: the static site has no backend search, so link to a web search.
+      if (intent && intent.p_confused >= CONFUSED_THRESHOLD) {
+        const link = document.createElement("a");
+        link.className = "search-chip";
+        link.textContent = "crab doesn't know — search the web ↗";
+        link.href = "https://duckduckgo.com/?q=" + encodeURIComponent(message);
+        link.target = "_blank";
+        link.rel = "noopener";
+        pending.after(link);
+      }
+
+      if (text !== "(no response)" && voiceCheckbox.checked) speak(text);
+      saveHistory();
+    } catch (e) {
+      console.error(e);
+      pending.textContent = "Generation failed: " + e.message;
+      pending.classList.add("error");
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "retry-chip";
+      retry.textContent = "↻ Retry";
+      retry.addEventListener("click", () => {
+        pending.closest(".row").remove();
+        if (lastUserText) send(lastUserText);
+      });
+      pending.after(retry);
+    } finally {
+      generating = false;
+      sendBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>`;
+    }
   } finally {
-    generating = false;
-    sendBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>`;
+    busy = false;
     input.disabled = false;
+    sendBtn.disabled = false;
     input.focus();
   }
 }

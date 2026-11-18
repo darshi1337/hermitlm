@@ -79,33 +79,78 @@ function safeEval(src) {
   return v;
 }
 
-// Parse "3x^2 + 2x - 5" (also "3*x^2", "x") into [[coef, exp], ...]
+// Parse a fraction like "2/3" (or a decimal/int) into a number. parseFloat
+// alone silently truncates "2/2" to 2, which produced wrong integrals.
+function parseRational(text) {
+  const t = (text == null ? "" : String(text)).trim();
+  if (t === "" || t === "+") return 1;
+  if (t === "-") return -1;
+  const frac = /^([+-]?\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)$/.exec(t);
+  if (frac) {
+    const den = parseFloat(frac[2]);
+    return den === 0 ? NaN : parseFloat(frac[1]) / den;
+  }
+  if (!/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(t)) return NaN;
+  return parseFloat(t);
+}
+
+// Parse "3x^2 + 2x - 5" (also "1/2x^3", "x^-2", "x^2/2") into
+// [[coefficient, exponent], ...]. Signs are scanned rather than rewritten to
+// "+-" so a '-' directly after '^' stays part of a negative exponent.
 function parsePoly(src) {
-  let s = src.replace(/\s+/g, "").replace(/\*/g, "");
-  if (!/^[0-9x+\-^./()]+$/.test(s) || /[()]/.test(s)) return null;
-  if (!s.includes("x")) return null;
-  s = s.replace(/-/g, "+-");
-  const terms = s.split("+").filter((t) => t !== "");
-  const out = [];
-  for (const term of terms) {
-    if (!term.includes("x")) {
-      const c = parseFloat(term);
-      if (isNaN(c)) return null;
-      out.push([c, 0]);
-      continue;
+  const s = src.replace(/\s+/g, "").replace(/\*/g, "");
+  if (!/^[0-9x+\-^./]+$/.test(s) || !s.includes("x")) return null;
+
+  function termFrom(text, sign) {
+    if (!text.includes("x")) {
+      const c = parseRational(text) * sign;
+      return isNaN(c) ? null : [c, 0];
     }
-    const parts = term.split("x");
+    const parts = text.split("x");
     if (parts.length > 2) return null;
-    let coef = parts[0];
-    coef = coef === "" || coef === "+" ? 1 : coef === "-" ? -1 : parseFloat(coef);
+    let coef = parseRational(parts[0] === "" ? "1" : parts[0]) * sign;
     if (isNaN(coef)) return null;
     let exp = 1;
     if (parts[1]) {
       if (!parts[1].startsWith("^")) return null;
-      exp = parseFloat(parts[1].slice(1));
+      const rest = parts[1].slice(1);
+      const slash = rest.indexOf("/");
+      // "x^2/2" means (x^2)/2: the part after '^' up to '/' is the exponent,
+      // anything after '/' is a denominator for the coefficient.
+      const expText = slash === -1 ? rest : rest.slice(0, slash);
+      exp = parseRational(expText);
       if (isNaN(exp)) return null;
+      if (slash !== -1) {
+        const den = parseRational(rest.slice(slash + 1));
+        if (isNaN(den) || den === 0) return null;
+        coef /= den;
+      }
     }
-    out.push([coef, exp]);
+    return [coef, exp];
+  }
+
+  const out = [];
+  let sign = 1;
+  let buf = "";
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    const isTermSign = (c === "+" || c === "-") && !(i > 0 && s[i - 1] === "^");
+    if (isTermSign) {
+      if (buf) {
+        const term = termFrom(buf, sign);
+        if (term === null) return null;
+        out.push(term);
+      }
+      sign = c === "-" ? -1 : 1;
+      buf = "";
+    } else {
+      buf += c;
+    }
+  }
+  if (buf) {
+    const term = termFrom(buf, sign);
+    if (term === null) return null;
+    out.push(term);
   }
   return out.length ? out : null;
 }
@@ -143,11 +188,16 @@ function fmtPoly(terms) {
 }
 
 function integratePoly(terms) {
-  return terms.map(([c, e]) => [c / (e + 1), e + 1]);
+  const out = [];
+  for (const [c, e] of terms) {
+    if (e === -1) return null;  // integral of 1/x is ln|x|, not a polynomial
+    out.push([c / (e + 1), e + 1]);
+  }
+  return out;
 }
 
 function diffPoly(terms) {
-  return terms.map(([c, e]) => [c * e, e - 1]).filter(([, e]) => e >= 0);
+  return terms.map(([c, e]) => [c * e, e - 1]);
 }
 
 // Returns answer string or null if not a math query we can solve.
@@ -158,7 +208,10 @@ export function localMath(query) {
   let m = lower.match(/^(integrate|integral of|antiderivative of)\s+(.+)$/);
   if (m) {
     const terms = parsePoly(m[2]);
-    if (terms) return `integral ${m[2].trim()} dx = ${fmtPoly(integratePoly(terms))} + constant`;
+    if (terms) {
+      const integrated = integratePoly(terms);
+      if (integrated) return `integral ${m[2].trim()} dx = ${fmtPoly(integrated)} + constant`;
+    }
     return null;
   }
   m = lower.match(/^(differentiate|derivative of|derive)\s+(.+)$/);

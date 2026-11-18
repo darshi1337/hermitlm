@@ -1,8 +1,9 @@
 """Versioned, hash-checked decision-head artifacts.
 
-Artifacts are plain ``torch.save`` dicts. New artifacts record a schema
-version plus SHA-256 hashes of the base checkpoint and tokenizer. ``load``
-only verifies hashes that are present, so older artifacts keep working.
+Artifacts are plain ``torch.save`` dicts. Every head records a schema version
+plus SHA-256 hashes of the base checkpoint and tokenizer. Loading rejects
+artifacts without hashes: silently scoring with a head fitted for a different
+checkpoint is worse than failing loudly and retraining.
 """
 
 import hashlib
@@ -35,19 +36,24 @@ def artifact_metadata(checkpoint_path: str | Path, tokenizer_path: str | Path) -
 def verify_artifact(
     artifact: dict, checkpoint_path: str | Path, tokenizer_path: str | Path
 ) -> None:
-    """Raise :class:`ArtifactMismatchError` on a stale artifact.
+    """Raise :class:`ArtifactMismatchError` on stale or unversioned artifacts.
 
-    Artifacts without hashes (schema 1) are accepted unchanged.
+    Both hashes must be present. A head without them cannot be tied to the
+    checkpoint/tokenizer it was fitted against, so it is rejected rather than
+    silently accepted.
     """
     expected_checkpoint = artifact.get("checkpoint_sha256")
-    if not expected_checkpoint:
-        return
+    expected_tokenizer = artifact.get("tokenizer_sha256")
+    if not expected_checkpoint or not expected_tokenizer:
+        raise ArtifactMismatchError(
+            "decision head is missing schema_version/checkpoint_sha256/"
+            "tokenizer_sha256; retrain the probe with the current scripts"
+        )
     if file_sha256(checkpoint_path) != expected_checkpoint:
         raise ArtifactMismatchError(
             "decision head was fitted for a different checkpoint; retrain the probe"
         )
-    expected_tokenizer = artifact.get("tokenizer_sha256")
-    if expected_tokenizer and file_sha256(tokenizer_path) != expected_tokenizer:
+    if file_sha256(tokenizer_path) != expected_tokenizer:
         raise ArtifactMismatchError(
             "decision head was fitted for a different tokenizer; retrain the probe"
         )

@@ -209,10 +209,23 @@ class ProbeDecisionModel:
 
     @torch.no_grad()
     def _hidden(self, query: str) -> torch.Tensor:
+        # predict(), predict_fine() and predict_tool() are called with the same
+        # query by the router. Reuse the last hidden vector so all three heads
+        # cost a single LM forward pass instead of three.
+        cache = getattr(self, "_hidden_cache", None)
+        if cache is None:
+            cache = {}
+            self._hidden_cache = cache
+        if query in cache:
+            return cache[query]
         ids = self.tokenizer.encode(chat_prompt(query)).ids[-self.config.max_seq_len :]
         idx = torch.tensor([ids], dtype=torch.long, device=self.device)
         _, _, hidden = self.model(idx, return_hidden=True)
-        return hidden[0, len(ids) - 1]
+        value = hidden[0, len(ids) - 1]
+        if len(cache) >= 8:  # bounded; consecutive requests reuse the latest
+            cache.clear()
+        cache[query] = value
+        return value
 
     @torch.no_grad()
     def predict(self, query: str) -> tuple[str, dict[str, float], float]:

@@ -1,5 +1,5 @@
 import hermitlm.tools.memory as memory_mod
-from hermitlm.tools.memory import get_memory, init_memory_db, save_memory
+from hermitlm.tools.memory import extract_fact, get_memory, init_memory_db, save_memory
 
 
 def test_memory(tmp_path, monkeypatch):
@@ -16,3 +16,10 @@ def test_memory(tmp_path, monkeypatch):
         "name"
     )
     assert result == "darshi"
+
+
+def test_extract_fact_is_bounded_and_preserves_original_case():
+    assert extract_fact("My name is Darshi, and I like tea") == ("name", "Darshi")
+    assert extract_fact("I LIKE kelp. really") == ("likes", "kelp")
+    assert extract_fact("I am from Éire!") == ("location", "Éire")
+    assert extract_fact("hello crab") is None

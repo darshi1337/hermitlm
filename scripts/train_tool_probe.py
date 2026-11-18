@@ -19,6 +19,7 @@ from tokenizers import Tokenizer
 from train_probe import extract_hidden, train_head
 
 from hermitlm.config import HermitConfig
+from hermitlm.settings import TRAIN_DEVICE
 from hermitlm.tools.artifacts import artifact_metadata
 from hermitlm.training.model import HermitLM
 
@@ -33,12 +34,20 @@ def main() -> None:
     parser.add_argument("--eval", default="data/tool_eval.jsonl")
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--device", default=TRAIN_DEVICE)
     parser.add_argument("--out", default="checkpoints/decision_tool_probe.pt")
     args = parser.parse_args()
 
     random.seed(args.seed)
+    from hermitlm.training.train import accelerator_available
+
     device = torch.device(args.device)
+    if device.type in ("cuda", "xpu") and not accelerator_available(device.type):
+        raise RuntimeError(
+            f"Tool-probe training was requested on {device.type} but that "
+            "backend is not available. Install the matching PyTorch build and "
+            "driver, or pass --device cpu for a CPU-only debug run."
+        )
     tokenizer = Tokenizer.from_file(args.tokenizer)
     ckpt = torch.load(args.checkpoint, map_location=device, weights_only=True)
     config = HermitConfig(**ckpt["config"]) if "config" in ckpt else HermitConfig()

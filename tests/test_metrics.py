@@ -79,9 +79,10 @@ def test_artifact_hash_roundtrip_and_mismatch(tmp_path):
         verify_artifact(metadata, checkpoint, tokenizer)
 
 
-def test_legacy_artifact_without_hashes_is_accepted(tmp_path):
+def test_legacy_artifact_without_hashes_is_rejected(tmp_path):
     checkpoint = tmp_path / "model.pt"
     tokenizer = tmp_path / "tokenizer.json"
     checkpoint.write_bytes(b"weights")
     tokenizer.write_bytes(b"{}")
-    verify_artifact({"temperature7": 1.0}, checkpoint, tokenizer)  # no raise
+    with pytest.raises(ArtifactMismatchError):
+        verify_artifact({"temperature7": 1.0}, checkpoint, tokenizer)

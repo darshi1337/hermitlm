@@ -116,8 +116,11 @@ def fit_temperature(
     if lo >= hi:
         raise ValueError("t_range must be increasing")
 
-    scores = logits.detach().to(dtype=torch.float64)
-    labels = targets.detach().to(dtype=torch.long)
+    # Calibration is tiny (one vector per row, golden-section over log T).
+    # Do it on CPU: it avoids device mismatches and flaky Level Zero resource
+    # errors on Intel XPU, and results are identical.
+    scores = logits.detach().to(dtype=torch.float64, device="cpu")
+    labels = targets.detach().to(dtype=torch.long, device="cpu")
     classes = n_classes if n_classes is not None else scores.shape[1]
     if classes < 2:
         raise ValueError("temperature scaling needs at least two classes")

@@ -13,6 +13,7 @@ Usage:
 import argparse
 import json
 import os
+import random
 
 import torch
 
@@ -38,9 +39,15 @@ from hermitlm.tools.metrics import (
 N_BINS = 10
 
 
-def _load_rows(eval_path: str, max_n: int) -> list[dict]:
+def _load_rows(eval_path: str, max_n: int, seed: int = 0) -> list[dict]:
+    """Load, shuffle and cap eval rows.
+
+    Shuffling before the `max_n` cap and before the calibration/test split
+    keeps the two halves class-balanced even when the source file is grouped
+    by `type`.
+    """
     rows = []
-    with open(eval_path) as f:
+    with open(eval_path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -48,9 +55,8 @@ def _load_rows(eval_path: str, max_n: int) -> list[dict]:
             d = json.loads(line)
             if d.get("input") and d.get("type") in FINE_TO_COARSE:
                 rows.append(d)
-            if len(rows) >= max_n:
-                break
-    return rows
+    random.Random(seed).shuffle(rows)
+    return rows[:max_n]
 
 
 def _prf(y_true: list[str], y_pred: list[str]) -> dict:
@@ -186,7 +192,7 @@ def _fit_or_default(logits: torch.Tensor, targets: torch.Tensor, fallback: float
 def _confused_ci(pb: torch.Tensor, labels: list[int], threshold: float, n_boot: int, seed: int) -> dict:
     if n_boot <= 0 or len(labels) < 2:
         return {}
-    y = torch.tensor(labels)
+    y = torch.tensor(labels, device=pb.device)
     preds = (pb >= threshold).long()
     n = len(labels)
 
@@ -222,8 +228,16 @@ def run_eval(
     bootstrap: int = 1000,
     seed: int = 0,
 ) -> dict:
+    from hermitlm.training.train import accelerator_available
+
+    resolved_device = torch.device(device)
+    if resolved_device.type in ("cuda", "xpu") and not accelerator_available(resolved_device.type):
+        raise RuntimeError(
+            f"Eval was requested on {resolved_device.type} but that backend is "
+            "not available. Pass --device cpu for a CPU-only run."
+        )
     os.makedirs(out_dir, exist_ok=True)
-    rows = _load_rows(eval_path, max_n)
+    rows = _load_rows(eval_path, max_n, seed=seed)
     if len(rows) < 2:
         raise ValueError("need at least two eval rows")
     y_true = [FINE_TO_COARSE[r["type"]] for r in rows]
@@ -242,8 +256,11 @@ def run_eval(
                     raw21.append(model.head21(h.unsqueeze(0))[0])
         raw7 = torch.stack(raw7)
         rawb = torch.stack(rawb)
-        y_all = torch.tensor([OPTION_LETTERS.index(FINE_TO_COARSE[r["type"]]) for r in rows])
-        c_all = torch.tensor(y_confused)
+        y_all = torch.tensor(
+            [OPTION_LETTERS.index(FINE_TO_COARSE[r["type"]]) for r in rows],
+            device=model.device,
+        )
+        c_all = torch.tensor(y_confused, device=model.device)
         best_t = _fit_or_default(raw7[:n_cal], y_all[:n_cal], float(model.temperature7))
         best_t_bin = _fit_or_default(rawb[:n_cal], c_all[:n_cal], float(model.temperature_bin))
 
@@ -297,7 +314,9 @@ def run_eval(
 
         if raw21:
             raw21_t = torch.stack(raw21)
-            y21 = torch.tensor([FINE21_ORDER.index(r["type"]) for r in rows])
+            y21 = torch.tensor(
+                [FINE21_ORDER.index(r["type"]) for r in rows], device=model.device
+            )
             best_t21 = _fit_or_default(
                 raw21_t[:n_cal], y21[:n_cal], float(model.temperature21)
             )
@@ -440,6 +459,8 @@ if __name__ == "__main__":
     parser.add_argument("--tokenizer", default="data/tokenizer.json")
     parser.add_argument("--eval", default="data/eval.jsonl")
     parser.add_argument("--max-n", type=int, default=1000)
+    # Inference/calibration is small and runs more reliably on CPU; the
+    # Intel XPU backend can crash in SYCL on some of these tensor ops.
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--out-dir", default="eval_out/decision")
     parser.add_argument("--method", choices=["logit", "probe"], default="logit")

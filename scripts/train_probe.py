@@ -23,6 +23,7 @@ import torch.nn.functional as F
 from tokenizers import Tokenizer
 
 from hermitlm.config import HermitConfig
+from hermitlm.settings import TRAIN_DEVICE
 from hermitlm.tools.artifacts import artifact_metadata
 from hermitlm.tools.calibration import fit_temperature
 from hermitlm.tools.decision_model import FINE21_ORDER, FINE_TO_COARSE, OPTION_LETTERS
@@ -48,8 +49,10 @@ def extract_hidden(
         padded = [s + [pad] * (width - len(s)) for s in ids]
         idx = torch.tensor(padded, dtype=torch.long, device=device)
         _, _, hidden = model(idx, return_hidden=True)
-        lengths = torch.tensor([len(s) for s in ids], device=device)
-        feats.append(hidden[torch.arange(len(batch), device=device), lengths - 1].cpu())
+        # Advanced indexing on Intel XPU hits Level Zero resource limits.
+        # Copy to CPU first; this is one small tensor per batch.
+        lengths = torch.tensor([len(s) for s in ids], dtype=torch.long)
+        feats.append(hidden.cpu()[torch.arange(len(batch)), lengths - 1])
     return torch.cat(feats)
 
 
@@ -92,12 +95,20 @@ def main() -> None:
     parser.add_argument("--per-fine", type=int, default=400)
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--device", default=TRAIN_DEVICE)
     parser.add_argument("--out", default="checkpoints/decision_probe.pt")
     args = parser.parse_args()
 
     random.seed(args.seed)
+    from hermitlm.training.train import accelerator_available
+
     device = torch.device(args.device)
+    if device.type in ("cuda", "xpu") and not accelerator_available(device.type):
+        raise RuntimeError(
+            f"Probe training was requested on {device.type} but that backend is "
+            "not available. Install the matching PyTorch build and driver, or "
+            "pass --device cpu for a CPU-only debug run."
+        )
     tokenizer = Tokenizer.from_file(args.tokenizer)
     ckpt = torch.load(args.checkpoint, map_location=device, weights_only=True)
     config = HermitConfig(**ckpt["config"]) if "config" in ckpt else HermitConfig()

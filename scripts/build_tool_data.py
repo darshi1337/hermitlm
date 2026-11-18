@@ -94,18 +94,18 @@ TOOL_EVAL = [
     ("faq", "is hermitlm your name"),
     ("faq", "who is in charge here"),
     ("faq", "do you dream"),
-    ("chat", "hello crab"),
-    ("chat", "are you hungry"),
+    ("chat", "hi there, little crab"),
+    ("chat", "is anyone still hungry down there"),
     ("chat", "the water feels cold today"),
     ("chat", "goodnight, see you tomorrow"),
-    ("chat", "you are moving fast"),
+    ("chat", "the crab is waving both claws at me"),
     ("chat", "was that loud just now"),
     ("chat", "i feel a bit lonely"),
     ("chat", "look at the bubbles rising"),
     ("chat", "is the glass clean"),
     ("chat", "it is dark in here"),
     ("chat", "time to eat something tasty"),
-    ("chat", "how are you feeling"),
+    ("chat", "i left a tiny shell by the filter"),
     ("chat", "the light just changed"),
     ("chat", "can you see outside the tank"),
     ("chat", "that noise scared me, sorry"),
@@ -307,6 +307,10 @@ def build(per_class=1200, seed=42):
     rng.shuffle(rows)
     Path("data/tool_train.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
     eval_rows = [{"input": q, "label": label} for label, q in TOOL_EVAL]
+    train_inputs = {r["input"] for r in rows}
+    overlap = [r["input"] for r in eval_rows if r["input"] in train_inputs]
+    if overlap:
+        raise ValueError(f"tool eval queries also present in train: {overlap}")
     Path("data/tool_eval.jsonl").write_text("\n".join(json.dumps(r) for r in eval_rows) + "\n")
     print(f"train={len(rows)} eval={len(eval_rows)}")
 

@@ -28,7 +28,11 @@ def test_mapping_covers_all_21_types_without_overlap():
 def test_option_ids_are_single_distinct_tokens():
     tokenizer = Tokenizer.from_file(TOKENIZER_PATH)
     ids = get_option_ids(tokenizer)
-    assert ids == [21, 22, 23, 24, 25, 26, 27]
+    # IDs shift when the tokenizer is retrained; only single-token, distinct
+    # verbalizers are a real requirement.
+    assert len(ids) == len(OPTION_LETTERS) == 7
+    assert len(set(ids)) == 7
+    assert all(len(tokenizer.encode(letter).ids) == 1 for letter in OPTION_LETTERS)
 
 
 def test_fine_option_ids_are_single_distinct_tokens():
@@ -100,6 +104,19 @@ def test_probe_predict_known_intents():
     assert 0.0 <= p_confused <= 1.0
     _, _, p_conf = model.predict("what is inventory management")
     assert p_conf > p_confused  # out-of-scope scores higher on confused head
+
+
+def test_probe_heads_share_one_forward_pass():
+    from hermitlm.tools.decision_model import ProbeDecisionModel
+
+    model = ProbeDecisionModel(
+        "checkpoints/best_model.pt", TOKENIZER_PATH, "checkpoints/decision_probe.pt", device="cpu"
+    )
+    model.predict("hello crab")
+    model.predict_fine("hello crab")
+    assert len(model._hidden_cache) == 1
+    model.predict("a different query")
+    assert len(model._hidden_cache) == 2
 
 
 def test_probe_predict_fine_known_type():

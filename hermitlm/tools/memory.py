@@ -1,7 +1,28 @@
+import re
 import sqlite3
 from datetime import datetime, timezone
 
 DB_PATH = "data/hermit.db"
+
+# Case-insensitive patterns applied to the *original* text. Using a lowercased
+# copy to find indices and then slicing the original breaks on Unicode where
+# lowercasing changes string length.
+_FACT_PATTERNS = [
+    ("name", re.compile(r"\bmy name is\s+([^,.;!?\n]+)", re.IGNORECASE)),
+    ("likes", re.compile(r"\bi like\s+([^,.;!?\n]+)", re.IGNORECASE)),
+    ("location", re.compile(r"\bi am from\s+([^,.;!?\n]+)", re.IGNORECASE)),
+]
+
+
+def extract_fact(text):
+    """Return (key, value) for the first remembered fact in `text`, or None."""
+    for key, pattern in _FACT_PATTERNS:
+        match = pattern.search(text or "")
+        if match:
+            value = match.group(1).strip()
+            if value:
+                return key, value
+    return None
 
 def save_memory(user_id, key, value):
     conn = sqlite3.connect(DB_PATH)

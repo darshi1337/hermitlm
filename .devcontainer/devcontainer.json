@@ -1,0 +1,19 @@
+{
+  // Python 3.11 matches CI (ci.yml, deploy.yml) and requires-python in pyproject.
+  "name": "HermitLM",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11-bookworm",
+  // Array form: Zed 1.28 wraps string lifecycle commands in /bin/sh -c without
+  // quoting, so the `&&` chain needs an explicit bash argv entry.
+  "postCreateCommand": ["bash", ".devcontainer/post-create.sh"],
+  "forwardPorts": [8000],
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "charliermarsh.ruff"],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestArgs": ["tests"]
+      }
+    }
+  }
+}

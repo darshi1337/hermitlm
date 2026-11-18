@@ -57,6 +57,9 @@ jobs:
       - name: Fetch vendored onnxruntime assets
         run: python scripts/fetch_vendor.py --output-dir web/vendor
 
+      - name: Write asset manifest for browser cache busting
+        run: python scripts/write_asset_manifest.py --output-dir web
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3

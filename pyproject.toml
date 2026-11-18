@@ -7,14 +7,14 @@ readme = "README.md"
 requires-python = ">=3.10"
 
 dependencies = [
-    "torch",
-    "tokenizers",
-    "python-dotenv",
-    "requests",
-    "fastapi",
-    "uvicorn",
-    "pydantic",
-    "ddgs",
+    "torch>=2.0",
+    "tokenizers>=0.14",
+    "python-dotenv>=1.0",
+    "requests>=2.28",
+    "fastapi>=0.100",
+    "uvicorn>=0.20",
+    "pydantic>=2.0",
+    "ddgs>=6.0",
 ]
 
 [project.scripts]

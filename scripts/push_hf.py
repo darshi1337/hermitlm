@@ -19,10 +19,15 @@ base_model: none
 A ~8M parameter causal transformer that talks like a tiny crab in an aquatic world.
 
 Architecture: 6 layers, hidden dim 320, 8 heads, SwiGLU FFN 800, learned positions,
-LayerNorm, weight-tied LM head. Vocab 2831 BPE, max sequence 512. See `config.json`.
+LayerNorm, weight-tied LM head. Vocab 2857 BPE, max sequence 512. See `config.json`.
 
-Training: SFT on `data/train.jsonl`, then PPO against a persona reward and a DPO stage.
-Eval on 10 held-out prompts: SFT persona 0.516, PPO 0.648, DPO 0.449. Perplexity ~1.93.
+Training: SFT for 30,000 steps on 95,000 generated crab-chat examples, including
+`[mode crab]` persona-prefixed variants. The shipped checkpoint is the SFT model;
+PPO/DPO are available as optional stages in the repo.
+
+Eval: perplexity 1.928, persona reward ~0.57 (sampling varies), 7-way intent probe
+accuracy 1.0 on 4,000 held-out rows, 21-way head 0.9955, tool-routing probe 0.6125
+on 80 hand-authored queries.
 
 ## Files
 

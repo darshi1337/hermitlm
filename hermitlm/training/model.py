@@ -149,19 +149,27 @@ class HermitLM(nn.Module):
 
                 logits, _ = self(idx_cond)
 
-                logits = logits[:, -1, :] / temperature
+                # Sampling is tiny (one vocab vector per step). Doing it on
+                # CPU avoids flaky Level Zero errors on Intel XPU and keeps
+                # generation identical across backends.
+                sample_logits = logits[:, -1, :].float().cpu() / temperature
 
                 if top_k > 0:
-                    v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
-                    logits[logits < v[:, [-1]]] = float("-inf")
+                    v, _ = torch.topk(sample_logits, min(top_k, sample_logits.size(-1)))
+                    # torch.where rather than in-place masked assignment.
+                    sample_logits = torch.where(
+                        sample_logits < v[:, [-1]],
+                        torch.full_like(sample_logits, float("-inf")),
+                        sample_logits,
+                    )
 
-                probs = F.softmax(logits, dim=-1)
-
-                next_id = torch.multinomial(probs, num_samples=1)
+                probs = F.softmax(sample_logits, dim=-1)
+                next_cpu = torch.multinomial(probs, num_samples=1)
+                next_id = next_cpu.to(idx.device)
 
                 idx = torch.cat([idx, next_id], dim=1)
 
-                if next_id.item() == self.config.eos_id:
+                if next_cpu.numel() == 1 and int(next_cpu.item()) == self.config.eos_id:
                     break
         finally:
             self.train(was_training)

@@ -82,7 +82,8 @@ def prepare(data_dir=DATA_DIR, n_samples=100000, eval_ratio=0.05):
     )
 
     tokens = tokenizer.encode(test).tokens
-    print(tokens)
+    # ascii() keeps this printable on Windows consoles using cp1252.
+    print(ascii(tokens))
 
 if __name__ == "__main__":
     prepare()

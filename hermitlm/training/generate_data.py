@@ -989,6 +989,26 @@ def to_openai(s):
     }
 
 
+# Persona modes used by the runtime. Training a model without ever seeing
+# these prefixes makes the inference-time injection out-of-distribution, so
+# generate a fraction of examples with them.
+PERSONA_BY_TYPE = {
+    "food": "hungry", "water": "hungry", "bubbles": "hungry",
+    "light": "guard", "color": "guard", "sound": "guard", "noise": "guard",
+    "state": "sleepy", "breathing": "sleepy",
+    "temp_cold": "sleepy", "temp_hot": "sleepy", "night": "sleepy",
+}
+
+
+def add_persona_variants(samples, p=0.25):
+    """Prefix a fraction of user turns with a persona marker."""
+    for sample in samples:
+        mode = PERSONA_BY_TYPE.get(sample.get("type"))
+        if mode and random.random() < p:
+            sample["input"] = f"[{mode} crab] " + sample["input"]
+    return samples
+
+
 def generate_dataset(n_samples=100000, eval_ratio=0.05, data_dir="data"):
 
     generators = [
@@ -1034,6 +1054,7 @@ def generate_dataset(n_samples=100000, eval_ratio=0.05, data_dir="data"):
         except Exception as e:  # noqa: BLE001 - one bad generator must not kill the batch
             print(f"Error in {gen.__name__}: {e}")
 
+    add_persona_variants(samples)
     random.shuffle(samples)
 
     n_eval = int(len(samples) * eval_ratio)

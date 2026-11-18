@@ -13,14 +13,31 @@ from hermitlm.training.dataset import get_dataloader
 from hermitlm.training.model import HermitLM
 
 
+def accelerator_available(kind):
+    """Return True if the requested accelerator backend is usable."""
+    if kind == "cuda":
+        return torch.cuda.is_available()
+    if kind == "xpu":
+        return hasattr(torch, "xpu") and torch.xpu.is_available()
+    if kind == "mps":
+        return hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+    return False
+
+
 def get_device(config):
     if config.device == "auto":
-        if torch.cuda.is_available():
-            return torch.device("cuda")
-        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            return torch.device("mps")
+        for kind in ("cuda", "xpu", "mps"):
+            if accelerator_available(kind):
+                return torch.device(kind)
         return torch.device("cpu")
-    return torch.device(config.device)
+    device = torch.device(config.device)
+    if device.type in ("cuda", "xpu") and not accelerator_available(device.type):
+        raise RuntimeError(
+            f"Training was requested on {device.type} but that backend is not "
+            "available. Install the matching PyTorch build and driver, or set "
+            "HERMIT_TRAIN_DEVICE=cpu for a CPU-only debug run."
+        )
+    return device
 
 def get_lr(step, config):
     if step < config.warmup_steps:
@@ -96,8 +113,11 @@ def evaluate(model, loader, device, max_batches=50):
     return total_loss / max(1, n)
 
 def train():
+    from hermitlm.settings import TRAIN_DEVICE
+
     mc = HermitConfig()
     tc = TrainConfig()
+    tc.device = TRAIN_DEVICE
 
     device = get_device(tc)
     torch.manual_seed(tc.seed)

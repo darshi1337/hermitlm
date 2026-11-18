@@ -7,6 +7,10 @@ load_dotenv()
 CHECKPOINT_PATH = os.getenv("HERMIT_CHECKPOINT", "checkpoints/best_model.pt")
 TOKENIZER_PATH = os.getenv("HERMIT_TOKENIZER", "data/tokenizer.json")
 DEVICE = os.getenv("HERMIT_DEVICE", "cpu")
+# Training defaults to the Intel Arc GPU on this machine (PyTorch XPU).
+# Set HERMIT_TRAIN_DEVICE=cuda on an NVIDIA machine, or =cpu for debugging.
+# Entry points raise if the requested accelerator is unavailable.
+TRAIN_DEVICE = os.getenv("HERMIT_TRAIN_DEVICE", "xpu")
 
 DEFAULT_TEMPERATURE = float(os.getenv("HERMIT_TEMPERATURE", "0.6"))
 DEFAULT_TOP_K = int(os.getenv("HERMIT_TOP_K", "20"))
@@ -19,3 +23,8 @@ TOOL_THRESHOLD = float(os.getenv("HERMIT_TOOL_THRESHOLD", "0.5"))
 BEST_OF = int(os.getenv("HERMIT_BEST_OF", "3"))
 CLARIFY = os.getenv("HERMIT_CLARIFY", "1") == "1"
 CLARIFY_THRESHOLD = float(os.getenv("HERMIT_CLARIFY_THRESHOLD", "0.75"))
+# [mode crab] prefixes only exist in the training data when the dataset was
+# generated with persona variants (generate_data.add_persona_variants). The
+# shipped checkpoint was trained without them, so injecting them by default
+# would feed the model an out-of-distribution prompt.
+PERSONA_PROMPT = os.getenv("HERMIT_PERSONA_PROMPT", "1") == "1"

@@ -65,29 +65,39 @@ def load_prompts(data_dir):
 
 
 def load_actor_critic(mc, checkpoint_path, device):
+    if not checkpoint_path or not os.path.exists(checkpoint_path):
+        # A missing SFT checkpoint must fail loudly: a randomly initialised
+        # actor with a different randomly initialised reference makes the KL
+        # penalty meaningless.
+        raise FileNotFoundError(
+            f"SFT checkpoint not found: {checkpoint_path!r}. Train the SFT "
+            "model first or set PPOConfig.sft_checkpoint to an existing file."
+        )
     model = ActorCriticHermitLM(mc).to(device)
 
-    if checkpoint_path and os.path.exists(checkpoint_path):
-        ckpt = torch.load(checkpoint_path, map_location=device, weights_only=True)
-        missing, unexpected = model.load_state_dict(
-            ckpt["model_state_dict"], strict=False
+    ckpt = torch.load(checkpoint_path, map_location=device, weights_only=True)
+    missing, unexpected = model.load_state_dict(
+        ckpt["model_state_dict"], strict=False
+    )
+    extra_missing = [k for k in missing if not k.startswith("value_head")]
+    if extra_missing or unexpected:
+        raise ValueError(
+            f"SFT checkpoint {checkpoint_path} doesn't match the model: "
+            f"missing={extra_missing}, unexpected={unexpected}"
         )
-        extra_missing = [k for k in missing if not k.startswith("value_head")]
-        if extra_missing or unexpected:
-            raise ValueError(
-                f"SFT checkpoint {checkpoint_path} doesn't match the model: "
-                f"missing={extra_missing}, unexpected={unexpected}"
-            )
 
     return model
 
 
 def load_reference(mc, checkpoint_path, device):
+    if not checkpoint_path or not os.path.exists(checkpoint_path):
+        raise FileNotFoundError(
+            f"SFT checkpoint not found: {checkpoint_path!r}."
+        )
     model = HermitLM(mc).to(device)
 
-    if checkpoint_path and os.path.exists(checkpoint_path):
-        ckpt = torch.load(checkpoint_path, map_location=device, weights_only=True)
-        model.load_state_dict(ckpt["model_state_dict"])
+    ckpt = torch.load(checkpoint_path, map_location=device, weights_only=True)
+    model.load_state_dict(ckpt["model_state_dict"])
 
     model.eval()
     for p in model.parameters():
@@ -292,12 +302,20 @@ def save_checkpoint(actor, mc, pc, iteration, path):
 
 
 def run_ppo(mc=None, pc=None):
-    mc = mc or HermitConfig()
     pc = pc or PPOConfig()
 
     # Dropout would make the "old" log-probs computed in prepare_ppo_batch
     # (eval mode) diverge from the ones recomputed during ppo_update (train
     # mode) even before any weight update, biasing the clipped objective.
+    # The architecture comes from the SFT checkpoint, not HermitConfig()
+    # defaults, so non-default SFT runs can be fine-tuned safely.
+    if not pc.sft_checkpoint or not os.path.exists(pc.sft_checkpoint):
+        raise FileNotFoundError(
+            f"SFT checkpoint not found: {pc.sft_checkpoint!r}."
+        )
+    ckpt = torch.load(pc.sft_checkpoint, map_location="cpu", weights_only=True)
+    if mc is None:
+        mc = HermitConfig(**ckpt["config"]) if "config" in ckpt else HermitConfig()
     mc.dropout = 0.0
 
     device = get_device(pc)
@@ -370,4 +388,6 @@ def run_ppo(mc=None, pc=None):
 
 
 if __name__ == "__main__":
-    run_ppo()
+    from hermitlm.settings import TRAIN_DEVICE
+
+    run_ppo(pc=PPOConfig(device=TRAIN_DEVICE))

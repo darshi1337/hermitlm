@@ -188,10 +188,9 @@ it is the next thing to fix — not a bigger head.
 Training batches right-pad to match `dataset.collate_fn`. Learned positions stay in distribution
 only that way. Left padding silently shifts positions and once cost 30 points of accuracy here.
 
-## Calibration toolkit (brier-inspired)
+## Calibration toolkit
 
-The decision stack now includes label-free and supervised calibration pieces inspired by
-[mohdUwaish59/brier](https://github.com/mohdUwaish59/brier):
+The decision stack includes label-free and supervised calibration pieces:
 
 - `hermitlm/tools/prior.py`: batch prior correction (`L0`). A prior fitted from an unlabelled
   pool can be applied as `log p - lambda * log pi`; it is stored in probe artifacts and applied

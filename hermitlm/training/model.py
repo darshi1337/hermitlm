@@ -138,6 +138,35 @@ class HermitLM(nn.Module):
 
         return logits, loss
 
+    def forward_hidden_layers(self, idx):
+        """Return per-block hidden states at every position, shape (B, T, L, d)."""
+        T = idx.size(1)
+        pos = torch.arange(0, T, device=idx.device)
+        x = self.tok_emb(idx) + self.pos_emb(pos)
+        x = self.drop(x)
+        mask = torch.tril(torch.ones(T, T, device=idx.device)).bool()
+        mask = mask.unsqueeze(0).unsqueeze(0)
+        hidden = []
+        for block in self.blocks:
+            x = block(x, mask)
+            hidden.append(x)
+        return torch.stack(hidden, dim=2)
+
+    def forward_with_hidden_layers(self, idx):
+        """Return (logits, per-block hidden states) in a single pass."""
+        T = idx.size(1)
+        pos = torch.arange(0, T, device=idx.device)
+        x = self.tok_emb(idx) + self.pos_emb(pos)
+        x = self.drop(x)
+        mask = torch.tril(torch.ones(T, T, device=idx.device)).bool()
+        mask = mask.unsqueeze(0).unsqueeze(0)
+        hidden = []
+        for block in self.blocks:
+            x = block(x, mask)
+            hidden.append(x)
+        logits = self.lm_head(self.norm(x))
+        return logits, torch.stack(hidden, dim=2)
+
     @torch.no_grad()
     def generate(self, idx, max_new_tokens=64, temperature=0.8, top_k=50):
         was_training = self.training
@@ -191,10 +220,14 @@ class ChatWithHidden(nn.Module):
     serves both chat generation and single-pass intent classification.
     """
 
-    def __init__(self, model: HermitLM):
+    def __init__(self, model: HermitLM, layer: int | None = None):
         super().__init__()
         self.model = model
+        self.layer = layer
 
     def forward(self, idx):
-        _logits, _loss, hidden = self.model(idx, return_hidden=True)
-        return _logits, hidden[:, -1, :]
+        if self.layer is None:
+            _logits, _loss, hidden = self.model(idx, return_hidden=True)
+            return _logits, hidden[:, -1, :]
+        logits, hidden = self.model.forward_with_hidden_layers(idx)
+        return logits, hidden[:, -1, self.layer, :]

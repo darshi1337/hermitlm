@@ -177,6 +177,31 @@ it is the next thing to fix — not a bigger head.
 Training batches right-pad to match `dataset.collate_fn`. Learned positions stay in distribution
 only that way. Left padding silently shifts positions and once cost 30 points of accuracy here.
 
+## Calibration toolkit (brier-inspired)
+
+The decision stack now includes label-free and supervised calibration pieces inspired by
+[mohdUwaish59/brier](https://github.com/mohdUwaish59/brier):
+
+- `hermitlm/tools/prior.py`: batch prior correction (`L0`). A prior fitted from an unlabelled
+  pool can be applied as `log p - lambda * log pi`; it is stored in probe artifacts and applied
+  by the API and browser UI.
+- `hermitlm/tools/heads.py` + `scripts/train_probe.py`: `L2` head selection over hidden layers,
+  ridge/LDA solvers and regularization, chosen by stratified k-fold OOF NLL. Selected heads
+  store standardization, temperature and OOF metrics in the artifact; `export_probe.py` folds
+  standardization into JSON weights for the browser.
+- `DecisionModel.predict_proba(..., rotations=k)`: option-order rotation with geometric-mean
+  recombination for the zero-shot constrained-decoding path.
+- `python -m hermitlm.tools.check`: validates label tokens, batch consistency, hidden layers,
+  prompt-template hashes and artifact selection before deploy.
+
+Artifact metadata now also pins the prompt-template hash, dtype and selected layer, so a
+probe cannot be silently paired with a changed prompt or precision.
+
+Evaluated on the hand-written human eval, the currently shipped last-layer probe still
+generalizes better than OOF-selected ridge/LDA heads (0.62 coarse / 0.48 fine vs 0.62 / 0.35),
+so the shipped artifact keeps that head. The selection/prior tooling remains available for
+future data improvements.
+
 ## Tool routing
 
 `scripts/build_tool_data.py` writes synthetic tool data (templates plus hand-authored natural
@@ -283,7 +308,7 @@ Status on 2026-10-15: the repo holds all 8 files (78.4 MB total). The model card
 conda create -n hermit -c pytorch -c conda-forge python=3.11 cpuonly pytorch tokenizers onnxruntime
 conda activate hermit
 pip install -e . -r requirements.txt
-pytest tests/          # 68 passed, 2 skipped
+pytest tests/          # 72 passed, 2 skipped
 ruff check .           # clean
 # optional local type check (not part of CI): basedpyright
 ```

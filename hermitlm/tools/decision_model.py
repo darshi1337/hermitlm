@@ -22,6 +22,8 @@ from tokenizers import Tokenizer
 
 from hermitlm.config import HermitConfig
 from hermitlm.tools.artifacts import verify_artifact
+from hermitlm.tools.heads import FittedHead
+from hermitlm.tools.prior import apply_prior
 from hermitlm.training.model import HermitLM
 
 # Coarse intent mapping: 7 balanced buckets covering all 21 fine types.
@@ -106,16 +108,23 @@ def get_fine_option_ids(tokenizer: Tokenizer) -> list[int]:
     return ids
 
 
-def format_prompt(query: str) -> str:
-    """Build the classification prompt. The model scores one letter next."""
-    options = "\n".join(f"{letter}. {COARSE_NAMES[letter]}" for letter in OPTION_LETTERS)
+def format_prompt(query: str, options: list[str] | None = None, shift: int = 0) -> str:
+    """Build the classification prompt. The model scores one letter next.
+
+    `shift` rotates the displayed option order (brier-style L0 debiasing).
+    """
+    letters = list(options or OPTION_LETTERS)
+    if shift:
+        letters = letters[shift:] + letters[:shift]
+    options_text = "\n".join(f"{letter}. {COARSE_NAMES[letter]}" for letter in letters)
     return (
         "<|im_start|>user\n"
         f"Classify the intent of this message: {query}\n"
-        f"Options:\n{options}\n"
+        f"Options:\n{options_text}\n"
         "Answer with one letter:\n"
         "<|im_start|>assistant\n"
     )
+
 
 
 def constrained_probs(
@@ -146,23 +155,56 @@ class DecisionModel:
         self.option_ids = get_option_ids(self.tokenizer)
 
     @torch.no_grad()
-    def predict_proba(self, query: str, temperature: float = 1.0) -> dict[str, float]:
-        ids = self.tokenizer.encode(format_prompt(query)).ids
-        ids = ids[-self.config.max_seq_len :]
-        idx = torch.tensor([ids], dtype=torch.long, device=self.device)
-        logits, _ = self.model(idx)
-        probs = constrained_probs(logits[0, -1], self.option_ids, temperature)
+    def predict_proba(self, query: str, temperature: float = 1.0, rotations: int = 1) -> dict[str, float]:
+        k = len(OPTION_LETTERS)
+        shifts = list(range(k)) if rotations == k else [round(j * k / rotations) for j in range(max(1, rotations))]
+        unrotated = []
+        for s in shifts:
+            letters = OPTION_LETTERS[s:] + OPTION_LETTERS[:s]
+            ids = self.tokenizer.encode(format_prompt(query, letters)).ids
+            ids = ids[-self.config.max_seq_len :]
+            idx = torch.tensor([ids], dtype=torch.long, device=self.device)
+            logits, _ = self.model(idx)
+            display_ids = [self.option_ids[OPTION_LETTERS.index(l)] for l in letters]
+            display_logp = torch.log_softmax(logits[0, -1, display_ids].float() / temperature, dim=-1)
+            orig_logp = torch.empty_like(display_logp)
+            orig_logp[torch.tensor([OPTION_LETTERS.index(l) for l in letters])] = display_logp
+            unrotated.append(orig_logp)
+        combined = torch.stack(unrotated).mean(dim=0)
+        probs = torch.softmax(combined, dim=-1)
         return {letter: float(p) for letter, p in zip(OPTION_LETTERS, probs.tolist())}
 
     @torch.no_grad()
-    def predict(self, query: str, temperature: float = 1.0) -> tuple[str, dict[str, float]]:
-        proba = self.predict_proba(query, temperature)
+    def predict(self, query: str, temperature: float = 1.0, rotations: int = 1) -> tuple[str, dict[str, float]]:
+        proba = self.predict_proba(query, temperature, rotations)
         label = max(OPTION_LETTERS, key=lambda letter: proba[letter])
         return label, proba
 
 def chat_prompt(query: str) -> str:
     """In-distribution chat prompt used for hidden-state probes."""
     return f"<|im_start|>user\n{query}<|im_end|>\n<|im_start|>assistant\n"
+
+
+PROMPT_TEMPLATES = format_prompt("x") + "\n" + chat_prompt("x")
+
+
+class LegacyHead:
+    """Adapter for pre-selection probe artifacts."""
+
+    def __init__(self, state, temperature, device):
+        from torch import nn
+
+        self.layer = None
+        d_model = state["weight"].size(1)
+        self.linear = nn.Linear(d_model, state["weight"].size(0)).to(device)
+        self.linear.load_state_dict(state)
+        self.temperature = float(temperature)
+
+    def scores(self, hidden):
+        return self.linear(hidden) / self.temperature
+
+    def log_probs(self, hidden):
+        return torch.log_softmax(self.scores(hidden), dim=-1)
 
 
 class ProbeDecisionModel:
@@ -174,8 +216,6 @@ class ProbeDecisionModel:
     """
 
     def __init__(self, checkpoint_path: str, tokenizer_path: str, probe_path: str, device: str = "cpu"):
-        from torch import nn
-
         self.device = torch.device(device)
         self.tokenizer = Tokenizer.from_file(tokenizer_path)
         ckpt = torch.load(checkpoint_path, map_location=self.device, weights_only=True)
@@ -185,84 +225,99 @@ class ProbeDecisionModel:
         self.model.load_state_dict(ckpt["model_state_dict"])
         self.model.eval()
         probe = torch.load(probe_path, map_location=self.device, weights_only=True)
-        verify_artifact(probe, checkpoint_path, tokenizer_path)
+        selection = probe.get("selection")
+        self.layer = selection["layer"] if selection else None
+        verify_artifact(
+            probe, checkpoint_path, tokenizer_path,
+            dtype=str(next(self.model.parameters()).dtype),
+            layer=self.layer,
+        )
         self.checkpoint_path = checkpoint_path
         self.tokenizer_path = tokenizer_path
-        d_model = probe["d_model"]
-        self.head7 = nn.Linear(d_model, len(OPTION_LETTERS)).to(self.device)
-        self.head7.load_state_dict(probe["head7"])
-        self.head7.eval()
-        self.temperature7 = float(probe["temperature7"])
-        self.head_bin = nn.Linear(d_model, 2).to(self.device)
-        self.head_bin.load_state_dict(probe["head_bin"])
-        self.head_bin.eval()
-        self.temperature_bin = float(probe["temperature_bin"])
-        self.head21 = None
-        self.temperature21 = 1.0
-        if "head21" in probe:
-            self.head21 = nn.Linear(d_model, len(FINE21_ORDER)).to(self.device)
-            self.head21.load_state_dict(probe["head21"])
-            self.head21.eval()
+        self.prior_lambda = float(probe.get("prior_lambda", 1.0))
+        self.priors = {k: torch.as_tensor(v, dtype=torch.float64) for k, v in probe.get("priors", {}).items()}
+        if selection:
+            heads = selection["heads"]
+            self.head7 = FittedHead.from_dict(heads["coarse"]).to(self.device)
+            self.head_bin = FittedHead.from_dict(heads["confused"]).to(self.device)
+            self.head21 = FittedHead.from_dict(heads["fine"]).to(self.device) if "fine" in heads else None
+            self.temperature7 = self.head7.temperature
+            self.temperature_bin = self.head_bin.temperature
+            self.temperature21 = self.head21.temperature if self.head21 else 1.0
+        else:
+
+            self.head7 = LegacyHead(probe["head7"], probe["temperature7"], self.device)
+            self.head_bin = LegacyHead(probe["head_bin"], probe["temperature_bin"], self.device)
+            self.head21 = LegacyHead(probe["head21"], probe.get("temperature21", 1.0), self.device) if "head21" in probe else None
+            self.temperature7 = float(probe["temperature7"])
+            self.temperature_bin = float(probe["temperature_bin"])
             self.temperature21 = float(probe.get("temperature21", 1.0))
         self.tool_head = None
-        self.tool_temperature = 1.0
+        self.tool_layer = None
 
     @torch.no_grad()
-    def _hidden(self, query: str) -> torch.Tensor:
-        # predict(), predict_fine() and predict_tool() are called with the same
-        # query by the router. Reuse the last hidden vector so all three heads
-        # cost a single LM forward pass instead of three.
+    def _hidden(self, query: str, layer=None) -> torch.Tensor:
         cache = getattr(self, "_hidden_cache", None)
         if cache is None:
             cache = {}
             self._hidden_cache = cache
-        if query in cache:
-            return cache[query]
+        key = (query, layer)
+        if key in cache:
+            return cache[key]
         ids = self.tokenizer.encode(chat_prompt(query)).ids[-self.config.max_seq_len :]
         idx = torch.tensor([ids], dtype=torch.long, device=self.device)
-        _, _, hidden = self.model(idx, return_hidden=True)
-        value = hidden[0, len(ids) - 1]
-        if len(cache) >= 8:  # bounded; consecutive requests reuse the latest
+        if layer is None:
+            _, _, hidden = self.model(idx, return_hidden=True)
+            value = hidden[0, len(ids) - 1]
+        else:
+            _, hidden = self.model.forward_with_hidden_layers(idx)
+            value = hidden[0, len(ids) - 1, layer, :]
+        if len(cache) >= 16:
             cache.clear()
-        cache[query] = value
+        cache[key] = value
         return value
+
+    def _log_probs(self, head, hidden, prior_key=None):
+        lp = head.log_probs(hidden.unsqueeze(0))
+        if prior_key in self.priors:
+            lp = apply_prior(lp, self.priors[prior_key], self.prior_lambda)
+        return lp
 
     @torch.no_grad()
     def predict(self, query: str) -> tuple[str, dict[str, float], float]:
-        """Return (coarse_label, proba_over_7, p_confused)."""
-        h = self._hidden(query)
-        logits7 = self.head7(h.unsqueeze(0)) / self.temperature7
-        proba7 = torch.softmax(logits7, dim=-1)[0]
+        h = self._hidden(query, self.layer)
+        proba7 = torch.exp(self._log_probs(self.head7, h, "coarse"))[0]
         proba = {letter: float(p) for letter, p in zip(OPTION_LETTERS, proba7.tolist())}
-        logits_bin = self.head_bin(h.unsqueeze(0)) / self.temperature_bin
-        p_confused = float(torch.softmax(logits_bin, dim=-1)[0, 1])
+        p_confused = float(torch.exp(self._log_probs(self.head_bin, h, "confused"))[0, 1])
         return max(OPTION_LETTERS, key=lambda letter: proba[letter]), proba, p_confused
 
     @torch.no_grad()
     def predict_fine(self, query: str) -> tuple[str, dict[str, float]] | None:
-        """Return (fine_type, proba_over_21) or None if the probe file predates head21."""
         if self.head21 is None:
             return None
-        h = self._hidden(query)
-        logits = self.head21(h.unsqueeze(0)) / self.temperature21
-        proba = torch.softmax(logits, dim=-1)[0]
+        h = self._hidden(query, self.layer)
+        proba = torch.exp(self._log_probs(self.head21, h, "fine"))[0]
         by_fine = {fine: float(p) for fine, p in zip(FINE21_ORDER, proba.tolist())}
         return max(FINE21_ORDER, key=lambda fine: by_fine[fine]), by_fine
 
     def load_tool_heads(self, tool_probe_path: str) -> bool:
-        """Load tool-routing heads into this instance (shares the frozen LM).
-
-        Return True on success, False if the file is missing or invalid.
-        """
-        from torch import nn
-
         try:
             tool = torch.load(tool_probe_path, map_location=self.device, weights_only=True)
-            verify_artifact(tool, self.checkpoint_path, self.tokenizer_path)
-            self.tool_head = nn.Linear(tool["d_model"], len(TOOL_CLASSES)).to(self.device)
-            self.tool_head.load_state_dict(tool["head"])
-            self.tool_head.eval()
-            self.tool_temperature = float(tool["temperature"])
+            verify_artifact(
+                tool, self.checkpoint_path, self.tokenizer_path,
+                dtype=str(next(self.model.parameters()).dtype),
+            )
+            selection = tool.get("selection")
+            self.tool_layer = selection["layer"] if selection else None
+            if selection:
+                self.tool_head = FittedHead.from_dict(selection["heads"]["tool"]).to(self.device)
+                self.tool_priors = {k: torch.as_tensor(v, dtype=torch.float64) for k, v in tool.get("priors", {}).items()}
+                self.tool_prior_lambda = float(tool.get("prior_lambda", 1.0))
+            else:
+
+                self.tool_head = LegacyHead(tool["head"], tool["temperature"], self.device)
+                self.tool_priors = {}
+                self.tool_prior_lambda = 1.0
             return True
         except Exception:  # noqa: BLE001 - missing file means no tool routing
             self.tool_head = None
@@ -270,12 +325,13 @@ class ProbeDecisionModel:
 
     @torch.no_grad()
     def predict_tool(self, query: str) -> tuple[str, dict[str, float]] | None:
-        """Return (tool_label, proba_over_4) or None if tool heads are not loaded."""
         if getattr(self, "tool_head", None) is None:
             return None
-        h = self._hidden(query)
-        logits = self.tool_head(h.unsqueeze(0)) / self.tool_temperature
-        proba = torch.softmax(logits, dim=-1)[0]
+        h = self._hidden(query, self.tool_layer)
+        lp = self.tool_head.log_probs(h.unsqueeze(0))
+        if "tool" in getattr(self, "tool_priors", {}):
+            lp = apply_prior(lp, self.tool_priors["tool"], self.tool_prior_lambda)
+        proba = torch.exp(lp)[0]
         by_tool = {label: float(p) for label, p in zip(TOOL_CLASSES, proba.tolist())}
         return max(TOOL_CLASSES, key=lambda label: by_tool[label]), by_tool
 
@@ -285,30 +341,52 @@ class ProbeDecisionModel:
 
 
 def export_probe(probe_path: str, output_path: str) -> dict:
-    """Write probe head weights to JSON for the browser UI. Return the data."""
+    """Write probe heads to JSON for the browser UI. Return the data."""
+    from hermitlm.tools.heads import FittedHead
+
     probe = torch.load(probe_path, map_location="cpu", weights_only=True)
     data = {
         "options": OPTION_LETTERS,
         "names": {letter: COARSE_NAMES[letter] for letter in OPTION_LETTERS},
-        "temperature7": float(probe["temperature7"]),
-        "temperature_bin": float(probe["temperature_bin"]),
-        "head7": {
+        "fine_options": FINE21_ORDER,
+    }
+    selection = probe.get("selection")
+    if selection:
+        data["head_layer"] = selection["layer"]
+        names = {
+            "coarse": ("head7", "temperature7"),
+            "confused": ("head_bin", "temperature_bin"),
+            "fine": ("head21", "temperature21"),
+        }
+        for key, (head_key, temp_key) in names.items():
+            if key in selection["heads"]:
+                h = FittedHead.from_dict(selection["heads"][key])
+                w, b = h.effective()
+                data[head_key] = {"weight": w.tolist(), "bias": b.tolist()}
+                data[temp_key] = h.temperature
+        data["priors"] = probe.get("priors", {})
+        data["prior_lambda"] = float(probe.get("prior_lambda", 1.0))
+    else:
+        data["temperature7"] = float(probe["temperature7"])
+        data["temperature_bin"] = float(probe["temperature_bin"])
+        data["head7"] = {
             "weight": probe["head7"]["weight"].tolist(),
             "bias": probe["head7"]["bias"].tolist(),
-        },
-        "head_bin": {
+        }
+        data["head_bin"] = {
             "weight": probe["head_bin"]["weight"].tolist(),
             "bias": probe["head_bin"]["bias"].tolist(),
-        },
-    }
-    if "head21" in probe:
-        data["head21"] = {
-            "weight": probe["head21"]["weight"].tolist(),
-            "bias": probe["head21"]["bias"].tolist(),
         }
-        data["temperature21"] = float(probe.get("temperature21", 1.0))
-        data["fine_options"] = FINE21_ORDER
-    for key in ("schema_version", "checkpoint_sha256", "tokenizer_sha256"):
+        if "head21" in probe:
+            data["head21"] = {
+                "weight": probe["head21"]["weight"].tolist(),
+                "bias": probe["head21"]["bias"].tolist(),
+            }
+            data["temperature21"] = float(probe.get("temperature21", 1.0))
+    for key in (
+        "schema_version", "checkpoint_sha256", "tokenizer_sha256",
+        "prompt_template_sha256", "dtype", "layer",
+    ):
         if key in probe:
             data[key] = probe[key]
     out = Path(output_path)
@@ -316,3 +394,4 @@ def export_probe(probe_path: str, output_path: str) -> dict:
     out.write_text(json.dumps(data))
     print(f"Exported probe to {out} ({out.stat().st_size / 1024:.1f}KB)")
     return data
+

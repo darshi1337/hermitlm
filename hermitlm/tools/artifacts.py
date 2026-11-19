@@ -24,17 +24,40 @@ def file_sha256(path: str | Path, chunk_size: int = 1 << 20) -> str:
     return digest.hexdigest()
 
 
-def artifact_metadata(checkpoint_path: str | Path, tokenizer_path: str | Path) -> dict:
-    """Return the version/hash fields to store next to a fitted head."""
-    return {
+def artifact_metadata(
+    checkpoint_path: str | Path,
+    tokenizer_path: str | Path,
+    *,
+    prompt_template=None,
+    dtype=None,
+    layer=None,
+) -> dict:
+    """Return version/hash fields to store next to a fitted head."""
+    import hashlib
+
+    meta = {
         "schema_version": SCHEMA_VERSION,
         "checkpoint_sha256": file_sha256(checkpoint_path),
         "tokenizer_sha256": file_sha256(tokenizer_path),
     }
+    if prompt_template is not None:
+        meta["prompt_template_sha256"] = hashlib.sha256(
+            prompt_template.encode("utf-8")
+        ).hexdigest()
+    if dtype is not None:
+        meta["dtype"] = str(dtype)
+    if layer is not None:
+        meta["layer"] = int(layer)
+    return meta
 
 
 def verify_artifact(
-    artifact: dict, checkpoint_path: str | Path, tokenizer_path: str | Path
+    artifact: dict,
+    checkpoint_path: str | Path,
+    tokenizer_path: str | Path,
+    *,
+    dtype=None,
+    layer=None,
 ) -> None:
     """Raise :class:`ArtifactMismatchError` on stale or unversioned artifacts.
 
@@ -57,3 +80,18 @@ def verify_artifact(
         raise ArtifactMismatchError(
             "decision head was fitted for a different tokenizer; retrain the probe"
         )
+    import hashlib
+
+    expected_prompt = artifact.get("prompt_template_sha256")
+    if expected_prompt:
+        from hermitlm.tools.decision_model import PROMPT_TEMPLATES
+
+        actual = hashlib.sha256(PROMPT_TEMPLATES.encode("utf-8")).hexdigest()
+        if actual != expected_prompt:
+            raise ArtifactMismatchError(
+                "prompt template changed since the head was fitted; retrain the probe"
+            )
+    if dtype is not None and "dtype" in artifact and str(artifact["dtype"]) != str(dtype):
+        raise ArtifactMismatchError("decision head was fitted with a different dtype")
+    if layer is not None and "layer" in artifact and int(artifact["layer"]) != int(layer):
+        raise ArtifactMismatchError("decision head was fitted for a different hidden layer")

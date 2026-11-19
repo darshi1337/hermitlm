@@ -16,10 +16,13 @@ import random
 
 import torch
 from tokenizers import Tokenizer
-from train_probe import extract_hidden, train_head
+from train_probe import extract_hidden_layers
 
 from hermitlm.config import HermitConfig
 from hermitlm.tools.artifacts import artifact_metadata
+from hermitlm.tools.decision_model import PROMPT_TEMPLATES
+from hermitlm.tools.heads import default_layers, select_head
+from hermitlm.tools.prior import apply_prior, fit_prior
 from hermitlm.training.model import HermitLM
 
 TOOL_CLASSES = ["math", "web", "faq", "chat"]
@@ -31,7 +34,7 @@ def main() -> None:
     parser.add_argument("--tokenizer", default="data/tokenizer.json")
     parser.add_argument("--train", default="data/tool_train.jsonl")
     parser.add_argument("--eval", default="data/tool_eval.jsonl")
-    parser.add_argument("--epochs", type=int, default=30)
+    parser.add_argument("--prior-lambda", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=42)
     # Probe fitting is frozen-model inference; CPU avoids flaky XPU crashes.
     parser.add_argument("--device", default="cpu")
@@ -70,17 +73,24 @@ def main() -> None:
             queries.append(q)
             targets.append(TOOL_CLASSES.index(label))
     print(f"training rows: {len(queries)}")
-    feats = extract_hidden(model, tokenizer, queries, config.max_seq_len, device)
-    head, temperature = train_head(feats, torch.tensor(targets), len(TOOL_CLASSES), args.epochs, args.seed)
+    feats = extract_hidden_layers(model, tokenizer, queries, config.max_seq_len, device)
+    print(f"features: {tuple(feats.shape)}")
+    layers = default_layers(config.n_layers)
+    head = select_head(feats, torch.tensor(targets), len(TOOL_CLASSES), layers, seed=args.seed)
+    layer = head.layer
+    prior = fit_prior(head.log_probs(feats[:, layer, :].double())).tolist()
+    print(f"selected layer={layer} solver={head.solver} alpha={head.alpha} "
+          f"T={head.temperature:.3f} oof_acc={head.oof_accuracy:.4f}")
 
     with open(args.eval) as f:
         eval_rows = [json.loads(line) for line in f if line.strip()]
-    eval_feats = extract_hidden(
+    eval_feats = extract_hidden_layers(
         model, tokenizer, [r["input"] for r in eval_rows], config.max_seq_len, device
     )
-    head.eval()
     with torch.no_grad():
-        probas = torch.softmax(head(eval_feats) / temperature, dim=-1)
+        lp = head.log_probs(eval_feats[:, layer, :].double())
+        lp = apply_prior(lp, torch.as_tensor(prior, dtype=torch.float64), args.prior_lambda)
+        probas = torch.exp(lp)
     conf, pred = probas.max(-1)
     true = torch.tensor([TOOL_CLASSES.index(r["label"]) for r in eval_rows])
     acc = (pred == true).float().mean().item()
@@ -97,13 +107,19 @@ def main() -> None:
 
     torch.save(
         {
-            "head": head.state_dict(),
-            "temperature": temperature,
+            "selection": {"layer": layer, "heads": {"tool": head.as_dict()}},
+            "priors": {"tool": prior},
+            "prior_lambda": args.prior_lambda,
             "classes": TOOL_CLASSES,
-            "d_model": feats.size(1),
+            "d_model": feats.size(2),
             "eval_accuracy": acc,
             "base_checkpoint": args.checkpoint,
-            **artifact_metadata(args.checkpoint, args.tokenizer),
+            **artifact_metadata(
+                args.checkpoint, args.tokenizer,
+                prompt_template=PROMPT_TEMPLATES,
+                dtype=str(next(model.parameters()).dtype),
+                layer=layer,
+            ),
         },
         args.out,
     )

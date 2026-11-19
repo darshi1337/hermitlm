@@ -35,6 +35,7 @@ from hermitlm.tools.metrics import (
     nll,
     paired_bootstrap_diff,
 )
+from hermitlm.tools.prior import apply_prior
 
 N_BINS = 10
 
@@ -248,12 +249,20 @@ def run_eval(
         model = ProbeDecisionModel(checkpoint, tokenizer_path, probe_path, device)
         raw7, rawb, raw21 = [], [], []
         with torch.no_grad():
+            def raw_scores(head, hidden, prior_key):
+                s = head.scores(hidden.unsqueeze(0))[0]
+                lp = torch.log_softmax(s, dim=-1)
+                prior = getattr(model, "priors", {}).get(prior_key)
+                if prior is not None:
+                    lp = apply_prior(lp, prior.to(lp.device), getattr(model, "prior_lambda", 1.0))
+                return lp
+
             for r in rows:
-                h = model._hidden(r["input"])
-                raw7.append(model.head7(h.unsqueeze(0))[0])
-                rawb.append(model.head_bin(h.unsqueeze(0))[0])
+                h = model._hidden(r["input"], model.layer)
+                raw7.append(raw_scores(model.head7, h, "coarse"))
+                rawb.append(raw_scores(model.head_bin, h, "confused"))
                 if model.head21 is not None:
-                    raw21.append(model.head21(h.unsqueeze(0))[0])
+                    raw21.append(raw_scores(model.head21, h, "fine"))
         raw7 = torch.stack(raw7)
         rawb = torch.stack(rawb)
         y_all = torch.tensor(

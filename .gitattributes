@@ -1,0 +1,4 @@
+# Artifacts are hash-pinned, so their bytes must not be rewritten by git.
+*.json -text
+*.jsonl -text
+*.pt binary

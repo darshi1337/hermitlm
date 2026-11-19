@@ -18,9 +18,13 @@ export function linear(hidden, weight, bias) {
   return out;
 }
 
-export function softmax(logits, temperature = 1.0) {
+export function softmax(logits, temperature = 1.0, prior = null, lambda = 0) {
+  let scaled = logits.map((v) => v / temperature);
+  if (prior && lambda > 0) {
+    const logPrior = prior.map((p) => Math.log(Math.max(p, 1e-6)));
+    scaled = scaled.map((v, i) => v - lambda * (logPrior[i] || 0));
+  }
   let maxLogit = -Infinity;
-  const scaled = logits.map((v) => v / temperature);
   for (const v of scaled) if (v > maxLogit) maxLogit = v;
   const exps = scaled.map((v) => Math.exp(v - maxLogit));
   const sum = exps.reduce((a, b) => a + b, 0);
@@ -29,13 +33,13 @@ export function softmax(logits, temperature = 1.0) {
 
 export function classifyIntent(lastHidden, probe) {
   const logits7 = linear(lastHidden, probe.head7.weight, probe.head7.bias);
-  const proba7 = softmax(logits7, probe.temperature7);
+  const proba7 = softmax(logits7, probe.temperature7, probe.priors?.coarse, probe.prior_lambda);
   let best = 0;
   for (let i = 1; i < proba7.length; i++) {
     if (proba7[i] > proba7[best]) best = i;
   }
   const logitsBin = linear(lastHidden, probe.head_bin.weight, probe.head_bin.bias);
-  const probaBin = softmax(logitsBin, probe.temperature_bin);
+  const probaBin = softmax(logitsBin, probe.temperature_bin, probe.priors?.confused, probe.prior_lambda);
   const label = probe.options[best];
   const proba = {};
   probe.options.forEach((letter, i) => (proba[letter] = proba7[i]));
@@ -55,7 +59,7 @@ export function classifyIntent(lastHidden, probe) {
 export function classifyFine(lastHidden, probe) {
   if (!probe.head21) return null;
   const logits = linear(lastHidden, probe.head21.weight, probe.head21.bias);
-  const probs = softmax(logits, probe.temperature21 || 1.0);
+  const probs = softmax(logits, probe.temperature21 || 1.0, probe.priors?.fine, probe.prior_lambda);
   let best = 0;
   for (let i = 1; i < probs.length; i++) {
     if (probs[i] > probs[best]) best = i;

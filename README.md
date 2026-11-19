@@ -27,23 +27,23 @@ A ~8M parameter LLM that talks like a tiny crab in an aquatic world, chattable e
 
 ```text
 You> hello crab
-Hermit> you again. i am near the sand. i have checked this 9 times.
+Hermit> you again. the salinity feels stable. i note soul sand near at the cave entrance.
 
 You> are you hungry
-Hermit> food detected. i have been exploring the cave waiting. current priority: bubble snacks.
+Hermit> i am interested in food. i prefer the sea pickles. do not delay. activity will continue as pretending to be sand.
 
 You> integrate x^2
-Hermit> integral x^2 dx = x^3/3 + constant
+Hermit> aah math! i hate it. still here is the answer from wolfram: integral x^2 dx = x^3/3 + constant
 
 You> latest AI news
-Hermit> redstone appears to be a human concept. the temperature is more important. water condition: swirling and clear.
-
-You> who is Elon Musk
-Hermit> Elon Musk - Wikipedia: 9 hours ago - Elon Reeve Musk (/ˈiːlɒn/ EE-lon; born June 28, 1971) is a businessman and past public official known for his leadership of Tesla and SpaceX. Musk has been the wealthiest person in the world since 2025; as of May 2026, Forbes estimates his net worth to be US$828 billion.
+Hermit> Google News - Artificial intelligence - Latest: Read full articles, watch videos, browse thousands of titles and more on the "Artificial intelligence" topic with Google News.
 
 You> goodnight crab
-Hermit> it is now dark. i will remain still. i have checked this 18 times.
+Hermit> night cycle detected. the small cave appears calmer now.
 ```
+
+Chat replies are sampled, so exact wording varies. The math intro is picked at random from a
+pool of crab-flavoured lines, and web results depend on live search availability.
 
 ## Architecture
 
@@ -83,9 +83,9 @@ Small causal transformer. Learned positions, standard attention, LayerNorm, weig
 The raw checkpoint `state_dict` sums to 9,660,800 because it stores `lm_head.weight` a second
 time; weight tying removes that duplicate 1,207,680-parameter matrix.
 
-# Features
+## Features
 - Runs fully client-side in the browser (ONNX + onnxruntime-web, no backend server)
-- Quantized web model (`model.quant.onnx`, ~9MB vs ~36MB fp32) with automatic fallback
+- Quantized web model (`model.quant.onnx`, ~9.8 MB vs ~38.7 MB fp32) with automatic fp32 fallback when `model.onnx` is present
 - Tool-calling router: FAQ, Wolfram math, and web search, via `<tool>name(query)</tool>` tags plus keyword fallback
 - Probe decision model: single-pass intent classification into 7 coarse intents, plus an out-of-scope score. High `p_confused` escalates to web search. The browser UI shows an intent chip on each reply.
 - Fine-grained 21-way intent head and tool-routing probe (math/web/faq/chat) on the same frozen features.
@@ -94,13 +94,13 @@ time; weight tying removes that duplicate 1,207,680-parameter matrix.
 - Streaming API (`POST /chat/stream`, SSE) alongside `POST /chat`; math replies use a randomly
   chosen crab-flavoured intro before the Wolfram/local answer
 - Modular architecture
-- Automated tests and ruff gates, plus a `hermit check` deploy diagnostic
+- Automated tests and ruff gates, plus a `python -m hermitlm.tools.check` deploy diagnostic
 - RLHF (PPO) and DPO fine-tuning stages
 - Eval dashboards: perplexity + generation-based persona reward + tool-trigger rate, plus decision-model accuracy/calibration
 
 ## Training
 
-Training and probe fitting default to the **Intel Arc GPU** via PyTorch's XPU backend (`HERMIT_TRAIN_DEVICE=xpu`). On an NVIDIA machine set `HERMIT_TRAIN_DEVICE=cuda`; use `=cpu` only for debugging. They fail loudly if the requested accelerator is unavailable. Install the matching wheel with `pip install torch --index-url https://download.pytorch.org/whl/xpu`. Data generation (`prepare_data.py`, `build_tool_data.py`) and ONNX export stay on CPU.
+Training defaults to the **Intel Arc GPU** via PyTorch's XPU backend (`HERMIT_TRAIN_DEVICE=xpu`). On an NVIDIA machine set `HERMIT_TRAIN_DEVICE=cuda`; use `=cpu` only for debugging. Probe fitting defaults to CPU (`--device cpu`) because it is frozen-model inference and avoids flaky XPU behaviour; pass `--device xpu` or `--device cuda` to move it. Training and probe entry points fail loudly if the requested accelerator is unavailable. Install the matching wheel with `pip install torch --index-url https://download.pytorch.org/whl/xpu`. Data generation (`prepare_data.py`, `build_tool_data.py`) and ONNX export stay on CPU.
 
 The full pipeline can be rerun with:
 
@@ -108,12 +108,13 @@ The full pipeline can be rerun with:
 # Windows / Intel Arc (XPU, default here)
 powershell -ExecutionPolicy Bypass -File scripts\retrain_resume.ps1
 # Linux / NVIDIA CUDA
-bash scripts/retrain_all.sh
+HERMIT_TRAIN_DEVICE=cuda bash scripts/retrain_all.sh
 ```
 
-Both are resume-safe: completed steps are recorded in `eval_out/retrain_done.txt` and skipped
-on the next run. `scripts/install_retrain_task.ps1` registers a logon-triggered task so a
-reboot resumes the retrain automatically.
+`scripts/retrain_resume.ps1` is resume-safe: completed steps are recorded in `eval_out/retrain_done.txt`
+and skipped on the next run. `scripts/retrain_all.sh` is a straight full run with no resume state.
+`scripts/install_retrain_task.ps1` registers a logon-triggered task so a reboot resumes the Windows
+retrain automatically.
 
 Three stages:
 

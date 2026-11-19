@@ -70,9 +70,10 @@ Small causal transformer. Learned positions, standard attention, LayerNorm, weig
 - Fine-grained 21-way intent head and tool-routing probe (math/web/faq/chat) on the same frozen features.
 - Calibrated heads: bounded temperature search with Platt-smoothed binary targets, bootstrap CIs, and hash-checked head files.
 - Best-of-N reply rerank by persona reward, confidence-gated clarifying questions, persona auto-router, and intent analytics (`GET /stats/intents`).
-- Streaming API (`POST /chat/stream`, SSE) alongside `POST /chat`
+- Streaming API (`POST /chat/stream`, SSE) alongside `POST /chat`; math replies use a randomly
+  chosen crab-flavoured intro before the Wolfram/local answer
 - Modular architecture
-- Automated tests, ruff, and basedpyright gates
+- Automated tests and ruff gates, plus a `hermit check` deploy diagnostic
 - RLHF (PPO) and DPO fine-tuning stages
 - Eval dashboards: perplexity + generation-based persona reward + tool-trigger rate, plus decision-model accuracy/calibration
 
@@ -80,17 +81,24 @@ Small causal transformer. Learned positions, standard attention, LayerNorm, weig
 
 Training and probe fitting default to the **Intel Arc GPU** via PyTorch's XPU backend (`HERMIT_TRAIN_DEVICE=xpu`). On an NVIDIA machine set `HERMIT_TRAIN_DEVICE=cuda`; use `=cpu` only for debugging. They fail loudly if the requested accelerator is unavailable. Install the matching wheel with `pip install torch --index-url https://download.pytorch.org/whl/xpu`. Data generation (`prepare_data.py`, `build_tool_data.py`) and ONNX export stay on CPU.
 
-On a CUDA machine, the full pipeline can be rerun with:
+The full pipeline can be rerun with:
 
 ```bash
+# Windows / Intel Arc (XPU, default here)
+powershell -ExecutionPolicy Bypass -File scripts\retrain_resume.ps1
+# Linux / NVIDIA CUDA
 bash scripts/retrain_all.sh
 ```
+
+Both are resume-safe: completed steps are recorded in `eval_out/retrain_done.txt` and skipped
+on the next run. `scripts/install_retrain_task.ps1` registers a logon-triggered task so a
+reboot resumes the retrain automatically.
 
 Three stages:
 
 1. **SFT** (`scripts/train.sh` → `hermitlm/training/train.py`): next-token prediction on `data/train.jsonl`, produces `checkpoints/best_model.pt`.
 
-2. **RLHF** (`scripts/train_ppo.sh` → `hermitlm/training/ppo.py`): PPO fine-tunes the SFT checkpoint against a heuristic persona-consistency reward (`hermitlm/training/reward.py`). The reward scores crab-vocabulary use and terse in-character style. It penalizes repetition, shouting, and character breaks. A KL penalty against the frozen SFT model (the reference policy) keeps the tuned policy from drifting off-distribution. Training draws rollout prompts from `data/train.jsonl`/`eval.jsonl`. PPO checkpoints land in `checkpoints/ppo/` and stay drop-in compatible with the inference, bot, and API code.
+2. **RLHF** (`scripts/train_ppo.sh` → `hermitlm/training/ppo.py`): PPO fine-tunes the SFT checkpoint against a heuristic persona-consistency reward (`hermitlm/training/reward.py`). The reward scores crab-vocabulary use and terse in-character style. It penalizes repetition, shouting, and character breaks. A KL penalty against the frozen SFT model (the reference policy) keeps the tuned policy from drifting off-distribution. Training draws rollout prompts only from `data/train.jsonl` so `eval.jsonl` stays held out. PPO checkpoints land in `checkpoints/ppo/` and stay drop-in compatible with the inference, bot, and API code.
 
 3. **DPO** (`scripts/train_dpo.sh` → `hermitlm/training/dpo.py`): simpler preference-tuning alternative to PPO. It builds chosen/rejected pairs on-policy (4 candidates per prompt, best vs worst by `score_response`). A pair survives only if the score gap clears a margin filter. It optimizes against a frozen SFT reference. Checkpoints land in `checkpoints/dpo/`.
 
@@ -116,7 +124,9 @@ Latest comparison (persona measured over 10 sampled generations, so ±0.05 noise
 | PPO (`ppo_final.pt`) | 1.992 | **0.648** |
 | DPO (`dpo_final.pt`, margin filter) | 1.930 | 0.449 |
 
-PPO is now the best persona checkpoint. DPO as configured does not beat SFT.
+Those PPO/DPO numbers are from an earlier training run; the current shipped artifact is the
+newly retrained SFT checkpoint above. PPO and DPO remain available as optional stages but have
+not been rerun on the 104k natural-paraphrase dataset.
 
 ## Tools
 
@@ -141,23 +151,24 @@ plus a confused-vs-rest out-of-scope head.
 | Intent | Covers | Precision | Recall | F1 |
 | --- | --- | --- | --- | --- |
 | `a` social | greeting, bye, lonely | 1.00 | 1.00 | 1.00 |
-| `b` needs | food, water, bubbles | 0.84 | 1.00 | 0.91 |
-| `c` tank | glass, environment, movement | 0.76 | 0.73 | 0.75 |
-| `d` sense | light, color, sound, noise | 0.82 | 1.00 | 0.90 |
-| `e` body | state, breathing | 1.00 | 0.78 | 0.88 |
-| `f` condition | temp_cold, temp_hot, night | 1.00 | 1.00 | 1.00 |
-| `g` mind | misc, confused, reflection | 1.00 | 0.83 | 0.91 |
+| `b` needs | food, water, bubbles | 1.00 | 1.00 | 1.00 |
+| `c` tank | glass, environment, movement | 1.00 | 1.00 | 1.00 |
+| `d` sense | light, color, sound, noise | 1.00 | 1.00 | 1.00 |
+| `e` body | state, breathing | 1.00 | 1.00 | 1.00 |
+| `f` condition | temp_cold, temp_hot, night | 1.00 | 0.9983 | 0.9992 |
+| `g` mind | misc, confused, reflection | 0.9983 | 1.00 | 0.9991 |
 
 Held-out (`data/eval.jsonl`, n=4000, temperature fitted on a disjoint 1000-row split):
-accuracy 1.0, macro F1 1.0, NLL 0.0, ECE 0.0. The confused detector reaches precision 1.0 at recall 1.0.
+accuracy 0.9998, macro F1 0.9998, NLL 0.0015, ECE 0.0012. The confused detector reaches
+precision 1.0 at recall 1.0. These are template-eval numbers; see the human eval below.
 
 Temperatures come from a bounded golden-section search over log T, not a coarse grid
 (`hermitlm/tools/calibration.py`). Binary heads use Platt-smoothed targets, which stops
 near-separable scores from collapsing to 0/1 confidence. `scripts/eval_decision.py` fits T on
 a disjoint calibration split and reports 95% bootstrap CIs plus a paired
-calibrated-minus-uncalibrated table. Head files carry schema version 2 and SHA-256 hashes of
-the checkpoint and tokenizer. Loading a head after a retrain raises an error instead of
-scoring with stale weights.
+calibrated-minus-uncalibrated table. Head files carry schema version 2, SHA-256 hashes of the
+checkpoint, tokenizer and prompt template, plus dtype and selected layer. Loading a head after
+a retrain or prompt change raises an error instead of scoring with stale weights.
 
 The 21-way head (`FINE21_ORDER` in `hermitlm/tools/decision_model.py`) reaches accuracy 0.9932
 and macro F1 0.9930 on the template split. Those numbers flatter the model. The training data now
@@ -230,9 +241,12 @@ body and condition to sleepy). The API returns the persona and prefixes the prom
 `GET /stats/intents` returns totals by label and tool plus the confused rate.
 
 ```bash
-conda run -n hermit python scripts/train_probe.py --per-class 1500 --epochs 30 --out checkpoints/decision_probe.pt
-conda run -n hermit python scripts/eval_decision.py --method probe --max-n 5000 --cal-n 1000 --bootstrap 1000 --out-dir eval_out/decision_probe
-conda run -n hermit python scripts/export_probe.py --output web/probe.json   # also runs in deploy CI
+python scripts/train_probe.py --per-class 1500 --per-fine 400 --out checkpoints/decision_probe.pt
+python scripts/train_tool_probe.py --out checkpoints/decision_tool_probe.pt
+python scripts/eval_decision.py --method probe --max-n 5000 --cal-n 1000 --bootstrap 1000 --out-dir eval_out/decision_probe
+python scripts/eval_decision.py --eval data/human_eval.jsonl --method probe --max-n 126 --cal-n 60 --out-dir eval_out/human
+python scripts/export_probe.py --output web/probe.json   # also runs in deploy CI
+python -m hermitlm.tools.check                           # pre-deploy diagnostics
 ```
 
 `HermitModel.classify()` (`web/model.js`) + `web/intent.js` run the same probe in-browser off the
@@ -263,9 +277,9 @@ The chat UI in `web/` runs the model entirely client-side. `scripts/export_onnx.
 The page tries the quantized model first. Deploy drops the full fp32 `model.onnx` from the
 Pages artifact (deploy.yml), so only the ~9MB quantized artifact ships.
 
-The page uses onnxruntime-web plus a from-scratch byte-level BPE tokenizer. The tokenizer reads
-`data/tokenizer.json` directly. The page generates responses in
- the browser with no backend. A generated `web/asset-manifest.json` keys the browser Cache API
+The page uses onnxruntime-web plus a from-scratch byte-level BPE tokenizer. `export_onnx.py`
+copies `data/tokenizer.json` into `web/tokenizer.json` for the browser. The page generates
+responses in the browser with no backend. A generated `web/asset-manifest.json` keys the browser Cache API
 by the quantized model's SHA-256, so new deploys cannot pair stale cached weights with a fresh probe.
 
 The UI streams tokens as they generate and offers temperature/top-K,
@@ -282,7 +296,11 @@ The UI streams tokens as they generate and offers temperature/top-K,
 
 Model repo: `darshi1337/hermitlm-8M`. Dataset repo: `darshi1337/hermitlm-100k-generic`.
 
-The model repo holds 8 files: `best_model.pt`, `config.json`, `tokenizer.json`, `model.onnx`, `model.quant.onnx`, `decision_probe.pt`, `decision_tool_probe.pt`, and `README.md` (model card).
+The model repo holds 9 files: `best_model.pt`, `config.json`, `tokenizer.json`, `model.onnx`,
+`model.quant.onnx`, `decision_probe.pt`, `decision_tool_probe.pt`, plus `README.md` (model
+card) and `.gitattributes`. The dataset repo includes `train.jsonl`, `eval.jsonl`, their
+OpenAI-format variants, `tool_train.jsonl`, `tool_eval.jsonl`, `human_eval.jsonl`, and the
+matching tokenizer.
 
 Download a published repo:
 
@@ -291,29 +309,36 @@ from huggingface_hub import snapshot_download
 repo = snapshot_download("darshi1337/hermitlm-8M")
 ```
 
-Upload a new build (maintainers only):
+Upload a new build (maintainers only; both scripts read `HF_TOKEN` from `.env` or `hf auth login`):
 
 ```bash
-pip install huggingface_hub
-export HF_TOKEN=<write token for darshi1337/hermitlm-8M>
 python scripts/push_hf.py --repo darshi1337/hermitlm-8M --dry-run
 python scripts/push_hf.py --repo darshi1337/hermitlm-8M
+python scripts/push_hf_dataset.py --repo darshi1337/hermitlm-100k-generic --dry-run
+python scripts/push_hf_dataset.py --repo darshi1337/hermitlm-100k-generic
 ```
 
-Status on 2026-10-15: the repo holds all 8 files (78.4 MB total). The model card is live.
+Status on 2026-11-19: model and dataset repos are synced with the current 104k balanced corpus
+and hash-pinned probes.
 
 ## Development
 
 ```bash
-conda create -n hermit -c pytorch -c conda-forge python=3.11 cpuonly pytorch tokenizers onnxruntime
-conda activate hermit
-pip install -e . -r requirements.txt
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1          # Windows; source .venv/bin/activate on Linux
+pip install -e . -r requirements.txt pytest ruff
+pip install onnx onnxscript onnxruntime
+# Intel Arc / XPU (default on this machine):
+pip install torch --index-url https://download.pytorch.org/whl/xpu
+# NVIDIA CUDA instead: pip install torch --index-url https://download.pytorch.org/whl/cu121
+
 pytest tests/          # 72 passed, 2 skipped
 ruff check .           # clean
-# optional local type check (not part of CI): basedpyright
+python -m hermitlm.tools.check
 ```
 
 Copy `.env` from the documented keys (`HERMIT_CHECKPOINT`, `HERMIT_TOKENIZER`, `HERMIT_DEVICE`,
+`HERMIT_TRAIN_DEVICE`,
 `HERMIT_PROBE`, `HERMIT_CONFUSED_THRESHOLD`, `HERMIT_TOOL_PROBE`, `HERMIT_TOOL_THRESHOLD`,
 `HERMIT_BEST_OF`, `HERMIT_CLARIFY`, `HERMIT_CLARIFY_THRESHOLD`, `HERMIT_PERSONA_PROMPT`,
 `WOLFRAM_APP_ID`, …). Never commit `.env`.

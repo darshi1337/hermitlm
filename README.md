@@ -120,7 +120,7 @@ Three stages:
 
 1. **SFT** (`scripts/train.sh` → `hermitlm/training/train.py`): next-token prediction on `data/train.jsonl`, produces `checkpoints/best_model.pt`.
 
-2. **RLHF** (`scripts/train_ppo.sh` → `hermitlm/training/ppo.py`): PPO fine-tunes the SFT checkpoint against a heuristic persona-consistency reward (`hermitlm/training/reward.py`). The reward scores crab-vocabulary use and terse in-character style. It penalizes repetition, shouting, and character breaks. A KL penalty against the frozen SFT model (the reference policy) keeps the tuned policy from drifting off-distribution. Training draws rollout prompts only from `data/train.jsonl` so `eval.jsonl` stays held out. PPO checkpoints land in `checkpoints/ppo/` and stay drop-in compatible with the inference, bot, and API code.
+2. **RLHF** (`scripts/train_ppo.sh` → `hermitlm/training/ppo.py`): PPO fine-tunes the SFT checkpoint against a heuristic persona-consistency reward (`hermitlm/training/reward.py`). The reward scores crab-vocabulary use and terse in-character style. It penalizes repetition, shouting, and character breaks. A KL penalty against the frozen SFT model (the reference policy) keeps the tuned policy from drifting off-distribution. Training draws rollout prompts only from `data/train.jsonl` so `eval.jsonl` stays held out. PPO checkpoints land in `checkpoints/ppo/` and stay drop-in compatible with the inference, chat UI, and API code.
 
 3. **DPO** (`scripts/train_dpo.sh` → `hermitlm/training/dpo.py`): simpler preference-tuning alternative to PPO. It builds chosen/rejected pairs on-policy (4 candidates per prompt, best vs worst by `score_response`). A pair survives only if the score gap clears a margin filter. It optimizes against a frozen SFT reference. Checkpoints land in `checkpoints/dpo/`.
 
@@ -256,8 +256,8 @@ confidence lands below the threshold without confusion, the API asks which of th
 intents the user means instead of guessing.
 - Persona auto-router. Coarse intent maps to UI persona mode (needs to hungry, sense to guard,
 body and condition to sleepy). The API returns the persona and prefixes the prompt with
-`[mode crab]`, which the current checkpoint was trained on via
-`generate_data.add_persona_variants()`. Set `HERMIT_PERSONA_PROMPT=0` to disable it.
+`[<persona> crab]` (for example `[hungry crab]`), matching the prefixed variants that
+`generate_data.add_persona_variants()` writes into training. Set `HERMIT_PERSONA_PROMPT=0` to disable it.
 - Analytics. Every reply logs its verdict to `intent_log` in `data/hermit.db`.
 `GET /stats/intents` returns totals by label and tool plus the confused rate.
 
@@ -288,7 +288,8 @@ uvicorn hermitlm.runtime.api:app --host 0.0.0.0 --port 8000
 ```json
 POST /chat {"user_id": "demo", "message": "hello crab"}
 → {"response": "oh. it's you...", "tool": null,
-   "intent": {"label": "a", "name": "social", "confidence": 1.0, "p_confused": 0.0067}}
+   "intent": {"label": "a", "name": "social", "confidence": 1.0, "p_confused": 0.0067},
+   "persona": null}
 ```
 
 ## Website
@@ -296,7 +297,8 @@ POST /chat {"user_id": "demo", "message": "hello crab"}
 The chat UI in `web/` runs the model entirely client-side. `scripts/export_onnx.py` exports
 `checkpoints/best_model.pt` to ONNX. `scripts/quantize_onnx.py` produces the uint8 `model.quant.onnx`.
 The page tries the quantized model first. Deploy drops the full fp32 `model.onnx` from the
-Pages artifact (deploy.yml), so only the ~9MB quantized artifact ships.
+Pages artifact (deploy.yml), so only the ~9.8 MB quantized artifact ships. The fp32 fallback
+still works when `web/` is served locally or self-hosted with `model.onnx` present.
 
 The page uses onnxruntime-web plus a from-scratch byte-level BPE tokenizer. `export_onnx.py`
 copies `data/tokenizer.json` into `web/tokenizer.json` for the browser. The page generates
@@ -304,12 +306,18 @@ responses in the browser with no backend. A generated `web/asset-manifest.json` 
 by the quantized model's SHA-256, so new deploys cannot pair stale cached weights with a fresh probe.
 
 The UI streams tokens as they generate and offers temperature/top-K,
- persona modes (normal/sleepy/hungry/guard-crab), a stop button, and speech synthesis.
+persona modes (normal/sleepy/hungry/guard-crab), a stop button, and speech synthesis.
 
- Every reply also shows a probe decision-model intent chip (`web/intent.js` + `web/probe.json`).
- Classification costs a single forward pass over the prompt. A high out-of-scope score links to a web search.
- The chip shows coarse and fine intent with confidence. Low confidence asks a clarifying question
- with quick-reply chips instead of guessing. Settings shows per-intent session counts.
+The page has a live canvas beach scene: flowing blue contour lines like a hand-drawn shoreline,
+three animated wave layers at the bottom, and a soft white foam edge. The speaker button in the
+header enables synthesized ambient water and periodic shore splashes using the Web Audio API —
+there are no audio files to download. All motion respects `prefers-reduced-motion`.
+
+Every reply also shows a probe decision-model intent chip (`web/intent.js` + `web/probe.json`).
+Classification costs a single forward pass over the prompt. A high out-of-scope score links to a web search.
+The chip shows coarse and fine intent with confidence. Low confidence asks a clarifying question
+with quick-reply chips instead of guessing. Settings shows per-intent session counts.
+
 `.github/workflows/deploy.yml` exports the model and publishes
 `web/` to GitHub Pages on every push to `main`.
 
@@ -358,8 +366,8 @@ ruff check .           # clean
 python -m hermitlm.tools.check
 ```
 
-Copy `.env` from the documented keys (`HERMIT_CHECKPOINT`, `HERMIT_TOKENIZER`, `HERMIT_DEVICE`,
-`HERMIT_TRAIN_DEVICE`,
+Create a `.env` with the documented keys (`HERMIT_CHECKPOINT`, `HERMIT_TOKENIZER`, `HERMIT_DEVICE`,
+`HERMIT_TRAIN_DEVICE`, `HERMIT_TEMPERATURE`, `HERMIT_TOP_K`, `HERMIT_MAX_TOKENS`,
 `HERMIT_PROBE`, `HERMIT_CONFUSED_THRESHOLD`, `HERMIT_TOOL_PROBE`, `HERMIT_TOOL_THRESHOLD`,
 `HERMIT_BEST_OF`, `HERMIT_CLARIFY`, `HERMIT_CLARIFY_THRESHOLD`, `HERMIT_PERSONA_PROMPT`,
 `WOLFRAM_APP_ID`, …). Never commit `.env`.

@@ -282,6 +282,94 @@ NATURAL_TRAIN = [
     ("chat", "weekend vibes in the fish room"),
 ]
 
+# The tool probe was weakest on `web` (0.15 accuracy). These are natural,
+# varied web-information requests that do not come from the old templates.
+WEB_NATURAL = [
+    "what's the latest on the mars rover",
+    "who won the championship last night",
+    "search for cheap flights to lisbon",
+    "explain how black holes work",
+    "current weather in reykjavik",
+    "news about the local election",
+    "look up the price of copper",
+    "find recipes for crab cakes",
+    "who painted the starry night",
+    "latest ai news this week",
+    "what's happening in japan today",
+    "search the web for hiking trails",
+    "who is the mayor of oslo",
+    "explain quantum entanglement simply",
+    "current time in sydney",
+    "news about a spacex launch",
+    "look up train schedules to kyoto",
+    "what's the weather like in mumbai",
+    "who directed the latest movie",
+    "find the best coffee in seattle",
+    "explain how vaccines work",
+    "latest score of the match",
+    "search for job openings near me",
+    "who invented the telephone",
+    "current gold price today",
+    "news about climate change",
+    "what's the population of indonesia",
+    "look up the definition of photosynthesis",
+    "explain the rules of cricket",
+    "who is the prime minister of canada",
+    "find directions to the museum",
+    "latest phone reviews this year",
+    "search for a good dentist nearby",
+    "who wrote the book on the shelf",
+    "current exchange rate for euros",
+    "news from the local newspaper",
+    "explain why the sky is blue",
+    "look up the history of coffee",
+    "find a recipe for sourdough bread",
+    "who holds the world record for marathon",
+    "latest results from the tournament",
+    "search for cheap hotels in oslo",
+    "what's new in python this year",
+    "explain how a refrigerator works",
+    "who discovered penicillin",
+    "find the nearest train station",
+    "current traffic conditions downtown",
+    "news about the new museum exhibit",
+    "look up the capital of australia",
+    "explain the water cycle to a kid",
+]
+
+# Hard negatives: chat/FAQ messages that contain web trigger words. They force
+# the probe to use meaning rather than keyword matching.
+HARD_NEGATIVES = [
+    ("chat", "who is my crab friend"),
+    ("faq", "who made you"),
+    ("chat", "what is your name again"),
+    ("chat", "search my shell for food"),
+    ("chat", "latest news from the tank"),
+    ("chat", "current mood: hungry"),
+    ("faq", "explain yourself"),
+    ("chat", "who is this little crab in the mirror"),
+    ("chat", "who is hungry today"),
+    ("chat", "what is happening in my tank"),
+    ("chat", "today was a long day"),
+    ("chat", "find my missing shell"),
+    ("chat", "look up at the sky with me"),
+    ("chat", "search the sand for snacks"),
+    ("chat", "latest thing my crab did"),
+    ("chat", "news from the cave"),
+    ("faq", "explain why you're a crab"),
+    ("chat", "who is this guy staring at me"),
+    ("chat", "current situation in the tank"),
+    ("faq", "who is your creator"),
+    ("chat", "what's new with you"),
+    ("chat", "search me for hidden treasure"),
+    ("chat", "explain why you're hiding"),
+    ("faq", "who are you really"),
+    ("chat", "current water level in my tank"),
+    ("chat", "find me a new rock for the tank"),
+    ("chat", "who is the boss of this tank"),
+    ("chat", "latest bubble count"),
+]
+
 
 def build(per_class=1200, seed=42):
     rng = random.Random(seed)
@@ -304,6 +392,8 @@ def build(per_class=1200, seed=42):
         rows.append({"input": q, "label": "chat"})
     for label, q in NATURAL_TRAIN:
         rows.append({"input": q, "label": label})
+    rows.extend({"input": q, "label": "web"} for q in WEB_NATURAL)
+    rows.extend({"input": q, "label": label} for label, q in HARD_NEGATIVES)
     rng.shuffle(rows)
     Path("data/tool_train.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
     eval_rows = [{"input": q, "label": label} for label, q in TOOL_EVAL]

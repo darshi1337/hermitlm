@@ -3,6 +3,8 @@ import os
 import random
 from collections import Counter
 
+from hermitlm.training.natural_data import NATURAL_INPUTS, perturb
+
 
 def pick(seq):
     return random.choice(seq)
@@ -976,6 +978,32 @@ def gen_misc():
 def gen_bye():
     return _make_sample(user_bye(), crab_bye(), "bye")
 
+
+# Used to give natural paraphrases a persona-consistent crab reply.
+TYPE_TO_GEN = {
+    "greeting": gen_greeting, "bye": gen_bye, "lonely": gen_lonely,
+    "food": gen_food, "water": gen_water, "bubbles": gen_bubbles,
+    "glass": gen_glass, "environment": gen_environment, "movement": gen_movement,
+    "light": gen_light, "color": gen_color, "sound": gen_sound,
+    "noise": gen_noise, "state": gen_state, "breathing": gen_breathing,
+    "temp_cold": gen_temp_cold, "temp_hot": gen_temp_hot, "night": gen_night,
+    "misc": gen_misc, "confused": gen_confused, "reflection": gen_reflection,
+}
+
+
+def build_natural_samples(per_type=200):
+    """Natural user messages per fine type, with fresh template-based replies."""
+    samples = []
+    for fine, phrases in NATURAL_INPUTS.items():
+        gen = TYPE_TO_GEN[fine]
+        for _ in range(per_type):
+            base = random.choice(phrases)
+            text = perturb(base) if random.random() < 0.6 else base
+            reply = gen()
+            samples.append({"input": text, "output": reply["output"], "type": fine})
+    return samples
+
+
 def format_sample(s):
     return f"User: {s['input']}\nCrab: {s['output']}"
 
@@ -1011,34 +1039,16 @@ def add_persona_variants(samples, p=0.25):
 
 def generate_dataset(n_samples=100000, eval_ratio=0.05, data_dir="data"):
 
+    # Balanced: the old 3/2/1 weights made core intents ~9% of data and
+    # rare ones ~3%, which hurt the fine-grained probe on those classes.
     generators = [
-        # Core personality
-        (gen_greeting, 3),
-        (gen_state, 3),
-        (gen_misc, 3),
-
-        # Common interaction
-        (gen_food, 2),
-        (gen_light, 2),
-        (gen_water, 2),
-        (gen_environment, 2),
-        (gen_confused, 2),
-
-        # Situational
-        (gen_temp_hot, 1),
-        (gen_temp_cold, 1),
-        (gen_noise, 1),
-        (gen_night, 1),
-        (gen_lonely, 1),
-        (gen_bye, 1),
-
-        # World
-        (gen_bubbles, 1),
-        (gen_glass, 1),
-        (gen_reflection, 1),
-        (gen_breathing, 1),
-        (gen_movement, 1),
-        (gen_color, 1),
+        (gen_greeting, 1), (gen_state, 1), (gen_misc, 1),
+        (gen_food, 1), (gen_light, 1), (gen_water, 1),
+        (gen_environment, 1), (gen_confused, 1),
+        (gen_temp_hot, 1), (gen_temp_cold, 1), (gen_noise, 1),
+        (gen_night, 1), (gen_lonely, 1), (gen_bye, 1),
+        (gen_bubbles, 1), (gen_glass, 1), (gen_reflection, 1),
+        (gen_breathing, 1), (gen_movement, 1), (gen_color, 1),
         (gen_sound, 1),
     ]
 
@@ -1054,6 +1064,8 @@ def generate_dataset(n_samples=100000, eval_ratio=0.05, data_dir="data"):
         except Exception as e:  # noqa: BLE001 - one bad generator must not kill the batch
             print(f"Error in {gen.__name__}: {e}")
 
+    # Natural paraphrases target the template-to-real-world generalization gap.
+    samples.extend(build_natural_samples())
     add_persona_variants(samples)
     random.shuffle(samples)
 

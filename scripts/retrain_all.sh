@@ -12,6 +12,7 @@ export PYTHONUNBUFFERED=1
 
 echo "== 1/9 Generate SFT data + tokenizer =="
 python -m hermitlm.training.prepare_data
+python scripts/build_human_eval.py
 
 echo "== 2/9 Build tool-routing data =="
 python scripts/build_tool_data.py
@@ -41,6 +42,9 @@ python scripts/eval.py --checkpoint checkpoints/best_model.pt --out-dir eval_out
 python scripts/eval_decision.py \
   --method probe --max-n 5000 --cal-n 1000 --bootstrap 1000 \
   --out-dir eval_out/decision_probe
+python scripts/eval_decision.py \
+  --eval data/human_eval.jsonl --method probe --max-n 126 --cal-n 60 \
+  --bootstrap 1000 --out-dir eval_out/human
 
 echo "== 7/9 Browser artifacts =="
 python scripts/export_onnx.py --output-dir web

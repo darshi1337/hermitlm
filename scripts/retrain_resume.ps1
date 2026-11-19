@@ -36,6 +36,8 @@ function Invoke-Step([string]$name, [scriptblock]$body) {
 
 Invoke-Step "data" {
     python -m hermitlm.training.prepare_data
+    if ($LASTEXITCODE -ne 0) { return }
+    python scripts/build_human_eval.py
 }
 Invoke-Step "tool_data" {
     python scripts/build_tool_data.py
@@ -53,6 +55,8 @@ Invoke-Step "evals" {
     python scripts/eval.py --checkpoint checkpoints/best_model.pt --out-dir eval_out/sft
     if ($LASTEXITCODE -ne 0) { return }
     python scripts/eval_decision.py --method probe --max-n 5000 --cal-n 1000 --bootstrap 1000 --out-dir eval_out/decision_probe
+    if ($LASTEXITCODE -ne 0) { return }
+    python scripts/eval_decision.py --eval data/human_eval.jsonl --method probe --max-n 126 --cal-n 60 --bootstrap 1000 --out-dir eval_out/human
 }
 Invoke-Step "onnx" {
     python scripts/export_onnx.py --output-dir web

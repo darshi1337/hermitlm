@@ -2,6 +2,7 @@ data/*
 !data/tokenizer.json
 !data/tool_train.jsonl
 !data/tool_eval.jsonl
+!data/human_eval.jsonl
 # local runtime state / generated training data
 data/hermit.db*
 data/train.jsonl

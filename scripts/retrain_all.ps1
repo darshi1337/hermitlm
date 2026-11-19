@@ -9,6 +9,8 @@ $env:PYTHONUNBUFFERED = "1"
 Write-Host "== 1/9 Generate SFT data + tokenizer =="
 python -m hermitlm.training.prepare_data
 if ($LASTEXITCODE -ne 0) { throw "prepare_data failed" }
+python scripts/build_human_eval.py
+if ($LASTEXITCODE -ne 0) { throw "build_human_eval failed" }
 
 Write-Host "== 2/9 Build tool-routing data =="
 python scripts/build_tool_data.py
@@ -31,6 +33,8 @@ python scripts/eval.py --checkpoint checkpoints/best_model.pt --out-dir eval_out
 if ($LASTEXITCODE -ne 0) { throw "eval failed" }
 python scripts/eval_decision.py --method probe --max-n 5000 --cal-n 1000 --bootstrap 1000 --out-dir eval_out/decision_probe
 if ($LASTEXITCODE -ne 0) { throw "eval_decision failed" }
+python scripts/eval_decision.py --eval data/human_eval.jsonl --method probe --max-n 126 --cal-n 60 --bootstrap 1000 --out-dir eval_out/human
+if ($LASTEXITCODE -ne 0) { throw "human eval failed" }
 
 Write-Host "== 7/9 Browser artifacts =="
 python scripts/export_onnx.py --output-dir web

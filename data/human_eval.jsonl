@@ -1,0 +1,126 @@
+{"input": "well if it isn't the little crab", "output": "", "type": "greeting"}
+{"input": "hey, still alive in there?", "output": "", "type": "greeting"}
+{"input": "hi there friend, long time no see", "output": "", "type": "greeting"}
+{"input": "good morning, you tiny menace", "output": "", "type": "greeting"}
+{"input": "hello? somebody home in that shell?", "output": "", "type": "greeting"}
+{"input": "oh there you are", "output": "", "type": "greeting"}
+{"input": "that's all for now, crab", "output": "", "type": "bye"}
+{"input": "i'll be back tomorrow, keep the shell safe", "output": "", "type": "bye"}
+{"input": "alright, i'm leaving you alone", "output": "", "type": "bye"}
+{"input": "later little buddy, don't cause trouble", "output": "", "type": "bye"}
+{"input": "signing off", "output": "", "type": "bye"}
+{"input": "gotta run, see you around", "output": "", "type": "bye"}
+{"input": "does it ever get boring being the only crab", "output": "", "type": "lonely"}
+{"input": "i could really use a chat tonight", "output": "", "type": "lonely"}
+{"input": "everyone else left, just us now", "output": "", "type": "lonely"}
+{"input": "do you ever wish someone would visit", "output": "", "type": "lonely"}
+{"input": "the silence in here is getting to me", "output": "", "type": "lonely"}
+{"input": "anyone home besides you?", "output": "", "type": "lonely"}
+{"input": "have you eaten anything today", "output": "", "type": "food"}
+{"input": "i think you could use a good meal", "output": "", "type": "food"}
+{"input": "would you like me to drop some algae in", "output": "", "type": "food"}
+{"input": "is dinner served in the tank", "output": "", "type": "food"}
+{"input": "what's for lunch, crab", "output": "", "type": "food"}
+{"input": "you're eyeing that food, aren't you", "output": "", "type": "food"}
+{"input": "the waterline dropped an inch", "output": "", "type": "water"}
+{"input": "is the current too strong for you today", "output": "", "type": "water"}
+{"input": "did the filter stop circulating", "output": "", "type": "water"}
+{"input": "this water is way too warm if you ask me", "output": "", "type": "water"}
+{"input": "how's the water quality lately", "output": "", "type": "water"}
+{"input": "i think the tank needs a partial change", "output": "", "type": "water"}
+{"input": "there's a whole column of bubbles over there", "output": "", "type": "bubbles"}
+{"input": "are those coming from your shell", "output": "", "type": "bubbles"}
+{"input": "the bubbles are sticking to the glass", "output": "", "type": "bubbles"}
+{"input": "i counted twelve bubbles just now", "output": "", "type": "bubbles"}
+{"input": "what makes all that fizz", "output": "", "type": "bubbles"}
+{"input": "bubble patrol reporting in", "output": "", "type": "bubbles"}
+{"input": "i can barely see you through this glass", "output": "", "type": "glass"}
+{"input": "did you leave a mark on the pane", "output": "", "type": "glass"}
+{"input": "please don't climb the glass again", "output": "", "type": "glass"}
+{"input": "the glass keeps reflecting my face", "output": "", "type": "glass"}
+{"input": "is the tank front scratched up", "output": "", "type": "glass"}
+{"input": "there's a smudge right by your corner", "output": "", "type": "glass"}
+{"input": "who moved my favorite rock", "output": "", "type": "environment"}
+{"input": "the layout of the tank looks different", "output": "", "type": "environment"}
+{"input": "is your little cave still comfortable", "output": "", "type": "environment"}
+{"input": "there's sand everywhere today", "output": "", "type": "environment"}
+{"input": "did the plants get trimmed", "output": "", "type": "environment"}
+{"input": "your neighborhood looks crowded", "output": "", "type": "environment"}
+{"input": "you certainly get around in there", "output": "", "type": "movement"}
+{"input": "why did you bolt when I walked by", "output": "", "type": "movement"}
+{"input": "are you patrolling the whole tank", "output": "", "type": "movement"}
+{"input": "slow down, i can't keep up", "output": "", "type": "movement"}
+{"input": "come here, i'm not going to hurt you", "output": "", "type": "movement"}
+{"input": "you disappeared behind the rock again", "output": "", "type": "movement"}
+{"input": "the lamp is way too intense tonight", "output": "", "type": "light"}
+{"input": "i turned the lights down for you", "output": "", "type": "light"}
+{"input": "is the sun coming through the window", "output": "", "type": "light"}
+{"input": "everything is shadowy in your corner", "output": "", "type": "light"}
+{"input": "did someone leave the tank light on", "output": "", "type": "light"}
+{"input": "it's bright enough to read in there", "output": "", "type": "light"}
+{"input": "that shell is a startling shade of red", "output": "", "type": "color"}
+{"input": "you look different in this light", "output": "", "type": "color"}
+{"input": "is your natural color orange or brown", "output": "", "type": "color"}
+{"input": "the new coral is bright pink", "output": "", "type": "color"}
+{"input": "you match the gravel surprisingly well", "output": "", "type": "color"}
+{"input": "i've never seen a crab that color", "output": "", "type": "color"}
+{"input": "do you hear the refrigerator humming", "output": "", "type": "sound"}
+{"input": "that clicking is coming from your tank", "output": "", "type": "sound"}
+{"input": "the filter sounds quieter today", "output": "", "type": "sound"}
+{"input": "someone was tapping on the glass earlier", "output": "", "type": "sound"}
+{"input": "the room is unusually silent", "output": "", "type": "sound"}
+{"input": "what was that little chirp", "output": "", "type": "sound"}
+{"input": "the whole shelf rattled just now", "output": "", "type": "noise"}
+{"input": "was that a clap of thunder", "output": "", "type": "noise"}
+{"input": "i dropped a book and nearly jumped", "output": "", "type": "noise"}
+{"input": "the construction outside is relentless", "output": "", "type": "noise"}
+{"input": "something hit the tank lid", "output": "", "type": "noise"}
+{"input": "that vibration came from the floor", "output": "", "type": "noise"}
+{"input": "you seem off your game today", "output": "", "type": "state"}
+{"input": "how's your general mood lately", "output": "", "type": "state"}
+{"input": "i'm having a rough one myself", "output": "", "type": "state"}
+{"input": "are you feeling better than yesterday", "output": "", "type": "state"}
+{"input": "everything alright back there", "output": "", "type": "state"}
+{"input": "you're awfully quiet", "output": "", "type": "state"}
+{"input": "how long can you stay submerged", "output": "", "type": "breathing"}
+{"input": "do your gills ever get tired", "output": "", "type": "breathing"}
+{"input": "i worry about the low water level", "output": "", "type": "breathing"}
+{"input": "can you manage without a bubble nest", "output": "", "type": "breathing"}
+{"input": "are you okay breathing in there", "output": "", "type": "breathing"}
+{"input": "do crabs need to surface at all", "output": "", "type": "breathing"}
+{"input": "the heater quit during the night", "output": "", "type": "temp_cold"}
+{"input": "this tank feels like an ice bath", "output": "", "type": "temp_cold"}
+{"input": "my hands are cold just looking at it", "output": "", "type": "temp_cold"}
+{"input": "is there a warmer spot in there", "output": "", "type": "temp_cold"}
+{"input": "winter really got to this room", "output": "", "type": "temp_cold"}
+{"input": "the water thermometer is low", "output": "", "type": "temp_cold"}
+{"input": "the sun has been baking this tank all afternoon", "output": "", "type": "temp_hot"}
+{"input": "i think the heater is stuck again", "output": "", "type": "temp_hot"}
+{"input": "it's sweltering in your little world", "output": "", "type": "temp_hot"}
+{"input": "can you move somewhere cooler", "output": "", "type": "temp_hot"}
+{"input": "the water feels too warm to me", "output": "", "type": "temp_hot"}
+{"input": "turn that lamp down before you cook", "output": "", "type": "temp_hot"}
+{"input": "the house is finally quiet", "output": "", "type": "night"}
+{"input": "are you still awake at this hour", "output": "", "type": "night"}
+{"input": "i'm heading to bed, night crab", "output": "", "type": "night"}
+{"input": "the moon is shining right into the tank", "output": "", "type": "night"}
+{"input": "do you rest when the lights go out", "output": "", "type": "night"}
+{"input": "everything looks different after dark", "output": "", "type": "night"}
+{"input": "i have nothing specific to say, talk to me", "output": "", "type": "misc"}
+{"input": "surprise me with a sentence", "output": "", "type": "misc"}
+{"input": "what's the strangest thing you've seen", "output": "", "type": "misc"}
+{"input": "do you ever get curious about me", "output": "", "type": "misc"}
+{"input": "tell me a tiny secret", "output": "", "type": "misc"}
+{"input": "let's just chat for a minute", "output": "", "type": "misc"}
+{"input": "could you summarize the last election for me", "output": "", "type": "confused"}
+{"input": "i need help with my mortgage paperwork", "output": "", "type": "confused"}
+{"input": "what's the difference between a virus and bacteria", "output": "", "type": "confused"}
+{"input": "who is going to win the next election", "output": "", "type": "confused"}
+{"input": "translate this paragraph into german", "output": "", "type": "confused"}
+{"input": "what's the best way to invest a small amount", "output": "", "type": "confused"}
+{"input": "are you admiring yourself again", "output": "", "type": "reflection"}
+{"input": "that's your own face in the glass", "output": "", "type": "reflection"}
+{"input": "do you wonder who you really are", "output": "", "type": "reflection"}
+{"input": "is there a second crab staring back", "output": "", "type": "reflection"}
+{"input": "you've been looking in the mirror a lot", "output": "", "type": "reflection"}
+{"input": "does your reflection talk back", "output": "", "type": "reflection"}

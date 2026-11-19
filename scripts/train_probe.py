@@ -23,7 +23,6 @@ import torch.nn.functional as F
 from tokenizers import Tokenizer
 
 from hermitlm.config import HermitConfig
-from hermitlm.settings import TRAIN_DEVICE
 from hermitlm.tools.artifacts import artifact_metadata
 from hermitlm.tools.calibration import fit_temperature
 from hermitlm.tools.decision_model import FINE21_ORDER, FINE_TO_COARSE, OPTION_LETTERS
@@ -95,7 +94,9 @@ def main() -> None:
     parser.add_argument("--per-fine", type=int, default=400)
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--device", default=TRAIN_DEVICE)
+    # Probe fitting is frozen-model inference; Intel XPU crashes intermittently
+    # with Level Zero resource errors across thousands of small forwards.
+    parser.add_argument("--device", default="cpu")
     parser.add_argument("--out", default="checkpoints/decision_probe.pt")
     args = parser.parse_args()
 

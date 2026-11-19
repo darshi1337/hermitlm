@@ -19,7 +19,6 @@ from tokenizers import Tokenizer
 from train_probe import extract_hidden, train_head
 
 from hermitlm.config import HermitConfig
-from hermitlm.settings import TRAIN_DEVICE
 from hermitlm.tools.artifacts import artifact_metadata
 from hermitlm.training.model import HermitLM
 
@@ -34,7 +33,8 @@ def main() -> None:
     parser.add_argument("--eval", default="data/tool_eval.jsonl")
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--device", default=TRAIN_DEVICE)
+    # Probe fitting is frozen-model inference; CPU avoids flaky XPU crashes.
+    parser.add_argument("--device", default="cpu")
     parser.add_argument("--out", default="checkpoints/decision_tool_probe.pt")
     args = parser.parse_args()
 

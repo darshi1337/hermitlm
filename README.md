@@ -112,7 +112,7 @@ Latest comparison (persona measured over 10 sampled generations, so ±0.05 noise
 
 | Checkpoint | Perplexity | Persona reward |
 | --- | --- | --- |
-| SFT (`best_model.pt`) | 1.928 | 0.566 |
+| SFT (`best_model.pt`) | 1.931 | 0.495 |
 | PPO (`ppo_final.pt`) | 1.992 | **0.648** |
 | DPO (`dpo_final.pt`, margin filter) | 1.930 | 0.449 |
 
@@ -159,11 +159,20 @@ calibrated-minus-uncalibrated table. Head files carry schema version 2 and SHA-2
 the checkpoint and tokenizer. Loading a head after a retrain raises an error instead of
 scoring with stale weights.
 
-The 21-way head (`FINE21_ORDER` in `hermitlm/tools/decision_model.py`) reaches accuracy 0.9955
-and macro F1 0.9929 on the same split. Both numbers flatter the model. The persona data is
-rigidly templated, so template eval is near trivial. On 20 hand-written natural paraphrases the
-7-way head scores 14/20. Misses collapse into `f` (condition) at full confidence. Plain paraphrase
-coverage is the next data gap, not a bigger head.
+The 21-way head (`FINE21_ORDER` in `hermitlm/tools/decision_model.py`) reaches accuracy 0.9932
+and macro F1 0.9930 on the template split. Those numbers flatter the model. The training data now
+includes ~4,200 hand-written natural paraphrases, but the only honest measure is the 126-row
+hand-written held-out set in `data/human_eval.jsonl`:
+
+```
+python scripts/eval_decision.py --eval data/human_eval.jsonl --method probe \
+  --max-n 126 --cal-n 60 --out-dir eval_out/human
+```
+
+Latest result: **7-way accuracy 0.6212** (macro F1 0.6075) and **21-way accuracy 0.4848**
+(macro F1 0.4199). Calibration temperature fitted on only 60 rows inflates confidence poorly here;
+treat this as a lower bound. The gap from 0.9998 on templates is the real generalization gap, and
+it is the next thing to fix — not a bigger head.
 
 Training batches right-pad to match `dataset.collate_fn`. Learned positions stay in distribution
 only that way. Left padding silently shifts positions and once cost 30 points of accuracy here.
@@ -174,8 +183,10 @@ only that way. Left padding silently shifts positions and once cost 30 points of
 queries) to `data/tool_train.jsonl` / `data/tool_eval.jsonl`. `scripts/train_tool_probe.py` trains
 a 4-way head (math/web/faq/chat) into `checkpoints/decision_tool_probe.pt`. Routing order is
 tag, then keywords (93% precise when they fire), then the probe on the residue, then confused
-escalation. Scores on the 80 hand-authored eval queries after the latest retrain: probe 0.6125
-(math 0.90, web 0.15, faq 0.80, chat 0.60).
+escalation. Training now includes 50 extra natural web queries and 28 hard negatives (chat/FAQ
+messages containing web trigger words). Scores on the 80 hand-authored eval queries after the
+latest retrain: probe **0.7250** (math 0.80, web 0.65, faq 0.60, chat 0.85), up from 0.6125 —
+the web class went from 0.15 to 0.65.
 
 ## Reply quality and analytics
 
@@ -272,7 +283,7 @@ Status on 2026-10-15: the repo holds all 8 files (78.4 MB total). The model card
 conda create -n hermit -c pytorch -c conda-forge python=3.11 cpuonly pytorch tokenizers onnxruntime
 conda activate hermit
 pip install -e . -r requirements.txt
-pytest tests/          # 65 passed, 2 skipped
+pytest tests/          # 68 passed, 2 skipped
 ruff check .           # clean
 # optional local type check (not part of CI): basedpyright
 ```

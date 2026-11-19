@@ -49,16 +49,18 @@ Hermit> it is now dark. i will remain still. i have checked this 18 times.
 
 | Field | Value |
 | --- | --- |
-| Parameters | 8.15M |
-| Layers | 6 |
-| Hidden dim | 320 |
-| Heads | 8 |
-| FFN | 800, SwiGLU |
-| Vocab | tokenizer-defined BPE |
+| Parameters | 8.45M (8,453,120) |
+| Layers | 6 transformer blocks |
+| Hidden dim (`d_model`) | 320 |
+| Attention heads | 8 (40 dims per head) |
+| FFN | 800 hidden, SwiGLU / SiLU |
+| Vocabulary | 3,774 byte-level BPE tokens |
 | Max sequence | 512 tokens |
-| Norm | LayerNorm |
+| Norm | LayerNorm (pre-norm residual blocks) |
 | Position | Learned embeddings |
-| LM head | Weight-tied with embeddings |
+| LM head | Weight-tied with token embeddings |
+| Dropout | 0.1 (disabled during probe fitting) |
+| Web artifact | uint8 dynamic quantization (~9.8 MB vs 38.7 MB fp32) |
 
 Small causal transformer. Learned positions, standard attention, LayerNorm, weight tying, and a compact SwiGLU feed-forward block.
 

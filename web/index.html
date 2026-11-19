@@ -41,15 +41,12 @@
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body {
-    margin: 0; background: var(--bg); color: var(--text);
+    margin: 0; background: transparent; color: var(--text);
     font-family: var(--font); overflow: hidden; display: flex;
     transition: background 0.3s ease, color 0.3s ease;
   }
+  html { background: var(--bg); }
   #beach-canvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; display: block; pointer-events: none; }
-  .shore-glow {
-    position: fixed; left: 0; right: 0; bottom: 0; height: 34vh; z-index: 0; pointer-events: none;
-    background: linear-gradient(to top, rgba(14,116,144,0.16), transparent 75%);
-  }
   .rail {
     width: 244px; flex: none; height: 100dvh; padding: 18px 14px;
     background: var(--card); backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
@@ -271,7 +268,6 @@
 </head>
 <body>
   <canvas id="beach-canvas" aria-hidden="true"></canvas>
-  <div class="shore-glow" aria-hidden="true"></div>
 
   <aside class="rail">
     <div class="rail-brand">

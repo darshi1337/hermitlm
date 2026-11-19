@@ -10,42 +10,82 @@
 <style>
   :root {
     color-scheme: light;
-    --bg: #fafaf9;
-    --card: #ffffff;
-    --border: #e7e5e0;
-    --text: #1c1917;
-    --muted: #78716c;
-    --faint: #a8a29e;
-    --accent: #c2410c;
-    --accent-soft: #fff3ec;
-    --radius: 14px;
+    --bg: #f6fbff;
+    --card: rgba(255, 255, 255, 0.78);
+    --card-solid: #ffffff;
+    --border: rgba(14, 116, 144, 0.16);
+    --text: #0f172a;
+    --muted: #5b7183;
+    --faint: #8ea4b5;
+    --accent: #0e7490;
+    --accent-2: #0284c7;
+    --accent-soft: rgba(14, 116, 144, 0.10);
+    --radius: 16px;
     --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    --glass: blur(18px) saturate(140%);
   }
   [data-theme="dark"] {
     color-scheme: dark;
-    --bg: #0c0a09;
-    --card: #1c1917;
-    --border: #2e2a27;
-    --text: #f5f4f3;
-    --muted: #a8a29e;
-    --faint: #78716c;
-    --accent: #fb923c;
-    --accent-soft: #2a1a10;
+    --bg: #07131d;
+    --card: rgba(15, 30, 43, 0.72);
+    --card-solid: #0f1e2b;
+    --border: rgba(125, 211, 252, 0.16);
+    --text: #e6f4fb;
+    --muted: #9fb6c6;
+    --faint: #6d8899;
+    --accent: #38bdf8;
+    --accent-2: #22d3ee;
+    --accent-soft: rgba(56, 189, 248, 0.12);
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
-    font-family: var(--font); overflow: hidden;
-    transition: background 0.25s ease, color 0.25s ease;
+    font-family: var(--font); overflow: hidden; display: flex;
+    transition: background 0.3s ease, color 0.3s ease;
   }
-  .shell { height: 100dvh; display: flex; flex-direction: column; align-items: center; }
+  #beach-canvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; display: block; pointer-events: none; }
+  .shore-glow {
+    position: fixed; left: 0; right: 0; bottom: 0; height: 34vh; z-index: 0; pointer-events: none;
+    background: linear-gradient(to top, rgba(14,116,144,0.16), transparent 75%);
+  }
+  .rail {
+    width: 244px; flex: none; height: 100dvh; padding: 18px 14px;
+    background: var(--card); backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+    border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px;
+    z-index: 3;
+  }
+  .rail-brand { display: flex; align-items: center; gap: 10px; padding: 4px 6px 10px; }
+  .rail-brand img { width: 36px; height: 36px; border-radius: 11px; object-fit: cover; border: 1px solid var(--border); }
+  .rail-brand b { display: block; font-size: 0.98rem; }
+  .rail-brand small { display: block; color: var(--muted); font-size: 0.7rem; }
+  .new-chat {
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    padding: 10px 12px; border-radius: 12px; cursor: pointer;
+    background: var(--accent); color: #fff; border: none; font: inherit; font-size: 0.86rem;
+    box-shadow: 0 6px 18px rgba(14,116,144,0.22);
+  }
+  .new-chat:hover { background: var(--accent-2); }
+  .new-chat svg { width: 16px; height: 16px; }
+  .rail-section { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--faint); padding: 10px 8px 2px; }
+  .rail-note {
+    margin-top: auto; font-size: 0.72rem; color: var(--muted); line-height: 1.5;
+    padding: 12px; border-radius: 12px; background: var(--accent-soft);
+  }
+  .rail-note b { color: var(--accent); }
+  .shell { flex: 1; min-width: 0; height: 100dvh; display: flex; flex-direction: column; align-items: center; position: relative; z-index: 1; }
 
   header {
-    width: 100%; max-width: 720px;
+    width: 100%; max-width: 820px;
     display: flex; align-items: center; gap: 10px;
     padding: 14px 20px 10px;
+  }
+  header > * { position: relative; }
+  .top-glass {
+    position: absolute; inset: 0 12px; z-index: -1; border-radius: 16px;
+    background: var(--card); border: 1px solid var(--border);
+    backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
   }
   .brand { display: flex; align-items: center; gap: 10px; margin-right: auto; }
   .brand img {
@@ -67,27 +107,36 @@
   }
   .icon-btn:hover { color: var(--text); }
   .icon-btn svg { width: 16px; height: 16px; }
+  .icon-btn.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  .water-icon { animation: water-rock 3.2s ease-in-out infinite; }
+  @keyframes water-rock { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(7deg); } }
 
   .content {
-    width: 100%; max-width: 720px; flex: 1; min-height: 0;
+    width: 100%; max-width: 820px; flex: 1; min-height: 0;
     display: flex; flex-direction: column; padding: 0 20px;
   }
 
-  .hero { text-align: center; margin: auto 0; padding: 16px 0; }
+  .hero {
+    text-align: center; margin: auto 0; padding: 30px 26px 26px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 24px;
+    backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+    box-shadow: 0 20px 60px rgba(14, 116, 144, 0.12);
+  }
   .content.chatting .hero { display: none; }
   .hero img {
-    width: 150px; height: auto; display: block; margin: 0 auto;
-    background: #fff; padding: 8px 8px 22px; border-radius: 6px;
+    width: 132px; height: auto; display: block; margin: 0 auto;
+    background: linear-gradient(180deg, #ffffff, #e0f2fe);
+    padding: 10px 10px 24px; border-radius: 14px;
     border: 1px solid var(--border);
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+    box-shadow: 0 14px 30px rgba(14, 116, 144, 0.18);
     transform: rotate(-2.5deg);
   }
   .hero h1 {
-    margin: 14px 0 0; font-size: 1.7rem; letter-spacing: -0.01em;
-    background: linear-gradient(120deg, var(--text) 40%, var(--accent));
+    margin: 18px 0 0; font-size: 2rem; letter-spacing: -0.025em;
+    background: linear-gradient(120deg, var(--text) 25%, var(--accent) 70%, var(--accent-2));
     -webkit-background-clip: text; background-clip: text; color: transparent;
   }
-  .hero p { color: var(--muted); margin: 6px 0 0; font-size: 0.9rem; }
+  .hero p { color: var(--muted); margin: 8px 0 0; font-size: 0.92rem; }
   .chips { display: flex; gap: 8px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
   .chip {
     cursor: pointer; font-size: 0.82rem; color: var(--text);
@@ -134,13 +183,15 @@
   .dots i:nth-child(3) { animation-delay: 0.3s; }
   @keyframes bounce { 0%, 100% { opacity: 0.4; } 40% { opacity: 1; } }
 
-  .composer { padding: 8px 0 calc(14px + env(safe-area-inset-bottom)); }
+  .composer { padding: 10px 0 calc(16px + env(safe-area-inset-bottom)); }
   form {
     display: flex; align-items: flex-end; gap: 8px;
     background: var(--card); border: 1px solid var(--border);
-    border-radius: 20px; padding: 7px 7px 7px 16px;
+    border-radius: 22px; padding: 8px 8px 8px 18px;
+    backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+    box-shadow: 0 12px 40px rgba(14, 116, 144, 0.14);
   }
-  form:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  form:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft), 0 12px 40px rgba(14,116,144,0.18); }
   .mic-btn {
     flex: none; width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
     border: none; background: transparent; color: var(--faint);
@@ -208,21 +259,48 @@
   .controls-grid button { font: inherit; cursor: pointer; background: var(--card); border: 1px solid var(--border); border-radius: 7px; padding: 3px 10px; color: var(--text); }
   .switch { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
 
+  @media (max-width: 900px) {
+    .rail { display: none; }
+  }
   @media (max-width: 560px) {
     .msg { max-width: 92%; }
     .brand small, .hint { display: none; }
+    .hero { padding: 24px 18px; }
+    .hero h1 { font-size: 1.7rem; }
   }
 </style>
 </head>
 <body>
+  <canvas id="beach-canvas" aria-hidden="true"></canvas>
+  <div class="shore-glow" aria-hidden="true"></div>
+
+  <aside class="rail">
+    <div class="rail-brand">
+      <img src="./assets/hermit_talk.gif" alt="">
+      <div><b>Hermit</b><small>beach-side chat</small></div>
+    </div>
+    <button class="new-chat" id="new-chat" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      New chat
+    </button>
+    <div class="rail-section">About</div>
+    <div class="rail-note">
+      An <b>8M-parameter</b> crab that runs entirely in your browser. The water below is drawn live with canvas; turn on <b>ambient sound</b> to hear the shore.
+    </div>
+  </aside>
+
   <div class="shell">
     <header>
+      <div class="top-glass" aria-hidden="true"></div>
       <div class="brand">
         <img src="./assets/hermit_talk.gif" alt="Hermit crab">
         <div><b>Hermit</b><small>8M params · in-browser</small></div>
       </div>
       <span class="pill loading" id="status">loading…</span>
       <span id="persona-badge"></span>
+      <button class="icon-btn" id="sound" type="button" title="Toggle shore sounds" aria-pressed="false">
+        <svg class="water-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/><path d="M2 20c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/><path d="M12 3c2.2 2.6 4 4.8 4 7a4 4 0 0 1-8 0c0-2.2 1.8-4.4 4-7z"/></svg>
+      </button>
       <button class="icon-btn" id="theme" title="Toggle dark mode" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
       </button>
@@ -424,12 +502,16 @@ function loadHistory() {
   } catch (e) {}
 }
 
-document.getElementById("clear").addEventListener("click", () => {
+function clearChat() {
   log.innerHTML = "";
   content.classList.add("empty");
   content.classList.remove("chatting");
   try { localStorage.removeItem("hermit-history"); } catch (e) {}
-});
+  for (const key of Object.keys(sessionCounts)) delete sessionCounts[key];
+  if (document.getElementById("session-stats")) document.getElementById("session-stats").textContent = "";
+}
+document.getElementById("clear").addEventListener("click", clearChat);
+document.getElementById("new-chat").addEventListener("click", clearChat);
 
 document.getElementById("chips").addEventListener("click", (e) => {
   const chip = e.target.closest(".chip");
@@ -795,6 +877,182 @@ input.addEventListener("keydown", (e) => {
 
 init();
 loadHistory();
+</script>
+
+<script>
+(() => {
+  "use strict";
+  const canvas = document.getElementById("beach-canvas");
+  const soundBtn = document.getElementById("sound");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let W = 0, H = 0, texture = null, dark = false;
+  let audio = null, noiseBuffer = null, ambientGain = null, splashTimer = null, soundOn = false;
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    canvas.style.width = W + "px"; canvas.style.height = H + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    dark = document.documentElement.dataset.theme === "dark";
+    texture = buildTexture();
+    draw(reduceMotion ? 0 : performance.now() / 1000);
+  }
+
+  function buildTexture() {
+    const off = document.createElement("canvas");
+    off.width = Math.max(1, Math.round(W)); off.height = Math.max(1, Math.round(H));
+    const c = off.getContext("2d");
+    const bg = c.createLinearGradient(0, 0, 0, H);
+    if (dark) { bg.addColorStop(0, "#07131d"); bg.addColorStop(1, "#0b2b3d"); }
+    else { bg.addColorStop(0, "#f8fcff"); bg.addColorStop(0.7, "#eef8ff"); bg.addColorStop(1, "#dcefff"); }
+    c.fillStyle = bg; c.fillRect(0, 0, W, H);
+
+    c.strokeStyle = dark ? "rgba(125,211,252,0.16)" : "rgba(14,116,144,0.20)";
+    c.lineWidth = 1;
+    const rows = Math.max(20, Math.floor(H / 9));
+    for (let i = 0; i < rows; i++) {
+      const t = i / (rows - 1);
+      const base = t * H;
+      const k1 = 2 + Math.floor(t * 5), k2 = 5 + Math.floor(t * 9);
+      const a1 = 2 + 9 * t, a2 = 1 + 4 * t, a3 = 3 + 11 * t;
+      c.beginPath();
+      for (let x = 0; x <= W; x += 6) {
+        const p = (x / Math.max(1, W)) * Math.PI * 2;
+        const y = base + Math.sin(p * k1 + i * 0.7) * a1
+                       + Math.sin(p * k2 + i * 0.31) * a2
+                       + Math.sin(p + i * 0.13) * a3;
+        if (x === 0) c.moveTo(x, y); else c.lineTo(x, y);
+      }
+      c.stroke();
+    }
+    // A few denser swirls near the shore, like the reference illustration.
+    c.strokeStyle = dark ? "rgba(56,189,248,0.20)" : "rgba(3,105,161,0.26)";
+    for (let s = 0; s < 9; s++) {
+      const cx = W * (0.06 + 0.09 * s);
+      const cy = H * (0.72 + 0.03 * (s % 4));
+      const r0 = 18 + (s % 3) * 9;
+      for (let ring = 1; ring <= 5; ring++) {
+        c.beginPath();
+        const r = r0 * ring * 0.8;
+        for (let a = 0; a <= 64; a++) {
+          const ang = (a / 64) * Math.PI * 2;
+          const rr = r * (1 + 0.16 * Math.sin(ang * 5 + s + ring));
+          const x = cx + Math.cos(ang) * rr, y = cy + Math.sin(ang) * rr * 0.55;
+          if (a === 0) c.moveTo(x, y); else c.lineTo(x, y);
+        }
+        c.stroke();
+      }
+    }
+    return off;
+  }
+
+  function drawShore(time) {
+    const layers = dark
+      ? ["rgba(2,132,199,0.16)", "rgba(3,105,161,0.14)", "rgba(8,145,178,0.12)"]
+      : ["rgba(2,132,199,0.10)", "rgba(3,105,161,0.09)", "rgba(14,165,233,0.08)"];
+    for (let l = 0; l < layers.length; l++) {
+      const base = H * (0.80 + l * 0.055);
+      const amp = 9 + l * 6;
+      const speed = 0.55 + l * 0.22;
+      ctx.beginPath(); ctx.moveTo(0, H);
+      for (let x = 0; x <= W; x += 8) {
+        const y = base + Math.sin(x / 90 + time * speed + l) * amp
+                       + Math.sin(x / 37 - time * speed * 1.3) * amp * 0.35;
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(W, H); ctx.closePath();
+      ctx.fillStyle = layers[l]; ctx.fill();
+      ctx.strokeStyle = dark ? "rgba(224,242,254,0.32)" : "rgba(255,255,255,0.80)";
+      ctx.lineWidth = 1.4; ctx.stroke();
+    }
+  }
+
+  function draw(time) {
+    if (!texture) return;
+    ctx.clearRect(0, 0, W, H);
+    const offset = reduceMotion ? 0 : (time * 13) % Math.max(1, W);
+    ctx.drawImage(texture, -offset, 0, W, H);
+    ctx.drawImage(texture, W - offset, 0, W, H);
+    drawShore(time);
+  }
+
+  function loop(now) { draw(now / 1000); requestAnimationFrame(loop); }
+  if (!reduceMotion) requestAnimationFrame(loop);
+
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(resize, 120);
+  });
+  new MutationObserver(() => setTimeout(resize, 20)).observe(document.documentElement, {
+    attributes: true, attributeFilter: ["data-theme"]
+  });
+
+  // --- Synthesized shore audio (Web Audio API, no files) ---
+  function ensureAudio() {
+    if (audio) return true;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return false;
+    audio = new AC();
+    noiseBuffer = audio.createBuffer(1, audio.sampleRate * 2, audio.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < data.length; i++) {
+      const white = Math.random() * 2 - 1;
+      last = (last + 0.02 * white) / 1.02;
+      data[i] = Math.max(-1, Math.min(1, last * 3.2));
+    }
+    const src = audio.createBufferSource();
+    src.buffer = noiseBuffer; src.loop = true;
+    const lp = audio.createBiquadFilter();
+    lp.type = "lowpass"; lp.frequency.value = 620;
+    ambientGain = audio.createGain(); ambientGain.gain.value = 0;
+    src.connect(lp).connect(ambientGain).connect(audio.destination);
+    src.start();
+    return true;
+  }
+
+  function splash() {
+    if (!soundOn || !audio || !noiseBuffer) return;
+    const now = audio.currentTime;
+    const src = audio.createBufferSource(); src.buffer = noiseBuffer;
+    const bp = audio.createBiquadFilter();
+    bp.type = "bandpass"; bp.Q.value = 0.6;
+    bp.frequency.setValueAtTime(1100, now);
+    bp.frequency.exponentialRampToValueAtTime(320, now + 0.75);
+    const g = audio.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.10, now + 0.07);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.9);
+    src.connect(bp).connect(g).connect(audio.destination);
+    src.start(now); src.stop(now + 1);
+    scheduleSplash();
+  }
+
+  function scheduleSplash() {
+    clearTimeout(splashTimer);
+    if (!soundOn) return;
+    splashTimer = setTimeout(splash, 3200 + Math.random() * 2200);
+  }
+
+  if (soundBtn) {
+    soundBtn.addEventListener("click", async () => {
+      if (!ensureAudio()) return;
+      if (audio.state === "suspended") { try { await audio.resume(); } catch (e) {} }
+      soundOn = !soundOn;
+      ambientGain.gain.setTargetAtTime(soundOn ? 0.035 : 0, audio.currentTime, 0.35);
+      soundBtn.classList.toggle("active", soundOn);
+      soundBtn.setAttribute("aria-pressed", String(soundOn));
+      soundBtn.title = soundOn ? "Mute shore sounds" : "Toggle shore sounds";
+      if (soundOn) scheduleSplash(); else clearTimeout(splashTimer);
+    });
+  }
+
+  resize();
+})();
 </script>
 </body>
 </html>

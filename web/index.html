@@ -118,9 +118,8 @@
 
   .hero {
     text-align: center; margin: auto 0; padding: 30px 26px 26px;
-    background: var(--card); border: 1px solid var(--border); border-radius: 24px;
-    backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
-    box-shadow: 0 20px 60px rgba(14, 116, 144, 0.12);
+    background: transparent; border: none; border-radius: 24px;
+    box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none;
   }
   .content.chatting .hero { display: none; }
   .hero img {
@@ -906,13 +905,13 @@ loadHistory();
     off.width = Math.max(1, Math.round(W)); off.height = Math.max(1, Math.round(H));
     const c = off.getContext("2d");
     const bg = c.createLinearGradient(0, 0, 0, H);
-    if (dark) { bg.addColorStop(0, "#07131d"); bg.addColorStop(1, "#0b2b3d"); }
-    else { bg.addColorStop(0, "#f8fcff"); bg.addColorStop(0.7, "#eef8ff"); bg.addColorStop(1, "#dcefff"); }
+    if (dark) { bg.addColorStop(0, "#0a1b28"); bg.addColorStop(1, "#103b52"); }
+    else { bg.addColorStop(0, "#f8fcff"); bg.addColorStop(0.7, "#eaf6ff"); bg.addColorStop(1, "#d6ecfb"); }
     c.fillStyle = bg; c.fillRect(0, 0, W, H);
 
-    c.strokeStyle = dark ? "rgba(125,211,252,0.16)" : "rgba(14,116,144,0.20)";
-    c.lineWidth = 1;
-    const rows = Math.max(20, Math.floor(H / 9));
+    c.strokeStyle = dark ? "rgba(125,211,252,0.38)" : "rgba(14,116,144,0.34)";
+    c.lineWidth = 1.25;
+    const rows = Math.max(30, Math.floor(H / 6));
     for (let i = 0; i < rows; i++) {
       const t = i / (rows - 1);
       const base = t * H;
@@ -929,7 +928,7 @@ loadHistory();
       c.stroke();
     }
     // A few denser swirls near the shore, like the reference illustration.
-    c.strokeStyle = dark ? "rgba(56,189,248,0.20)" : "rgba(3,105,161,0.26)";
+    c.strokeStyle = dark ? "rgba(56,189,248,0.42)" : "rgba(3,105,161,0.42)";
     for (let s = 0; s < 9; s++) {
       const cx = W * (0.06 + 0.09 * s);
       const cy = H * (0.72 + 0.03 * (s % 4));
@@ -951,8 +950,8 @@ loadHistory();
 
   function drawShore(time) {
     const layers = dark
-      ? ["rgba(2,132,199,0.16)", "rgba(3,105,161,0.14)", "rgba(8,145,178,0.12)"]
-      : ["rgba(2,132,199,0.10)", "rgba(3,105,161,0.09)", "rgba(14,165,233,0.08)"];
+      ? ["rgba(2,132,199,0.26)", "rgba(3,105,161,0.22)", "rgba(8,145,178,0.18)"]
+      : ["rgba(2,132,199,0.17)", "rgba(3,105,161,0.14)", "rgba(14,165,233,0.11)"];
     for (let l = 0; l < layers.length; l++) {
       const base = H * (0.80 + l * 0.055);
       const amp = 9 + l * 6;
@@ -965,8 +964,8 @@ loadHistory();
       }
       ctx.lineTo(W, H); ctx.closePath();
       ctx.fillStyle = layers[l]; ctx.fill();
-      ctx.strokeStyle = dark ? "rgba(224,242,254,0.32)" : "rgba(255,255,255,0.80)";
-      ctx.lineWidth = 1.4; ctx.stroke();
+      ctx.strokeStyle = dark ? "rgba(224,242,254,0.55)" : "rgba(255,255,255,0.95)";
+      ctx.lineWidth = 1.8; ctx.stroke();
     }
   }
 

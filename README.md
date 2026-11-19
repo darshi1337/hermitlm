@@ -64,6 +64,25 @@ Hermit> it is now dark. i will remain still. i have checked this 18 times.
 
 Small causal transformer. Learned positions, standard attention, LayerNorm, weight tying, and a compact SwiGLU feed-forward block.
 
+### How the 8.45M count is derived
+
+`HermitLM.param_count()` counts unique parameters (the tied `lm_head` is not counted twice):
+
+| Component | Calculation | Parameters |
+| --- | --- | --- |
+| Token embedding | 3,774 × 320 | 1,207,680 |
+| Position embedding | 512 × 320 | 163,840 |
+| 6 × attention QKV | 6 × (320 × 960 + 960) | 1,848,960 |
+| 6 × attention output | 6 × (320 × 320 + 320) | 616,320 |
+| 6 × SwiGLU FFN | 6 × (3 × 320 × 800) | 4,608,000 |
+| 6 × block LayerNorms | 6 × (2 × 320 × 2) | 7,680 |
+| Final LayerNorm | 2 × 320 | 640 |
+| LM head | tied to token embedding | 0 |
+| **Total** | | **8,453,120** |
+
+The raw checkpoint `state_dict` sums to 9,660,800 because it stores `lm_head.weight` a second
+time; weight tying removes that duplicate 1,207,680-parameter matrix.
+
 # Features
 - Runs fully client-side in the browser (ONNX + onnxruntime-web, no backend server)
 - Quantized web model (`model.quant.onnx`, ~9MB vs ~36MB fp32) with automatic fallback

@@ -11,45 +11,30 @@
   :root {
     color-scheme: light;
     --bg: #f6fbff;
-    --card: rgba(255, 255, 255, 0.78);
+    --card: rgba(255, 255, 255, 0.10);
     --card-solid: #ffffff;
-    --border: rgba(14, 116, 144, 0.16);
+    --border: rgba(14, 116, 144, 0.20);
     --text: #0f172a;
-    --muted: #5b7183;
-    --faint: #8ea4b5;
+    --muted: #46647a;
+    --faint: #6f8ba0;
     --accent: #0e7490;
     --accent-2: #0284c7;
     --accent-soft: rgba(14, 116, 144, 0.10);
     --radius: 16px;
     --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-    --glass: blur(18px) saturate(140%);
-  }
-  [data-theme="dark"] {
-    color-scheme: dark;
-    --bg: #07131d;
-    --card: rgba(15, 30, 43, 0.72);
-    --card-solid: #0f1e2b;
-    --border: rgba(125, 211, 252, 0.16);
-    --text: #e6f4fb;
-    --muted: #9fb6c6;
-    --faint: #6d8899;
-    --accent: #38bdf8;
-    --accent-2: #22d3ee;
-    --accent-soft: rgba(56, 189, 248, 0.12);
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body {
     margin: 0; background: transparent; color: var(--text);
     font-family: var(--font); overflow: hidden; display: flex;
-    transition: background 0.3s ease, color 0.3s ease;
   }
-  html { background: var(--bg); }
+  html { background: #eaf6ff; }
   #beach-canvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; display: block; pointer-events: none; }
   .rail {
     width: 244px; flex: none; height: 100dvh; padding: 18px 14px;
-    background: var(--card); backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+    background: transparent;
     border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px;
     z-index: 3;
   }
@@ -68,7 +53,7 @@
   .rail-section { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--faint); padding: 10px 8px 2px; }
   .rail-note {
     margin-top: auto; font-size: 0.72rem; color: var(--muted); line-height: 1.5;
-    padding: 12px; border-radius: 12px; background: var(--accent-soft);
+    padding: 12px; border-radius: 12px; background: transparent;
   }
   .rail-note b { color: var(--accent); }
   .shell { flex: 1; min-width: 0; height: 100dvh; display: flex; flex-direction: column; align-items: center; position: relative; z-index: 1; }
@@ -77,12 +62,6 @@
     width: 100%; max-width: 820px;
     display: flex; align-items: center; gap: 10px;
     padding: 14px 20px 10px;
-  }
-  header > * { position: relative; }
-  .top-glass {
-    position: absolute; inset: 0 12px; z-index: -1; border-radius: 16px;
-    background: var(--card); border: 1px solid var(--border);
-    backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
   }
   .brand { display: flex; align-items: center; gap: 10px; margin-right: auto; }
   .brand img {
@@ -99,7 +78,7 @@
   .pill.error { color: #b91c1c; background: #fef2f2; border-color: #fecaca; cursor: pointer; }
   .icon-btn {
     width: 32px; height: 32px; border-radius: 9px; cursor: pointer;
-    border: 1px solid var(--border); background: var(--card); color: var(--muted);
+    border: 1px solid var(--border); background: transparent; color: var(--muted);
     display: inline-flex; align-items: center; justify-content: center;
   }
   .icon-btn:hover { color: var(--text); }
@@ -136,7 +115,7 @@
   .chips { display: flex; gap: 8px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
   .chip {
     cursor: pointer; font-size: 0.82rem; color: var(--text);
-    background: var(--card); border: 1px solid var(--border);
+    background: transparent; border: 1px solid var(--border);
     padding: 8px 14px; border-radius: 999px;
   }
   .chip:hover { border-color: var(--accent); color: var(--accent); }
@@ -152,7 +131,7 @@
   .row.bot { justify-content: flex-start; align-items: flex-start; gap: 8px; }
   .avatar {
     flex: none; width: 28px; height: 28px; border-radius: 50%;
-    background: var(--card); border: 1px solid var(--border);
+    background: transparent; border: 1px solid var(--border);
     display: flex; align-items: center; justify-content: center; font-size: 0.95rem;
   }
   .msg { max-width: 85%; }
@@ -163,7 +142,6 @@
   .row.bot .bubble { padding: 2px 0; }
   .bubble code { font-family: var(--mono); font-size: 0.85em; background: rgba(128,120,110,0.15); padding: 1px 5px; border-radius: 5px; }
   .bubble.error { color: #b91c1c; }
-  [data-theme="dark"] .bubble.error { color: #fca5a5; }
   .meta { font-size: 0.68rem; color: var(--faint); margin-top: 4px; font-family: var(--mono); }
   .actions { display: flex; gap: 4px; margin-top: 5px; }
   .mini-btn {
@@ -182,12 +160,10 @@
   .composer { padding: 10px 0 calc(16px + env(safe-area-inset-bottom)); }
   form {
     display: flex; align-items: flex-end; gap: 8px;
-    background: var(--card); border: 1px solid var(--border);
+    background: transparent; border: 1px solid var(--border);
     border-radius: 22px; padding: 8px 8px 8px 18px;
-    backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
-    box-shadow: 0 12px 40px rgba(14, 116, 144, 0.14);
   }
-  form:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft), 0 12px 40px rgba(14,116,144,0.18); }
+  form:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
   .mic-btn {
     flex: none; width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
     border: none; background: transparent; color: var(--faint);
@@ -286,7 +262,6 @@
 
   <div class="shell">
     <header>
-      <div class="top-glass" aria-hidden="true"></div>
       <div class="brand">
         <img src="./assets/hermit_talk.gif" alt="Hermit crab">
         <div><b>Hermit</b><small>8M params · in-browser</small></div>
@@ -295,9 +270,6 @@
       <span id="persona-badge"></span>
       <button class="icon-btn" id="sound" type="button" title="Toggle shore sounds" aria-pressed="false">
         <svg class="water-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/><path d="M2 20c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/><path d="M12 3c2.2 2.6 4 4.8 4 7a4 4 0 0 1-8 0c0-2.2 1.8-4.4 4-7z"/></svg>
-      </button>
-      <button class="icon-btn" id="theme" title="Toggle dark mode" type="button">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
       </button>
       <button class="icon-btn" id="clear" title="Clear chat" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
@@ -439,18 +411,6 @@ document.addEventListener("keydown", (e) => {
     input.focus();
   }
   if (e.key === "Escape" && generating) stopFlag = true;
-});
-
-/* theme: manual toggle wins, else OS preference */
-const root = document.documentElement;
-try {
-  const saved = localStorage.getItem("hermit-theme");
-  if (saved) root.dataset.theme = saved;
-  else if (window.matchMedia("(prefers-color-scheme: dark)").matches) root.dataset.theme = "dark";
-} catch (e) { /* private mode */ }
-document.getElementById("theme").addEventListener("click", () => {
-  root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
-  try { localStorage.setItem("hermit-theme", root.dataset.theme); } catch (e) {}
 });
 
 /* smart scroll: stick only when already at the bottom */
@@ -882,16 +842,15 @@ loadHistory();
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  let W = 0, H = 0, texture = null, dark = false;
+  let W = 0, H = 0, texture = null;
   let audio = null, noiseBuffer = null, ambientGain = null, splashTimer = null, soundOn = false;
 
   function resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-    W = window.innerWidth; H = window.innerHeight;
+    W = Math.max(1, Math.round(canvas.clientWidth || window.innerWidth));
+    H = Math.max(1, Math.round(canvas.clientHeight || window.innerHeight));
     canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
-    canvas.style.width = W + "px"; canvas.style.height = H + "px";
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    dark = document.documentElement.dataset.theme === "dark";
     texture = buildTexture();
     draw(reduceMotion ? 0 : performance.now() / 1000);
   }
@@ -901,11 +860,10 @@ loadHistory();
     off.width = Math.max(1, Math.round(W)); off.height = Math.max(1, Math.round(H));
     const c = off.getContext("2d");
     const bg = c.createLinearGradient(0, 0, 0, H);
-    if (dark) { bg.addColorStop(0, "#0a1b28"); bg.addColorStop(1, "#103b52"); }
-    else { bg.addColorStop(0, "#f8fcff"); bg.addColorStop(0.7, "#eaf6ff"); bg.addColorStop(1, "#d6ecfb"); }
+    bg.addColorStop(0, "#f8fcff"); bg.addColorStop(0.7, "#eaf6ff"); bg.addColorStop(1, "#d6ecfb");
     c.fillStyle = bg; c.fillRect(0, 0, W, H);
 
-    c.strokeStyle = dark ? "rgba(125,211,252,0.38)" : "rgba(14,116,144,0.34)";
+    c.strokeStyle = "rgba(14,116,144,0.34)";
     c.lineWidth = 1.25;
     const rows = Math.max(30, Math.floor(H / 6));
     for (let i = 0; i < rows; i++) {
@@ -924,7 +882,7 @@ loadHistory();
       c.stroke();
     }
     // A few denser swirls near the shore, like the reference illustration.
-    c.strokeStyle = dark ? "rgba(56,189,248,0.42)" : "rgba(3,105,161,0.42)";
+    c.strokeStyle = "rgba(3,105,161,0.42)";
     for (let s = 0; s < 9; s++) {
       const cx = W * (0.06 + 0.09 * s);
       const cy = H * (0.72 + 0.03 * (s % 4));
@@ -945,9 +903,7 @@ loadHistory();
   }
 
   function drawShore(time) {
-    const layers = dark
-      ? ["rgba(2,132,199,0.26)", "rgba(3,105,161,0.22)", "rgba(8,145,178,0.18)"]
-      : ["rgba(2,132,199,0.17)", "rgba(3,105,161,0.14)", "rgba(14,165,233,0.11)"];
+    const layers = ["rgba(2,132,199,0.20)", "rgba(3,105,161,0.16)", "rgba(14,165,233,0.13)"];
     for (let l = 0; l < layers.length; l++) {
       const base = H * (0.80 + l * 0.055);
       const amp = 9 + l * 6;
@@ -960,7 +916,7 @@ loadHistory();
       }
       ctx.lineTo(W, H); ctx.closePath();
       ctx.fillStyle = layers[l]; ctx.fill();
-      ctx.strokeStyle = dark ? "rgba(224,242,254,0.55)" : "rgba(255,255,255,0.95)";
+      ctx.strokeStyle = "rgba(255,255,255,0.95)";
       ctx.lineWidth = 1.8; ctx.stroke();
     }
   }
@@ -981,9 +937,6 @@ loadHistory();
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(resize, 120);
-  });
-  new MutationObserver(() => setTimeout(resize, 20)).observe(document.documentElement, {
-    attributes: true, attributeFilter: ["data-theme"]
   });
 
   // --- Synthesized shore audio (Web Audio API, no files) ---

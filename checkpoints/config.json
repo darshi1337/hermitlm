@@ -1,6 +1,6 @@
 {
   "model": {
-    "vocab_size": 2857,
+    "vocab_size": 3774,
     "max_seq_len": 512,
     "d_model": 320,
     "n_layers": 6,
@@ -16,7 +16,7 @@
     "learning_rate": 0.0002,
     "min_lr": 2e-05,
     "warmup_steps": 800,
-    "max_steps": 30000,
+    "max_steps": 32000,
     "weight_decay": 0.1,
     "grad_clip": 1.0,
     "eval_interval": 200,

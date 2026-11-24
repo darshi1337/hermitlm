@@ -45,6 +45,21 @@ Hermit> night cycle detected. the small cave appears calmer now.
 Chat replies are sampled, so exact wording varies. The math intro is picked at random from a
 pool of crab-flavoured lines, and web results depend on live search availability.
 
+## 📖 How it works
+
+A 15-chapter textbook explains the project step by step, with analogies, worked calculations,
+annotated code and diagrams. Start at [chapters/00_overview.md](chapters/00_overview.md), or use
+the [chapter index](chapters/README.md).
+
+| Topic | Chapter |
+|---|---|
+| Tokenization, embeddings, attention, transformer blocks | [0–5](chapters/README.md) |
+| Full model, training loop, generation | [6–8](chapters/README.md) |
+| Tools, decision model, PPO/DPO | [9–11](chapters/README.md) |
+| ONNX export, browser inference, evaluation | [12–14](chapters/README.md) |
+
+Every formula and hyperparameter is collected in [Chapter 14](chapters/14_glossary_math.md).
+
 ## Architecture
 
 | Field | Value |

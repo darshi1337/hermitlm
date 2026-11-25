@@ -28,7 +28,7 @@ flowchart TD
     H -->|"yes"| I["web search"]
     H -->|"no"| J["tool probe (4-way)"]
     J -->|"confidence ≥ 0.5"| C
-    J -->|"low"| K{"p_confused ≥ 0.9?"}
+    J -->|"low"| K{"p_yes ≥ 0.5?"}
     K -->|"yes"| I
     K -->|"no"| L["chat with the model"]
 ```
@@ -166,8 +166,8 @@ Per-class accuracy on the 80-row eval set: math 0.80 (16/20), web 0.65 (13/20), 
 172:             probe_tool, probe_result = _dispatch_probe(decision["label"], user_input)
 ...
 175:     if tool is None and intent is not None:
-176:         threshold = CONFUSED_THRESHOLD if confused_threshold is None else confused_threshold
-177:         if intent["p_confused"] >= threshold:
+176:         threshold = YES_THRESHOLD if confused_threshold is None else confused_threshold
+177:         if intent.get("p_yes", intent["p_confused"]) >= threshold:
 178:             try:
 179:                 web_result = _web(user_input)
 ```
@@ -176,9 +176,10 @@ Settings (`hermitlm/settings.py:20-25`):
 
 | Threshold | Value | Meaning |
 |---|---:|---|
-| `CONFUSED_THRESHOLD` | 0.9 | Out-of-scope score that triggers web search |
+| `YES_THRESHOLD` | 0.5 | Calibrated out-of-scope probability that triggers web search |
+| `CONFUSED_THRESHOLD` | 0.9 | Legacy fallback for probes without `head_yes` |
 | `TOOL_THRESHOLD` | 0.5 | Minimum probe confidence to dispatch a tool |
-| `BEST_OF` | 3 | Candidates sampled before reward reranking |
+| `BEST_OF` | 3 | Candidates sampled before score-head reranking |
 | `CLARIFY_THRESHOLD` | 0.75 | Below this confidence, ask a clarifying question |
 
 ### Worked escalation example
@@ -187,16 +188,16 @@ For a message like `quantum entanglement photosynthesis`:
 
 1. No tag, no FAQ hit, no keyword.
 2. Tool probe returns `chat` with confidence 0.42, below 0.5, so no dispatch.
-3. Intent probe reports `p_confused = 0.97`, above 0.9.
+3. The yes head reports `p_yes = 0.97`, above 0.5.
 4. Web search runs and its result becomes the reply.
 
-With `p_confused = 0.10`, step 4 is skipped and the model answers normally.
+With `p_yes = 0.10`, step 4 is skipped and the model answers normally.
 
 ---
 
 ## Clarifying questions and personas
 
-`api.py:148-160` asks for clarification when no tool fired, intent confidence is below 0.75, `p_confused < 0.9`, and two top intents are available:
+The API asks for clarification when no tool fired, intent confidence is below 0.75, `p_yes < 0.5`, and two top intents are available:
 
 ```python
 148:        if (
@@ -204,7 +205,7 @@ With `p_confused = 0.10`, step 4 is skipped and the model answers normally.
 150:            and CLARIFY
 151:            and intent is not None
 152:            and intent["confidence"] < CLARIFY_THRESHOLD
-153:            and intent["p_confused"] < 0.9
+153:            and intent.get("p_yes", intent["p_confused"]) < YES_THRESHOLD
 154:            and len(intent.get("top2", [])) == 2
 155:        ):
 ```

@@ -48,7 +48,8 @@ From `checkpoints/config.json` and `hermitlm/config.py`:
 | Coarse intents | 7 (`a`–`g`) |
 | Fine intents | 21 |
 | Tool classes | 4 (math, web, faq, chat) |
-| `CONFUSED_THRESHOLD` | 0.9 |
+| `YES_THRESHOLD` | 0.5 |
+| `CONFUSED_THRESHOLD` (legacy fallback) | 0.9 |
 | `TOOL_THRESHOLD` | 0.5 |
 | `CLARIFY_THRESHOLD` | 0.75 |
 | `BEST_OF` | 3 |
@@ -144,8 +145,8 @@ stop when next ∈ {eos_id, bos_id}
 ```
 P(decided at k) = Π_{i<k}(1 − p_i) · p_k
 tool dispatch if probe confidence ≥ 0.5
-web escalation if p_confused ≥ 0.9
-clarify if confidence < 0.75 and p_confused < 0.9
+web escalation if p_yes ≥ 0.5
+clarify if confidence < 0.75 and p_yes < 0.5
 ```
 
 ### Chapter 10 — Decision model

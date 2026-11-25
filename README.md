@@ -27,23 +27,36 @@ A ~8M parameter LLM that talks like a tiny crab in an aquatic world, chattable e
 
 ```text
 You> hello crab
-Hermit> you again. the salinity feels stable. i note soul sand near at the cave entrance.
+Hermit> hello. i heard a thud earlier. i am observing. my antennae report warmth changes.
 
 You> are you hungry
-Hermit> i am interested in food. i prefer the sea pickles. do not delay. activity will continue as pretending to be sand.
+Hermit> food detected. i prefer the mysterious crumbs. my antennae report temperature changes.
+
+You> are you a crab
+Hermit> currently good. the water is gentle. current priority: soft algae.
+
+You> do you know the capital of france
+Hermit> Google News - Artificial intelligence - Latest: Read full articles, watch videos, browse thousands of titles and more on the "Artificial intelligence" topic with Google News.
+
+You> who made you
+Hermit> I was created by Darshi.
+
+You> solve 2+2
+Hermit> math! *shudders*. here, take wolfram's answer: 4
 
 You> integrate x^2
-Hermit> aah math! i hate it. still here is the answer from wolfram: integral x^2 dx = x^3/3 + constant
+Hermit> math! *shudders*. here, take wolfram's answer: integral x^2 dx = x^3/3 + constant
 
 You> latest AI news
 Hermit> Google News - Artificial intelligence - Latest: Read full articles, watch videos, browse thousands of titles and more on the "Artificial intelligence" topic with Google News.
 
 You> goodnight crab
-Hermit> night cycle detected. the small cave appears calmer now.
+Hermit> it is now dark. movement will decrease. activity will continue as guarding my spot.
 ```
 
 Chat replies are sampled, so exact wording varies. The math intro is picked at random from a
-pool of crab-flavoured lines, and web results depend on live search availability.
+pool of crab-flavoured lines, and web results depend on live search availability. Yes/no questions
+stay in persona when `p_yes` is low; an out-of-scope one escalates to web search.
 
 ## 📖 How it works
 
@@ -102,10 +115,10 @@ time; weight tying removes that duplicate 1,207,680-parameter matrix.
 - Runs fully client-side in the browser (ONNX + onnxruntime-web, no backend server)
 - Quantized web model (`model.quant.onnx`, ~9.8 MB vs ~38.7 MB fp32) with automatic fp32 fallback when `model.onnx` is present
 - Tool-calling router: FAQ, Wolfram math, and web search, via `<tool>name(query)</tool>` tags plus keyword fallback
-- Probe decision model: single-pass intent classification into 7 coarse intents, plus an out-of-scope score. High `p_confused` escalates to web search. The browser UI shows an intent chip on each reply.
+- Probe decision model: single-pass intent classification into 7 coarse intents, plus a calibrated `p_yes` out-of-scope score. High `p_yes` escalates to web search. The browser UI shows an intent chip on each reply.
 - Fine-grained 21-way intent head and tool-routing probe (math/web/faq/chat) on the same frozen features.
 - Calibrated heads: bounded temperature search with Platt-smoothed binary targets, bootstrap CIs, and hash-checked head files.
-- Best-of-N reply rerank by persona reward, confidence-gated clarifying questions, persona auto-router, and intent analytics (`GET /stats/intents`).
+- Best-of-N reply rerank by the calibrated score head's `expected` value (heuristic persona reward as fallback), confidence-gated clarifying questions, persona auto-router, and intent analytics (`GET /stats/intents`).
 - Streaming API (`POST /chat/stream`, SSE) alongside `POST /chat`; math replies use a randomly
   chosen crab-flavoured intro before the Wolfram/local answer
 - Modular architecture
@@ -173,8 +186,8 @@ keyword heuristics route to the FAQ responder, Wolfram (`math.py`), or DuckDuckG
 Both the FastAPI backend and the eval harness use it. `POST /chat` returns which tool fired.
 
 `route_with_intent()` also attaches the probe decision-model verdict. It escalates
-out-of-scope messages (`p_confused >= HERMIT_CONFUSED_THRESHOLD`, default 0.9) to web search
-when no other tool fired.
+out-of-scope messages (`p_yes >= HERMIT_YES_THRESHOLD`, default 0.5) to web search when no other
+tool fired; legacy probes without the yes head fall back to `p_confused`.
 
 ## Decision model
 
@@ -309,13 +322,14 @@ uvicorn hermitlm.runtime.api:app --host 0.0.0.0 --port 8000
 
 - `GET /health`: status, checkpoint, tokenizer, device, probe.
 - `GET /stats/intents`: totals by intent label and tool, plus the confused rate.
-- `POST /chat`: `{user_id, message, temperature, top_k, max_tokens}` → `{response, tool, intent, persona}`. `intent` holds the coarse label, the confidence, and `p_confused`. High `p_confused` escalates to web search.
+- `POST /chat`: `{user_id, message, temperature, top_k, max_tokens}` → `{response, tool, intent, persona}`. `intent` holds the coarse label, the confidence, `p_confused` and `p_yes`. High `p_yes` escalates to web search.
 - `POST /chat/stream`: same request, server-sent events stream.
 
 ```json
 POST /chat {"user_id": "demo", "message": "hello crab"}
 → {"response": "oh. it's you...", "tool": null,
-   "intent": {"label": "a", "name": "social", "confidence": 1.0, "p_confused": 0.0067},
+   "intent": {"label": "a", "name": "social", "confidence": 1.0, "p_confused": 0.0067,
+              "p_yes": 0.0021, "level": "L0", "rotations": 1},
    "persona": null}
 ```
 

@@ -178,20 +178,23 @@ The API enforces bounds: temperature `[0.1, 2.0]`, top_k `[0, 200]`, max_tokens 
 
 ## Best-of-N reranking
 
-`runtime/inference.py:67-79` generates several replies and keeps the one with the highest persona reward (chapter 11):
+`runtime/inference.py:68-94` generates several replies and keeps the best by the score head's
+`expected = sum(k * p_k)` when the probe carries `head_score`. The heuristic persona reward is
+still computed for every candidate and used as a fallback and for the logged comparison:
 
 ```python
 72:        candidates = self.chat_candidates(user_input, n, temperature, top_k, max_tokens)
-73:        if len(candidates) == 1:
-74:            return candidates[0], [0.0]
-75:        from hermitlm.training.reward import score_response
-76:
-77:        scores = [score_response(text) for text in candidates]
-78:        best = max(range(len(candidates)), key=lambda i: scores[i])
-79:        return candidates[best], scores
+73:        scores = [score_response(text) for text in candidates]
+74:        if len(candidates) == 1:
+75:            return candidates[0], [0.0], None
+76:        ranker = [self.probe.predict_score(query, text)[0] for text in candidates]
+77:        best = max(range(len(candidates)), key=lambda i: ranker[i])
+78:        return candidates[best], scores, ranker[best]
 ```
 
-`BEST_OF = 3` by default (`settings.py:23`). With three candidates scoring `[0.46, 0.18, 0.61]`, the API returns candidate 3 and logs all three scores. Setting `HERMIT_BEST_OF=1` skips the reranker and returns `[0.0]`.
+`BEST_OF = 3` by default (`settings.py:24`). With expected scores `[0.46, 0.18, 0.61]`, the API
+returns candidate 3 and logs `0.61` in `intent_log.expected_score`. Setting `HERMIT_BEST_OF=1`
+skips the reranker.
 
 ---
 

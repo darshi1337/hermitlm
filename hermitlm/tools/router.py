@@ -3,8 +3,8 @@
 Model can emit <tool>name(arg)</tool>. The router also falls back to keyword heuristics.
 `route_with_intent` also runs the probe decision model
 (`hermitlm/tools/decision_model.py`): every reply carries a coarse intent
-label, and high `p_confused` (out-of-scope) escalates to web search when no
-other tool fired.
+label, and high `p_yes` (out-of-scope) escalates to web search when no other
+tool fired. Older probes fall back to `p_confused`.
 """
 import os
 import re

@@ -73,7 +73,7 @@ Probe fitting is different. It runs on CPU by default (`scripts/train_probe.py:5
 | `hermitlm/training/train.py` | SFT loop, learning-rate schedule, masked loss |
 | `hermitlm/training/generate_data.py` | 1,105 lines of crab templates and persona variants |
 | `hermitlm/training/natural_data.py` | Hand-written natural paraphrases and perturbations |
-| `hermitlm/training/reward.py` | `score_response`, the persona reward |
+| `hermitlm/training/reward.py` | `score_response` persona reward and `context_score` score-head supervision |
 | `hermitlm/training/ppo.py`, `dpo.py` | Optional RLHF stages |
 | `hermitlm/runtime/inference.py` | `HermitInference`, `chat`, `best_of_n` |
 | `hermitlm/runtime/api.py` | FastAPI `/chat`, `/chat/stream`, `/stats/intents` |

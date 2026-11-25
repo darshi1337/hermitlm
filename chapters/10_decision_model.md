@@ -401,8 +401,8 @@ That is 0.13% of the 8,453,120-parameter chat model.
 ### Probe artifact size
 
 ```
-raw float32 matrices = (7 + 2 + 21) × 320 × 4 + (7 + 2 + 21) × 4 = 38,520 bytes
-web/probe.json       = 212,496 bytes
+raw float32 matrices = (7 + 2 + 21 + 2 + 5) × 320 × 4 + (7 + 2 + 21 + 2 + 5) × 4 = 47,508 bytes
+web/probe.json       = 262,502 bytes
 ratio                = 5.5× (decimal text is larger than binary)
 ```
 

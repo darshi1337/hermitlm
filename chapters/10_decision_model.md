@@ -243,7 +243,31 @@ corrected_c = log p_c − λ log π_c
 final       = softmax(corrected)
 ```
 
-with `0 ≤ λ ≤ 1`. The browser does the same in `web/intent.js:21-32`. The shipped `web/probe.json` has no `priors` key, so this correction is currently a no-op there.
+with `0 ≤ λ ≤ 1`. The browser does the same in `web/intent.js:21-32`.
+
+The prior is fitted without labels: `scripts/fit_probe_prior.py` runs the probe heads over an
+unlabelled query pool and stores `priors` / `prior_lambda` in the artifact. `export_probe.py`
+copies both into `web/probe.json`, so the API and browser apply the same correction. The shipped
+probe carries `prior_lambda = 0.5`; `classify_intent()` reports `level: "L0"` when it is active
+and `level: "raw"` when no coarse prior is present.
+
+### Option-order rotation
+
+Zero-shot constrained decoding scores the displayed letters `a`–`g`, and the model has a strong
+position/letter bias. `option_assignment(shift)` rotates which class each letter names, the
+forward pass is repeated for `rotation_shifts(k)` (two evenly spaced passes by default), and the
+per-class log-probabilities are averaged before the softmax:
+
+```
+assignment = [a, b, c, d, e, f, g] shifted by s
+display_logp = log_softmax(logits[a..g] / T)
+unrotated[class] = display_logp[letter showing that class]
+combined = mean(unrotated over s)
+```
+
+`scripts/eval_decision.py` reports an `order_flip` section that permutes the assignment and
+compares predictions. On the zero-shot path the flip rate drops from `1.0` (single pass) to
+`0.60` with L0 rotation; probe heads use a fixed prompt and therefore report `rotations: 1`.
 
 ---
 

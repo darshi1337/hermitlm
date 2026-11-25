@@ -230,14 +230,16 @@ only that way. Left padding silently shifts positions and once cost 30 points of
 The decision stack includes label-free and supervised calibration pieces:
 
 - `hermitlm/tools/prior.py`: batch prior correction (`L0`). A prior fitted from an unlabelled
-  pool can be applied as `log p - lambda * log pi`; it is stored in probe artifacts and applied
-  by the API and browser UI.
+  pool is applied as `log p - lambda * log pi`. `scripts/fit_probe_prior.py` fits it into the
+  probe artifact; `export_probe.py` copies it to `web/probe.json`, so the API and browser apply
+  the same correction. `classify_intent()` reports `level` (`raw` or `L0`) plus `rotations`.
 - `hermitlm/tools/heads.py` + `scripts/train_probe.py`: `L2` head selection over hidden layers,
   ridge/LDA solvers and regularization, chosen by stratified k-fold OOF NLL. Selected heads
   store standardization, temperature and OOF metrics in the artifact; `export_probe.py` folds
   standardization into JSON weights for the browser.
-- `DecisionModel.predict_proba(..., rotations=k)`: option-order rotation with geometric-mean
-  recombination for the zero-shot constrained-decoding path.
+- `DecisionModel.predict_proba(..., rotations=k)`: option-order rotation with two evenly spaced
+  passes by default for the zero-shot constrained-decoding path. `eval_decision.py` reports the
+  order-flip rate for `raw` vs `L0` in the `order_flip` section.
 - `python -m hermitlm.tools.check`: validates label tokens, batch consistency, hidden layers,
   prompt-template hashes and artifact selection before deploy.
 

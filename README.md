@@ -248,8 +248,8 @@ probe cannot be silently paired with a changed prompt or precision.
 
 Evaluated on the hand-written human eval, the currently shipped last-layer probe still
 generalizes better than OOF-selected ridge/LDA heads (0.62 coarse / 0.48 fine vs 0.62 / 0.35),
-so the shipped artifact keeps that head. The selection/prior tooling remains available for
-future data improvements.
+so the shipped artifact keeps that head. The label-free prior is active on the shipped probe;
+the head-selection tooling remains available for future data improvements.
 
 ## Tool routing
 
@@ -325,13 +325,15 @@ by the quantized model's SHA-256, so new deploys cannot pair stale cached weight
 The UI streams tokens as they generate and offers temperature/top-K,
 persona modes (normal/sleepy/hungry/guard-crab), a stop button, and speech synthesis.
 
-The page has a live canvas beach scene: flowing blue contour lines like a hand-drawn shoreline,
-three animated wave layers at the bottom, and a soft white foam edge. The speaker button in the
-header enables synthesized ambient water and periodic shore splashes using the Web Audio API —
-there are no audio files to download. All motion respects `prefers-reduced-motion`.
+The UI has a light/dark theme toggle (OS preference by default), a clear-chat button, and a
+Settings panel with temperature, top-K, persona mode, voice output and a stop button. Voice input
+uses the browser speech-recognition API when available; replies can be read aloud with speech
+synthesis. `Enter` sends and `Esc` stops generation.
 
 Every reply also shows a probe decision-model intent chip (`web/intent.js` + `web/probe.json`).
-Classification costs a single forward pass over the prompt. A high out-of-scope score links to a web search.
+Classification costs a single forward pass over the prompt. The probe ships a label-free `L0`
+batch prior at `lambda = 0.5`, applied identically in the API and browser; the classifier reports
+`level: "L0"` when it is active. A high out-of-scope score links to a web search.
 The chip shows coarse and fine intent with confidence. Low confidence asks a clarifying question
 with quick-reply chips instead of guessing. Settings shows per-intent session counts.
 
@@ -378,7 +380,7 @@ pip install onnx onnxscript onnxruntime
 pip install torch --index-url https://download.pytorch.org/whl/xpu
 # NVIDIA CUDA instead: pip install torch --index-url https://download.pytorch.org/whl/cu121
 
-pytest tests/          # 72 passed, 2 skipped
+pytest tests/          # 81 passed, 2 skipped
 ruff check .           # clean
 python -m hermitlm.tools.check
 ```

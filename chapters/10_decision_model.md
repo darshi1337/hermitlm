@@ -106,7 +106,7 @@ scores   = W x + b
 log p_c  = log( exp(scores_c/T) / Σ_j exp(scores_j/T) )
 ```
 
-The shipped artifact uses the older "legacy" form (`decision_model.py:203-207`): `scores = linear(hidden) / temperature`, then `log_softmax`.
+The shipped artifact uses the older "legacy" form (`decision_model.py:225-241`): `scores = linear(hidden) / temperature`, then `log_softmax`.
 
 ### Shipped head shapes and temperatures
 
@@ -121,15 +121,15 @@ From `checkpoints/decision_probe.pt` and `web/probe.json`:
 
 ### Prediction
 
-`decision_model.py:286-292`:
+`decision_model.py:331-336`:
 
 ```python
-287:    def predict(self, query: str) -> tuple[str, dict[str, float], float]:
-288:        h = self._hidden(query, self.layer)
-289:        proba7 = torch.exp(self._log_probs(self.head7, h, "coarse"))[0]
-290:        proba = {letter: float(p) for letter, p in zip(OPTION_LETTERS, proba7.tolist())}
-291:        p_confused = float(torch.exp(self._log_probs(self.head_bin, h, "confused"))[0, 1])
-292:        return max(OPTION_LETTERS, key=lambda letter: proba[letter]), proba, p_confused
+331:    def predict(self, query: str) -> tuple[str, dict[str, float], float]:
+332:        h = self._hidden(query, self.layer)
+333:        proba7 = torch.exp(self._log_probs(self.head7, h, "coarse"))[0]
+334:        proba = {letter: float(p) for letter, p in zip(OPTION_LETTERS, proba7.tolist())}
+335:        p_confused = float(torch.exp(self._log_probs(self.head_bin, h, "confused"))[0, 1])
+336:        return max(OPTION_LETTERS, key=lambda letter: proba[letter]), proba, p_confused
 ```
 
 For a zero hidden vector, the coarse head emits only its biases. Those biases are `[-0.01427, -0.08197, -0.01813, 0.0085, -0.00159, -0.0419, 0.06219]`, and after division by `T = 1.23006` plus softmax the largest class is `g` (mind) at **0.1517**. The binary head's biases give `p_confused = sigmoid((0.00603 − 0.06934)/1.33109) = 0.4881`.
@@ -308,7 +308,7 @@ ECE = (|0.8 − 1| + |0.6 − 0|)/2 = (0.2 + 0.6)/2 = 0.4
 
 ### Bootstrap confidence intervals
 
-`metrics.py:77-93` resamples rows `n_boot` times with replacement and takes the 2.5th and 97.5th percentiles. The eval script defaults to 1,000 resamples (`scripts/eval_decision.py:229`). Paired bootstrap (`metrics.py:96-120`) computes intervals for `stat_calibrated − stat_uncalibrated` on the same draws.
+`metrics.py:77-93` resamples rows `n_boot` times with replacement and takes the 2.5th and 97.5th percentiles. The eval script defaults to 1,000 resamples (`scripts/eval_decision.py:284`). Paired bootstrap (`metrics.py:96-120`) computes intervals for `stat_calibrated − stat_uncalibrated` on the same draws.
 
 ---
 
@@ -318,10 +318,10 @@ ECE = (|0.8 − 1| + |0.6 − 0|)/2 = (0.2 + 0.6)/2 = 0.4
 |---|---:|---|
 | Zero-shot constrained decoding | 0.214 | `eval_out/decision/report.json`, n=1000 |
 | Frozen-head probe, template eval | 1.000 | `eval_out/decision_probe/report.json`, n=4000 |
-| Frozen-head probe, hand-written eval | 0.6212 | `README.md:205`, 126 rows |
-| 21-way on hand-written eval | 0.4848 | `README.md:205` |
+| Frozen-head probe, hand-written eval | 0.6212 | README, 126 rows, with L0 prior at λ=0.5 |
+| 21-way on hand-written eval | 0.4848 | README |
 
-The huge gap between template and human scores is the honest generalization gap. `README.md:206-208` calls the template numbers flattering and says the next fix is better data, not a bigger head.
+The huge gap between template and human scores is the honest generalization gap. The README calls the template numbers flattering and says the next fix is better data, not a bigger head.
 
 Other shipped template numbers:
 
@@ -350,7 +350,7 @@ Loading a head after a retrain or a prompt-template change raises an error inste
 
 ## Export to the browser
 
-`decision_model.export_probe()` (`decision_model.py:343-396`) writes `web/probe.json` with `options`, `names`, `fine_options`, the three heads and their temperatures plus the hashes. `scripts/export_probe.py` is a 23-line wrapper.
+`decision_model.export_probe()` (`decision_model.py:387-445`) writes `web/probe.json` with `options`, `names`, `fine_options`, the three heads and their temperatures, the `priors` / `prior_lambda` pair, and the hashes. `scripts/export_probe.py` is a 23-line wrapper. Priors are exported for both selection-format and legacy artifacts.
 
 When a head has standardization, `FittedHead.effective()` (`heads.py:43-47`) folds it into plain weights for JSON:
 
@@ -359,7 +359,7 @@ w_eff = W / σ
 b_eff = b − (μ/σ) · Wᵀ
 ```
 
-Then the browser needs only a dot product and a softmax (`web/intent.js:9-32`).
+Then the browser needs only a dot product, a prior subtraction and a softmax (`web/intent.js:9-73`).
 
 ---
 
@@ -410,14 +410,15 @@ softmax ≈ [0.1799, 0.1659, 0.1529, 0.1410, 0.1300, 0.1198, 0.1105]
 | File and lines | What it does |
 |---|---|
 | `hermitlm/tools/decision_model.py:29-78` | Intent label sets and persona map |
-| `hermitlm/tools/decision_model.py:258-292` | Hidden-state extraction and prediction |
+| `hermitlm/tools/decision_model.py:302-345` | Hidden-state extraction, prior application and prediction |
+| `hermitlm/tools/decision_model.py:111-160` | Option assignment, rotation shifts and prompt template |
 | `hermitlm/tools/heads.py:36-47` | Scoring, log-softmax, export folding |
 | `hermitlm/tools/heads.py:94-139` | Ridge, LDA, layer grid |
 | `hermitlm/tools/calibration.py:29-146` | Platt targets and temperature search |
 | `hermitlm/tools/prior.py:10-24` | Prior fit and correction |
 | `hermitlm/tools/metrics.py:26-120` | Accuracy, NLL, ECE, macro F1, bootstrap |
 | `scripts/train_probe.py:32-49` | Frozen hidden-state extraction |
-| `web/intent.js:9-68` | Browser-side probe inference |
+| `web/intent.js:9-73` | Browser-side probe inference |
 
 ---
 

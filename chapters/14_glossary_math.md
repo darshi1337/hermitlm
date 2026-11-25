@@ -252,6 +252,7 @@ paired diff CI = percentile bootstrap of (stat_b − stat_a) on same draws
 | `hermitlm/tools/artifacts.py` | SHA-256 pinning |
 | `scripts/export_onnx.py`, `quantize_onnx.py` | Browser artifacts |
 | `scripts/train_probe.py`, `train_tool_probe.py` | Head fitting |
+| `scripts/fit_probe_prior.py` | Label-free prior fitting into a probe artifact |
 | `scripts/eval.py`, `eval_decision.py` | Evaluation |
 | `scripts/retrain_all.sh`, `retrain_resume.ps1` | Pipeline runners |
 | `web/` | Browser UI and ONNX artifacts |
@@ -278,6 +279,8 @@ paired diff CI = percentile bootstrap of (stat_b − stat_a) on same draws
 | **Warmup** | Linearly increasing learning rate at the start. |
 | **Cosine decay** | Slowly lowering the learning rate with a cosine curve. |
 | **Temperature** | Divides logits to sharpen or flatten sampling. |
+| **Batch prior (L0)** | Mean predicted class probability over an unlabelled pool; subtracted as `λ log π` to undo label bias. |
+| **Option rotation** | Repeats a multiple-choice prompt with the classes assigned to different letters and averages the result. |
 | **top-k** | Keep only the k largest logits. |
 | **top-p** | Keep the smallest set reaching cumulative probability p. |
 | **EOS / BOS** | End-of-sequence and beginning-of-sequence markers. |
@@ -312,8 +315,6 @@ These are real. They are listed so you do not debug them twice.
 | Tags parsed only in user text | Generated tool tags are not rescanned |
 | No top-p in Python | top-p exists only in `web/model.js` |
 | No true API token streaming | `/chat/stream` streams whitespace-split words |
-| Probe JSON has no priors | Browser prior correction is a no-op with the shipped file |
-| README beach/audio claim | The current `web/index.html` has no canvas or Web Audio |
 
 ---
 
@@ -339,6 +340,12 @@ stat -c '%n %s' web/model.onnx web/model.quant.onnx web/probe.json
 python scripts/eval.py --checkpoint checkpoints/best_model.pt --out-dir eval_out/sft
 python scripts/eval_decision.py --method probe --max-n 5000 --cal-n 1000 \
   --bootstrap 1000 --out-dir eval_out/decision_probe
+python scripts/eval_decision.py --method logit --max-n 400 --cal-n 200 \
+  --bootstrap 0 --out-dir eval_out/decision_order
+
+# refresh the shipped L0 prior and the browser probe
+python scripts/fit_probe_prior.py --max-n 4000
+python scripts/export_probe.py --output web/probe.json
 
 # deploy diagnostics
 python -m hermitlm.tools.check

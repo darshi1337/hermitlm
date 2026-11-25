@@ -110,7 +110,7 @@ This script has two methods.
 
 ### Logit method
 
-Uses the model's own next-token logits at constrained option-token IDs (`decision_model.py:130-140`). A temperature is fitted on a calibration split, then applied to the test split.
+Uses the model's own next-token logits at constrained option-token IDs (`decision_model.py:81-95`). It now averages two rotated class-to-letter assignments by default; a temperature is fitted on the calibration split, then applied to the test split.
 
 `eval_out/decision/report.json`:
 
@@ -127,7 +127,9 @@ The ECE calculation: all rows fall in one confidence bin with mean confidence 0.
 
 ### Probe method
 
-Uses the frozen linear heads (chapter 10). `scripts/eval_decision.py:248-352` applies prior correction, refits temperatures on the calibration half, sweeps a confused threshold, and reports the test half.
+Uses the frozen linear heads (chapter 10). `scripts/eval_decision.py:273-385` applies the shipped
+label-free prior (`log p − λ log π`, λ = 0.5), refits temperatures on the calibration half, sweeps
+a confused threshold, and reports the disjoint test half.
 
 `eval_out/decision_probe/report.json`:
 
@@ -147,16 +149,36 @@ Uses the frozen linear heads (chapter 10). `scripts/eval_decision.py:248-352` ap
 
 All 4,000 test rows land in the `(0.90, 1.00]` confidence bin. These numbers come from template-generated data and flatter the model.
 
+### Option-order robustness (zero-shot)
+
+`DecisionModel.predict()` rotates which class each display letter names and averages two evenly
+spaced passes. `_order_flip_rate()` (`eval_decision.py:118-156`) re-runs the prediction after
+permuting the assignment by three letters and counts how often the predicted class changes.
+
+```bash
+python scripts/eval_decision.py --method logit --max-n 400 --cal-n 200 \
+  --bootstrap 0 --out-dir eval_out/decision_order
+```
+
+| Variant | Order-flip rate |
+|---|---:|
+| raw (1 pass) | 1.0000 |
+| L0 (2 passes) | **0.6025** |
+
+The raw model nearly always picks the first display letter, so a re-labelling flips almost every
+prediction. Rotation spreads the letter bias across classes. The probe path uses one fixed prompt
+and reports `rotations: 1`.
+
 ### Human eval
 
-`data/human_eval.jsonl` has 126 hand-written messages: 21 fine types × 6. The command from `README.md:200-203`:
+`data/human_eval.jsonl` has 126 hand-written messages: 21 fine types × 6. The command from the README:
 
 ```bash
 python scripts/eval_decision.py --eval data/human_eval.jsonl --method probe \
   --max-n 126 --cal-n 60 --out-dir eval_out/human
 ```
 
-Results in `README.md:205`:
+Results in the README:
 
 | Metric | Value |
 |---|---:|
@@ -212,7 +234,7 @@ Defaults: `n_boot = 2000` in `metrics.py:81-83`, 1,000 in the eval script. The p
 
 ### Confusion threshold sweep
 
-`eval_decision.py:279-287` tries `[0.3, 0.5, 0.7, 0.8, 0.9, 0.95]` and keeps the threshold with the best binary F1:
+`eval_decision.py:332-343` tries `[0.3, 0.5, 0.7, 0.8, 0.9, 0.95]` and keeps the threshold with the best binary F1:
 
 ```
 F1 = 2 tp / (2 tp + fp + fn)
@@ -244,7 +266,7 @@ This matches the report. Macro F1 punishes the five classes the zero-shot prompt
 |---|---|
 | `scripts/build_human_eval.py` | Writes 126 hand-written rows from `HUMAN_EVAL` |
 | `scripts/build_tool_data.py` | Writes 5,038 tool-train and 80 tool-eval rows; checks train/eval overlap |
-| `scripts/eval_decision.py` | Accuracy, NLL, ECE, F1, bins, paired bootstrap, confusion CI |
+| `scripts/eval_decision.py` | Accuracy, NLL, ECE, F1, bins, paired bootstrap, confusion CI, order-flip rate |
 | `scripts/eval.py` | Perplexity, persona reward, tool triggers |
 | `python -m hermitlm.tools.check` | Pre-deploy artifact and token checks |
 
@@ -259,6 +281,7 @@ This matches the report. Macro F1 punishes the five classes the zero-shot prompt
 3. The probe's near-perfect template scores do not transfer to human phrasing: 1.000 → 0.6212 on 126 hand-written rows.
 4. `eval_out/human/` is not checked in, so the human-eval numbers exist only in the README.
 5. `eval_out/decision/report.json` uses an older script format with a `grid` key; current runs report `n = rows − n_cal`.
+6. The order-flip report is zero-shot only; the shipped router uses the supervised probe, which does not rotate.
 
 ---
 
@@ -295,9 +318,10 @@ test  = 126 − 60 = 66
 |---|---|
 | `scripts/eval.py:38-46` | Perplexity proxy |
 | `scripts/eval.py:47-73` | Generation reward and offline tool checks |
-| `scripts/eval_decision.py:103-144` | Metric summary and bootstrap CIs |
-| `scripts/eval_decision.py:248-352` | Probe evaluation path |
-| `scripts/eval_decision.py:279-287` | Confusion threshold sweep |
+| `scripts/eval_decision.py:158-200` | Metric summary and bootstrap CIs |
+| `scripts/eval_decision.py:273-385` | Probe evaluation path (with prior) |
+| `scripts/eval_decision.py:332-343` | Confusion threshold sweep |
+| `scripts/eval_decision.py:118-156` | Zero-shot order-flip report |
 | `hermitlm/tools/metrics.py:26-120` | All metric implementations |
 
 ---

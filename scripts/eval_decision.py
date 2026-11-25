@@ -26,6 +26,8 @@ from hermitlm.tools.decision_model import (
     DecisionModel,
     ProbeDecisionModel,
     format_prompt,
+    option_assignment,
+    rotation_shifts,
 )
 from hermitlm.tools.metrics import (
     accuracy,
@@ -98,6 +100,59 @@ def _matrix(probas: list[dict[str, float]]) -> torch.Tensor:
     return torch.tensor(
         [[p[letter] for letter in OPTION_LETTERS] for p in probas], dtype=torch.float64
     )
+
+
+@torch.no_grad()
+def _zero_shot_log_probs(model: DecisionModel, query: str, shift: int) -> torch.Tensor:
+    """Log-probabilities in original class order for one L0 assignment."""
+    assignment = option_assignment(shift)
+    ids = model.tokenizer.encode(format_prompt(query, assignment)).ids[-model.config.max_seq_len :]
+    idx = torch.tensor([ids], dtype=torch.long, device=model.device)
+    logits, _ = model.model(idx)
+    display = torch.log_softmax(logits[0, -1, model.option_ids].float(), dim=-1).cpu()
+    out = torch.empty_like(display)
+    out[torch.tensor([OPTION_LETTERS.index(cls) for cls in assignment])] = display
+    return out
+
+
+def _order_flip_rate(
+    rows: list[dict], model: DecisionModel, rotations: int = 2, flip_shift: int = 3
+) -> dict:
+    """Compare predictions under the normal and a permuted option order.
+
+    ``raw`` uses one displayed order per side; ``L0`` averages ``rotations``
+    evenly spaced orders per side. A lower L0 rate means the prediction is
+    less dependent on where the options happen to sit.
+    """
+    k = len(OPTION_LETTERS)
+    l0_shifts = rotation_shifts(rotations)
+    needed = sorted(set(l0_shifts) | {flip_shift})
+    per_shift: dict[int, list[torch.Tensor]] = {shift: [] for shift in needed}
+    with torch.no_grad():
+        for row in rows:
+            for shift in needed:
+                per_shift[shift].append(_zero_shot_log_probs(model, row["input"], shift))
+    stacks = {shift: torch.stack(values) for shift, values in per_shift.items()}
+
+    def preds(log_probs: torch.Tensor) -> torch.Tensor:
+        return log_probs.argmax(dim=-1)
+
+    def mean_of(shifts: list[int]) -> torch.Tensor:
+        return torch.stack([stacks[shift] for shift in shifts]).mean(dim=0)
+
+    raw_normal = preds(stacks[0])
+    raw_permuted = preds(stacks[flip_shift])
+    l0_normal = preds(mean_of(l0_shifts))
+    l0_permuted = preds(mean_of([(flip_shift + shift) % k for shift in l0_shifts]))
+
+    n = len(rows)
+    return {
+        "raw": round(float((raw_normal != raw_permuted).float().mean()), 4),
+        "L0": round(float((l0_normal != l0_permuted).float().mean()), 4),
+        "rotations": rotations,
+        "permutation_shift": flip_shift,
+        "n": n,
+    }
 
 
 def summarize(
@@ -228,6 +283,7 @@ def run_eval(
     cal_n: int = 1000,
     bootstrap: int = 1000,
     seed: int = 0,
+    rotations: int = 2,
 ) -> dict:
     from hermitlm.training.train import accelerator_available
 
@@ -352,15 +408,15 @@ def run_eval(
         report["calibrated"] = report["probed"]
     else:
         model = DecisionModel(checkpoint, tokenizer_path, device)
+        order_flip = _order_flip_rate(rows, model, rotations=rotations)
         # Collect base (T=1) logits one time.
         raw_logits: list[dict[str, float]] = []
         with torch.no_grad():
             for r in rows:
-                ids = model.tokenizer.encode(format_prompt(r["input"])).ids[-model.config.max_seq_len :]
-                idx = torch.tensor([ids], dtype=torch.long, device=model.device)
-                logits, _ = model.model(idx)
-                gathered = logits[0, -1, torch.tensor(model.option_ids)].float()
-                raw_logits.append({letter: float(v) for letter, v in zip(OPTION_LETTERS, gathered.tolist())})
+                lp = _zero_shot_log_probs(model, r["input"], 0)
+                raw_logits.append(
+                    {letter: float(v) for letter, v in zip(OPTION_LETTERS, lp.tolist())}
+                )
 
         logits_matrix = torch.tensor(
             [[raw[letter] for letter in OPTION_LETTERS] for raw in raw_logits],
@@ -397,6 +453,7 @@ def run_eval(
             ),
             "paired": paired_report(base, calibrated, y_test, n_boot=bootstrap, seed=seed + 2),
             "cal_n": n_cal,
+            "order_flip": order_flip,
         }
 
     with open(os.path.join(out_dir, "report.json"), "w") as f:
@@ -414,8 +471,22 @@ def run_eval(
         if "precision_ci" in cd:
             lines.append(f"precision 95% CI={cd['precision_ci']} recall 95% CI={cd['recall_ci']}")
         lines.append("")
+    if "order_flip" in report:
+        of = report["order_flip"]
+        lines.append("## order robustness (zero-shot)")
+        lines.append("")
+        lines.append(
+            f"option order permuted by {of['permutation_shift']} of {len(OPTION_LETTERS)}; "
+            f"L0 averages {of['rotations']} evenly spaced rotations; n={of['n']}"
+        )
+        lines.append("")
+        lines.append("| variant | order-flip rate |")
+        lines.append("| --- | --- |")
+        lines.append(f"| raw (1 pass) | {of['raw']} |")
+        lines.append(f"| L0 ({of['rotations']} passes) | {of['L0']} |")
+        lines.append("")
     for key in report:
-        if key in ("grid", "paired", "confused_detector", "fine21", "calibrated", "cal_n"):
+        if key in ("grid", "paired", "confused_detector", "fine21", "calibrated", "cal_n", "order_flip"):
             continue
         s = report[key]
         lines.append(f"## {key} (T={s['temperature']}, n={s['n']})")
@@ -477,6 +548,7 @@ if __name__ == "__main__":
     parser.add_argument("--cal-n", type=int, default=1000)
     parser.add_argument("--bootstrap", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--rotations", type=int, default=2, help="L0 rotations for the zero-shot order-flip report")
     args = parser.parse_args()
     run_eval(
         args.checkpoint,
@@ -490,4 +562,5 @@ if __name__ == "__main__":
         cal_n=args.cal_n,
         bootstrap=args.bootstrap,
         seed=args.seed,
+        rotations=args.rotations,
     )

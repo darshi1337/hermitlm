@@ -60,6 +60,8 @@ class IntentResponse(BaseModel):
     name: str
     confidence: float
     p_confused: float
+    level: str = "raw"
+    rotations: int = 1
 
 
 class ChatResponse(BaseModel):
@@ -199,7 +201,14 @@ def chat(req: ChatRequest):
     return ChatResponse(
         response=response,
         tool=tool,
-        intent=IntentResponse(**{k: intent[k] for k in ("label", "name", "confidence", "p_confused")}) if intent else None,
+        intent=IntentResponse(
+            label=intent["label"],
+            name=intent["name"],
+            confidence=intent["confidence"],
+            p_confused=intent["p_confused"],
+            level=intent.get("level", "raw"),
+            rotations=intent.get("rotations", 1),
+        ) if intent else None,
         persona=persona,
     )
 

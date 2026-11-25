@@ -94,15 +94,18 @@ def _get_probe():
 
 
 def classify_intent(user_input):
-    """Return intent dict (label, name, confidence, p_confused, proba, fine, top2) or None."""
+    """Return intent dict (label, name, confidence, p_confused, proba, fine, top2,
+    level, rotations) or None."""
     probe = _get_probe()
     if probe is None:
         return None
     try:
-        from hermitlm.tools.decision_model import COARSE_NAMES
+        from hermitlm.tools.decision_model import COARSE_NAMES, debias_level
 
         label, proba, p_confused = probe.predict(user_input)
         ranked = sorted(proba.items(), key=lambda kv: kv[1], reverse=True)[:2]
+        priors = getattr(probe, "priors", {}) or {}
+        prior_lambda = float(getattr(probe, "prior_lambda", 0.0) or 0.0)
         result = {
             "label": label,
             "name": COARSE_NAMES[label],
@@ -112,6 +115,10 @@ def classify_intent(user_input):
             "top2": [[letter, round(p, 4)] for letter, p in ranked],
             "fine_label": None,
             "fine_name": None,
+            # Debiasing provenance, mirrored by web/intent.js:
+            # "raw" = head output, "L0" = fitted batch prior applied.
+            "level": debias_level(priors, prior_lambda),
+            "rotations": getattr(probe, "rotations", 1),
         }
         fine = probe.predict_fine(user_input)
         if fine is not None:

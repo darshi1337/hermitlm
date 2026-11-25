@@ -9,6 +9,9 @@ from hermitlm.tools.decision_model import (
     constrained_probs,
     format_prompt,
     get_option_ids,
+    option_assignment,
+    rotation_shifts,
+    unrotate_display,
 )
 
 TOKENIZER_PATH = "data/tokenizer.json"
@@ -80,6 +83,41 @@ def test_format_prompt_lists_all_options():
     for letter in OPTION_LETTERS:
         assert f"{letter}." in prompt
     assert prompt.rstrip().endswith("<|im_start|>assistant")
+
+
+def test_rotation_shifts_are_evenly_spaced():
+    assert rotation_shifts(1) == [0]
+    assert rotation_shifts(2) == [0, 4]  # two passes, farthest apart
+    assert rotation_shifts(7) == list(range(7))
+    with pytest.raises(ValueError):
+        rotation_shifts(0)
+    with pytest.raises(ValueError):
+        rotation_shifts(8)
+
+
+def test_option_permutation_equivariance():
+    """Permute which class each letter denotes; unrolling must restore the output."""
+    torch.manual_seed(0)
+    probs = torch.softmax(torch.randn(len(OPTION_LETTERS)), dim=-1)
+    original = {letter: float(probs[i]) for i, letter in enumerate(OPTION_LETTERS)}
+    for shift in range(len(OPTION_LETTERS)):
+        assignment = option_assignment(shift)
+        displayed = [original[cls] for cls in assignment]
+        restored = unrotate_display(displayed, shift)
+        for cls in OPTION_LETTERS:
+            assert restored[cls] == pytest.approx(original[cls])
+
+
+def test_rotation_permutes_class_assignments():
+    base = format_prompt("hello crab")
+    rotated = format_prompt("hello crab", shift=3)
+
+    assert "a. social" in base and "e. social" in rotated
+    assert "a. sense" in rotated and "d. sense" in base
+    # The class set is unchanged; only which letter names it moves.
+    base_classes = {line.split(". ", 1)[1] for line in base.splitlines() if line[:3] in {f"{l}. " for l in OPTION_LETTERS}}
+    rotated_classes = {line.split(". ", 1)[1] for line in rotated.splitlines() if line[:3] in {f"{l}. " for l in OPTION_LETTERS}}
+    assert base_classes == rotated_classes
 
 
 def test_predict_single_pass_cpu():

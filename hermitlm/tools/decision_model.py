@@ -108,15 +108,49 @@ def get_fine_option_ids(tokenizer: Tokenizer) -> list[int]:
     return ids
 
 
-def format_prompt(query: str, options: list[str] | None = None, shift: int = 0) -> str:
+def option_assignment(shift: int) -> list[str]:
+    """Return the class shown at each display letter ``a..g``.
+
+    ``shift=2`` assigns ``c d e f g a b`` to ``a b c d e f g``. Rotating this
+    assignment is the zero-shot L0 debias: option-letter bias is spread over
+    classes and averaged out.
+    """
+    k = len(OPTION_LETTERS)
+    shift %= k
+    return [OPTION_LETTERS[(i + shift) % k] for i in range(k)]
+
+
+def rotation_shifts(rotations: int) -> list[int]:
+    """Evenly spaced assignments; two rotations cost two passes."""
+    k = len(OPTION_LETTERS)
+    if not 1 <= rotations <= k:
+        raise ValueError(f"rotations must be in [1, {k}]")
+    return [round(j * k / rotations) % k for j in range(rotations)]
+
+
+def unrotate_display(values, shift: int) -> dict[str, float]:
+    """Map display-letter values back onto their original class letters."""
+    assignment = option_assignment(shift)
+    return {cls: float(values[i]) for i, cls in enumerate(assignment)}
+
+
+def debias_level(priors: dict, prior_lambda: float) -> str:
+    """`L0` when a fitted coarse prior is actually applied, else `raw`."""
+    return "L0" if ("coarse" in (priors or {}) and prior_lambda > 0) else "raw"
+
+
+def format_prompt(query: str, assignment: list[str] | None = None, shift: int = 0) -> str:
     """Build the classification prompt. The model scores one letter next.
 
-    `shift` rotates the displayed option order (brier-style L0 debiasing).
+    ``assignment[i]`` is the class printed next to display letter ``i``.
+    ``shift`` is shorthand for ``option_assignment(shift)`` (L0 debiasing).
     """
-    letters = list(options or OPTION_LETTERS)
-    if shift:
-        letters = letters[shift:] + letters[:shift]
-    options_text = "\n".join(f"{letter}. {COARSE_NAMES[letter]}" for letter in letters)
+    classes = list(assignment) if assignment is not None else option_assignment(shift)
+    if len(classes) != len(OPTION_LETTERS):
+        raise ValueError("assignment must cover every option letter")
+    options_text = "\n".join(
+        f"{letter}. {COARSE_NAMES[cls]}" for letter, cls in zip(OPTION_LETTERS, classes)
+    )
     return (
         "<|im_start|>user\n"
         f"Classify the intent of this message: {query}\n"
@@ -155,27 +189,27 @@ class DecisionModel:
         self.option_ids = get_option_ids(self.tokenizer)
 
     @torch.no_grad()
-    def predict_proba(self, query: str, temperature: float = 1.0, rotations: int = 1) -> dict[str, float]:
-        k = len(OPTION_LETTERS)
-        shifts = list(range(k)) if rotations == k else [round(j * k / rotations) for j in range(max(1, rotations))]
+    def predict_proba(self, query: str, temperature: float = 1.0, rotations: int = 2) -> dict[str, float]:
+        shifts = rotation_shifts(rotations)
         unrotated = []
         for s in shifts:
-            letters = OPTION_LETTERS[s:] + OPTION_LETTERS[:s]
-            ids = self.tokenizer.encode(format_prompt(query, letters)).ids
+            assignment = option_assignment(s)
+            ids = self.tokenizer.encode(format_prompt(query, assignment)).ids
             ids = ids[-self.config.max_seq_len :]
             idx = torch.tensor([ids], dtype=torch.long, device=self.device)
             logits, _ = self.model(idx)
-            display_ids = [self.option_ids[OPTION_LETTERS.index(l)] for l in letters]
-            display_logp = torch.log_softmax(logits[0, -1, display_ids].float() / temperature, dim=-1)
+            display_logp = torch.log_softmax(
+                logits[0, -1, self.option_ids].float() / temperature, dim=-1
+            )
             orig_logp = torch.empty_like(display_logp)
-            orig_logp[torch.tensor([OPTION_LETTERS.index(l) for l in letters])] = display_logp
+            orig_logp[torch.tensor([OPTION_LETTERS.index(c) for c in assignment])] = display_logp
             unrotated.append(orig_logp)
         combined = torch.stack(unrotated).mean(dim=0)
         probs = torch.softmax(combined, dim=-1)
         return {letter: float(p) for letter, p in zip(OPTION_LETTERS, probs.tolist())}
 
     @torch.no_grad()
-    def predict(self, query: str, temperature: float = 1.0, rotations: int = 1) -> tuple[str, dict[str, float]]:
+    def predict(self, query: str, temperature: float = 1.0, rotations: int = 2) -> tuple[str, dict[str, float]]:
         proba = self.predict_proba(query, temperature, rotations)
         label = max(OPTION_LETTERS, key=lambda letter: proba[letter])
         return label, proba
@@ -254,6 +288,16 @@ class ProbeDecisionModel:
             self.temperature21 = float(probe.get("temperature21", 1.0))
         self.tool_head = None
         self.tool_layer = None
+
+    @property
+    def level(self) -> str:
+        """Which debias level the coarse prediction reflects."""
+        return debias_level(self.priors, self.prior_lambda)
+
+    @property
+    def rotations(self) -> int:
+        """Probe heads score one fixed prompt, so one forward pass is enough."""
+        return 1
 
     @torch.no_grad()
     def _hidden(self, query: str, layer=None) -> torch.Tensor:
@@ -364,8 +408,6 @@ def export_probe(probe_path: str, output_path: str) -> dict:
                 w, b = h.effective()
                 data[head_key] = {"weight": w.tolist(), "bias": b.tolist()}
                 data[temp_key] = h.temperature
-        data["priors"] = probe.get("priors", {})
-        data["prior_lambda"] = float(probe.get("prior_lambda", 1.0))
     else:
         data["temperature7"] = float(probe["temperature7"])
         data["temperature_bin"] = float(probe["temperature_bin"])
@@ -383,6 +425,12 @@ def export_probe(probe_path: str, output_path: str) -> dict:
                 "bias": probe["head21"]["bias"].tolist(),
             }
             data["temperature21"] = float(probe.get("temperature21", 1.0))
+    # Priors are label-free and apply to both legacy and selected artifacts.
+    # Export them even when empty so the browser sees the same payload the API
+    # loads (intent.js checks probe.priors?.coarse).
+    if "priors" in probe:
+        data["priors"] = probe["priors"]
+        data["prior_lambda"] = float(probe.get("prior_lambda", 1.0))
     for key in (
         "schema_version", "checkpoint_sha256", "tokenizer_sha256",
         "prompt_template_sha256", "dtype", "layer",

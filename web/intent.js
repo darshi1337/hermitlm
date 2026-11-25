@@ -32,14 +32,15 @@ export function softmax(logits, temperature = 1.0, prior = null, lambda = 0) {
 }
 
 export function classifyIntent(lastHidden, probe) {
+  const lambda = probe.prior_lambda ?? 1.0;
   const logits7 = linear(lastHidden, probe.head7.weight, probe.head7.bias);
-  const proba7 = softmax(logits7, probe.temperature7, probe.priors?.coarse, probe.prior_lambda);
+  const proba7 = softmax(logits7, probe.temperature7, probe.priors?.coarse, lambda);
   let best = 0;
   for (let i = 1; i < proba7.length; i++) {
     if (proba7[i] > proba7[best]) best = i;
   }
   const logitsBin = linear(lastHidden, probe.head_bin.weight, probe.head_bin.bias);
-  const probaBin = softmax(logitsBin, probe.temperature_bin, probe.priors?.confused, probe.prior_lambda);
+  const probaBin = softmax(logitsBin, probe.temperature_bin, probe.priors?.confused, lambda);
   const label = probe.options[best];
   const proba = {};
   probe.options.forEach((letter, i) => (proba[letter] = proba7[i]));
@@ -53,13 +54,17 @@ export function classifyIntent(lastHidden, probe) {
     p_confused: probaBin[1],
     proba,
     top2: ranked.slice(0, 2),
+    // Debiasing provenance, matching classify_intent() in router.py.
+    level: Array.isArray(probe.priors?.coarse) && lambda > 0 ? "L0" : "raw",
+    rotations: 1,
   };
 }
 
 export function classifyFine(lastHidden, probe) {
   if (!probe.head21) return null;
+  const lambda = probe.prior_lambda ?? 1.0;
   const logits = linear(lastHidden, probe.head21.weight, probe.head21.bias);
-  const probs = softmax(logits, probe.temperature21 || 1.0, probe.priors?.fine, probe.prior_lambda);
+  const probs = softmax(logits, probe.temperature21 || 1.0, probe.priors?.fine, lambda);
   let best = 0;
   for (let i = 1; i < probs.length; i++) {
     if (probs[i] > probs[best]) best = i;

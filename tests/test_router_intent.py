@@ -42,6 +42,50 @@ def test_probe_missing_falls_back_to_keywords(monkeypatch):
     assert isinstance(tool, str) or tool is None
 
 
+def test_classify_intent_reports_debias_metadata(monkeypatch):
+    class DebiasProbe:
+        def __init__(self):
+            self.priors = {"coarse": [1 / 7] * 7}
+            self.prior_lambda = 1.0
+
+        def predict(self, query):
+            proba = {letter: 1 / 7 for letter in "abcdefg"}
+            proba["a"] = 0.5
+            return "a", proba, 0.1
+
+        def predict_fine(self, query):
+            return "greeting", {"greeting": 1.0}
+
+    monkeypatch.setattr(router, "_probe", DebiasProbe())
+    monkeypatch.setattr(router, "_probe_failed", False)
+    intent = classify_intent("hello crab")
+    assert intent is not None
+    assert intent["level"] == "L0"
+    assert intent["rotations"] == 1
+
+
+def test_classify_intent_reports_raw_without_prior(monkeypatch):
+    class RawProbe:
+        def __init__(self):
+            self.priors = {}
+            self.prior_lambda = 1.0
+
+        def predict(self, query):
+            proba = {letter: 1 / 7 for letter in "abcdefg"}
+            proba["a"] = 0.5
+            return "a", proba, 0.1
+
+        def predict_fine(self, query):
+            return None
+
+    monkeypatch.setattr(router, "_probe", RawProbe())
+    monkeypatch.setattr(router, "_probe_failed", False)
+    intent = classify_intent("hello crab")
+    assert intent is not None
+    assert intent["level"] == "raw"
+    assert intent["rotations"] == 1
+
+
 def test_confused_escalates_to_web(monkeypatch):
     class FakeProbe:
         def predict(self, query):

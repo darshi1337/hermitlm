@@ -17,11 +17,12 @@ from hermitlm.settings import (
     DEVICE,
     PERSONA_PROMPT,
     TOKENIZER_PATH,
+    YES_THRESHOLD,
 )
 from hermitlm.tools.db import init_db, insert_conversation, insert_intent, intent_stats
 from hermitlm.tools.decision_model import COARSE_NAMES, INTENT_PERSONA
 from hermitlm.tools.memory import extract_fact, get_memory, init_memory_db, save_memory
-from hermitlm.tools.router import route_with_intent
+from hermitlm.tools.router import get_probe, route_with_intent
 
 app = FastAPI(title="HermitLM API")
 
@@ -43,7 +44,8 @@ init_memory_db()
 engine = HermitInference(
     CHECKPOINT_PATH,
     TOKENIZER_PATH,
-    device=DEVICE
+    device=DEVICE,
+    probe=get_probe(),
 )
 
 
@@ -60,6 +62,7 @@ class IntentResponse(BaseModel):
     name: str
     confidence: float
     p_confused: float
+    p_yes: float = 0.0
     level: str = "raw"
     rotations: int = 1
 
@@ -152,7 +155,7 @@ def _respond(user_input, req):
             and CLARIFY
             and intent is not None
             and intent["confidence"] < CLARIFY_THRESHOLD
-            and intent["p_confused"] < 0.9
+            and intent.get("p_yes", intent["p_confused"]) < YES_THRESHOLD
             and len(intent.get("top2", [])) == 2
         ):
             (first, _), (second, _) = intent["top2"]
@@ -167,13 +170,16 @@ def _respond(user_input, req):
             if persona and PERSONA_PROMPT:
                 prompt = f"[{persona} crab] " + prompt
 
-            response, _scores = engine.best_of_n(
+            response, _scores, expected = engine.best_of_n(
                 prompt,
                 n=BEST_OF,
                 temperature=req.temperature,
                 top_k=req.top_k,
                 max_tokens=req.max_tokens,
+                score_query=user_input,
             )
+            if intent is not None:
+                intent["expected"] = expected
 
     return response, _tool, intent, persona
 
@@ -186,7 +192,7 @@ def _log_turn(req, user_input, response, tool, intent):
         bot_response=response,
         channel_id="api",
     )
-    insert_intent(user_input, intent, tool)
+    insert_intent(user_input, intent, tool, expected=(intent or {}).get("expected"))
 
 
 @app.post("/chat", response_model=ChatResponse)
@@ -206,6 +212,7 @@ def chat(req: ChatRequest):
             name=intent["name"],
             confidence=intent["confidence"],
             p_confused=intent["p_confused"],
+            p_yes=intent.get("p_yes", intent["p_confused"]),
             level=intent.get("level", "raw"),
             rotations=intent.get("rotations", 1),
         ) if intent else None,

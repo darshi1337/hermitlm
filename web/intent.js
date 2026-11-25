@@ -4,6 +4,9 @@
 // linear heads (web/probe.json) with temperature-scaled softmax.
 
 export const CONFUSED_THRESHOLD = 0.9;
+// Decision boundary of the calibrated yes/no head (HERMIT_YES_THRESHOLD).
+// CONFUSED_THRESHOLD remains as the fallback for legacy probes without it.
+export const YES_THRESHOLD = 0.5;
 export const CLARIFY_THRESHOLD = 0.75;
 
 export function linear(hidden, weight, bias) {
@@ -41,6 +44,14 @@ export function classifyIntent(lastHidden, probe) {
   }
   const logitsBin = linear(lastHidden, probe.head_bin.weight, probe.head_bin.bias);
   const probaBin = softmax(logitsBin, probe.temperature_bin, probe.priors?.confused, lambda);
+  // Calibrated out-of-scope probability. Older probes without head_yes fall
+  // back to the legacy confused head, matching router.classify_intent().
+  let pYes = probaBin[1];
+  if (probe.head_yes) {
+    const logitsYes = linear(lastHidden, probe.head_yes.weight, probe.head_yes.bias);
+    const probaYes = softmax(logitsYes, probe.temperature_yes, probe.priors?.yes, lambda);
+    pYes = probaYes[1];
+  }
   const label = probe.options[best];
   const proba = {};
   probe.options.forEach((letter, i) => (proba[letter] = proba7[i]));
@@ -52,6 +63,7 @@ export function classifyIntent(lastHidden, probe) {
     name: probe.names[label],
     confidence: proba7[best],
     p_confused: probaBin[1],
+    p_yes: pYes,
     proba,
     top2: ranked.slice(0, 2),
     // Debiasing provenance, matching classify_intent() in router.py.

@@ -108,6 +108,39 @@ def get_fine_option_ids(tokenizer: Tokenizer) -> list[int]:
     return ids
 
 
+def get_label_ids(tokenizer: Tokenizer, labels, fallback_labels=None) -> tuple[list[str], list[int]]:
+    """Resolve constrained-decoding labels to single tokens.
+
+    Score levels are naturally written as digits (`0`, `1`, ...), but a custom
+    tokenizer may encode a digit into several tokens. Falling back to letters
+    keeps constrained decoding valid instead of silently scoring a prefix
+    token. Returns the labels actually used and their token ids.
+    """
+    labels = [str(label) for label in labels]
+    ids: list[int] = []
+    for label in labels:
+        encoded = tokenizer.encode(label).ids
+        if len(encoded) != 1:
+            ids = []
+            break
+        ids.append(encoded[0])
+    if len(ids) == len(labels) and len(set(ids)) == len(ids):
+        return labels, ids
+
+    fallback = [str(label) for label in (fallback_labels or [])]
+    if len(fallback) != len(labels):
+        fallback = [chr(ord("a") + i) for i in range(len(labels))]
+    ids = []
+    for label in fallback:
+        encoded = tokenizer.encode(label).ids
+        if len(encoded) != 1:
+            raise ValueError(f"fallback label {label!r} is not a single token: {encoded}")
+        ids.append(encoded[0])
+    if len(set(ids)) != len(ids):
+        raise ValueError(f"fallback label ids are not distinct: {ids}")
+    return fallback, ids
+
+
 def option_assignment(shift: int) -> list[str]:
     """Return the class shown at each display letter ``a..g``.
 
@@ -219,6 +252,11 @@ def chat_prompt(query: str) -> str:
     return f"<|im_start|>user\n{query}<|im_end|>\n<|im_start|>assistant\n"
 
 
+def score_prompt(query: str, response: str = "") -> str:
+    """Prompt for the reply-quality score head: query plus a candidate reply."""
+    return chat_prompt(query) + response
+
+
 PROMPT_TEMPLATES = format_prompt("x") + "\n" + chat_prompt("x")
 
 
@@ -286,8 +324,45 @@ class ProbeDecisionModel:
             self.temperature7 = float(probe["temperature7"])
             self.temperature_bin = float(probe["temperature_bin"])
             self.temperature21 = float(probe.get("temperature21", 1.0))
+        self.head_yes = self._aux_head(probe, "yes", "head_yes", "temperature_yes")
+        self.head_score = self._aux_head(probe, "score", "head_score", "temperature_score")
+        labels = probe.get("score_labels") or [str(k) for k in range(len(probe.get("score_levels", [])))]
+        self.score_labels, _ = get_label_ids(self.tokenizer, labels)
+        self.score_levels = [float(v) for v in probe.get("score_levels", [])]
+        self.score_thresholds = [float(v) for v in probe.get("score_thresholds", [])]
         self.tool_head = None
         self.tool_layer = None
+
+    def _aux_head(self, probe: dict, name: str, head_key: str, temp_key: str):
+        """Load an optional head that may live in `selection` or at top level."""
+        selection = probe.get("selection") or {}
+        state = selection.get("heads", {}).get(name)
+        if state is None:
+            state = probe.get(head_key)
+        if state is None:
+            return None
+        if isinstance(state, dict) and "mean" in state and "std" in state:
+            return FittedHead.from_dict(state).to(self.device)
+        temperature = float(probe.get(temp_key, 1.0))
+        if isinstance(state, dict):
+            temperature = float(state.get("temperature", temperature))
+        return LegacyHead(state, temperature, self.device)
+
+    @staticmethod
+    def _head_layer(head) -> int | None:
+        """`None` or -1 means the final normed hidden state (legacy probes)."""
+        if head is None:
+            return None
+        layer = getattr(head, "layer", None)
+        return None if layer is None or int(layer) == -1 else int(layer)
+
+    @property
+    def has_yes_head(self) -> bool:
+        return self.head_yes is not None
+
+    @property
+    def has_score_head(self) -> bool:
+        return self.head_score is not None and bool(self.score_levels)
 
     @property
     def level(self) -> str:
@@ -301,14 +376,19 @@ class ProbeDecisionModel:
 
     @torch.no_grad()
     def _hidden(self, query: str, layer=None) -> torch.Tensor:
+        """Hidden state at the last real token of a chat prompt."""
+        return self._hidden_prompt(chat_prompt(query), layer)
+
+    @torch.no_grad()
+    def _hidden_prompt(self, prompt: str, layer=None) -> torch.Tensor:
         cache = getattr(self, "_hidden_cache", None)
         if cache is None:
             cache = {}
             self._hidden_cache = cache
-        key = (query, layer)
+        key = (prompt, layer)
         if key in cache:
             return cache[key]
-        ids = self.tokenizer.encode(chat_prompt(query)).ids[-self.config.max_seq_len :]
+        ids = self.tokenizer.encode(prompt).ids[-self.config.max_seq_len :]
         idx = torch.tensor([ids], dtype=torch.long, device=self.device)
         if layer is None:
             _, _, hidden = self.model(idx, return_hidden=True)
@@ -343,6 +423,35 @@ class ProbeDecisionModel:
         proba = torch.exp(self._log_probs(self.head21, h, "fine"))[0]
         by_fine = {fine: float(p) for fine, p in zip(FINE21_ORDER, proba.tolist())}
         return max(FINE21_ORDER, key=lambda fine: by_fine[fine]), by_fine
+
+    @torch.no_grad()
+    def predict_yes(self, query: str) -> tuple[float, dict[str, float]] | None:
+        """P(out-of-scope) from the calibrated yes/no head.
+
+        Class 0 is "in scope" and class 1 is "yes, out of scope". Returns
+        ``None`` when the artifact predates the head.
+        """
+        if self.head_yes is None:
+            return None
+        h = self._hidden_prompt(chat_prompt(query), self._head_layer(self.head_yes))
+        proba = torch.exp(self._log_probs(self.head_yes, h, "yes"))[0]
+        by_class = {name: float(p) for name, p in zip(("in_scope", "out_of_scope"), proba.tolist())}
+        return by_class["out_of_scope"], by_class
+
+    @torch.no_grad()
+    def predict_score(self, query: str, response: str) -> tuple[float, list[float]] | None:
+        """Expected reply quality plus the level distribution.
+
+        ``expected = sum(k * p_k)`` over the calibrated score levels stored in
+        the artifact. Returns ``None`` when no score head is available.
+        """
+        if not self.has_score_head:
+            return None
+        h = self._hidden_prompt(score_prompt(query, response), self._head_layer(self.head_score))
+        proba = torch.exp(self._log_probs(self.head_score, h, "score"))[0]
+        levels = torch.tensor(self.score_levels, dtype=proba.dtype)
+        expected = float((levels * proba).sum())
+        return expected, proba.tolist()
 
     def load_tool_heads(self, tool_probe_path: str) -> bool:
         try:
@@ -425,6 +534,29 @@ def export_probe(probe_path: str, output_path: str) -> dict:
                 "bias": probe["head21"]["bias"].tolist(),
             }
             data["temperature21"] = float(probe.get("temperature21", 1.0))
+    # Optional yes/no and score heads. They may be stored in `selection` or at
+    # top level for legacy artifacts; export both shapes as plain linear heads.
+    for name, head_key, temp_key in (
+        ("yes", "head_yes", "temperature_yes"),
+        ("score", "head_score", "temperature_score"),
+    ):
+        state = (selection or {}).get("heads", {}).get(name)
+        if state is None:
+            state = probe.get(head_key)
+        if state is None:
+            continue
+        if "mean" in state and "std" in state:
+            fitted = FittedHead.from_dict(state)
+            w, b = fitted.effective()
+            temperature = fitted.temperature
+        else:
+            w, b = state["weight"], state["bias"]
+            temperature = float(state.get("temperature", probe.get(temp_key, 1.0)))
+        data[head_key] = {"weight": w.tolist(), "bias": b.tolist()}
+        data[temp_key] = float(temperature)
+    for key in ("score_levels", "score_thresholds", "score_labels"):
+        if key in probe:
+            data[key] = probe[key]
     # Priors are label-free and apply to both legacy and selected artifacts.
     # Export them even when empty so the browser sees the same payload the API
     # loads (intent.js checks probe.priors?.coarse).

@@ -93,9 +93,14 @@ def _get_probe():
         return None
 
 
+def get_probe():
+    """Return the shared probe instance (used to attach it to the chat engine)."""
+    return _get_probe()
+
+
 def classify_intent(user_input):
-    """Return intent dict (label, name, confidence, p_confused, proba, fine, top2,
-    level, rotations) or None."""
+    """Return intent dict (label, name, confidence, p_confused, p_yes, proba,
+    fine, top2, level, rotations) or None."""
     probe = _get_probe()
     if probe is None:
         return None
@@ -103,6 +108,10 @@ def classify_intent(user_input):
         from hermitlm.tools.decision_model import COARSE_NAMES, debias_level
 
         label, proba, p_confused = probe.predict(user_input)
+        yes = probe.predict_yes(user_input) if hasattr(probe, "predict_yes") else None
+        # Older artifacts have no yes head: the legacy confused probability is
+        # the fallback so routing behaviour stays unchanged.
+        p_yes = yes[0] if yes is not None else p_confused
         ranked = sorted(proba.items(), key=lambda kv: kv[1], reverse=True)[:2]
         priors = getattr(probe, "priors", {}) or {}
         prior_lambda = float(getattr(probe, "prior_lambda", 0.0) or 0.0)
@@ -111,6 +120,7 @@ def classify_intent(user_input):
             "name": COARSE_NAMES[label],
             "confidence": round(proba[label], 4),
             "p_confused": round(p_confused, 4),
+            "p_yes": round(p_yes, 4),
             "proba": {k: round(v, 4) for k, v in proba.items()},
             "top2": [[letter, round(p, 4)] for letter, p in ranked],
             "fine_label": None,
@@ -168,7 +178,7 @@ def route_with_intent(user_input, confused_threshold=None, tool_threshold=None):
     Order: tag/keyword routing first (high precision), then the tool probe on
     the residue, then confused escalation to web search.
     """
-    from hermitlm.settings import CONFUSED_THRESHOLD, TOOL_THRESHOLD
+    from hermitlm.settings import TOOL_THRESHOLD, YES_THRESHOLD
 
     tool, result = route(user_input)
     intent = classify_intent(user_input)
@@ -180,8 +190,8 @@ def route_with_intent(user_input, confused_threshold=None, tool_threshold=None):
             if probe_tool:
                 return probe_tool, probe_result, intent
     if tool is None and intent is not None:
-        threshold = CONFUSED_THRESHOLD if confused_threshold is None else confused_threshold
-        if intent["p_confused"] >= threshold:
+        threshold = YES_THRESHOLD if confused_threshold is None else confused_threshold
+        if intent.get("p_yes", intent["p_confused"]) >= threshold:
             try:
                 web_result = _web(user_input)
             except Exception:  # noqa: BLE001 - escalation must not break chat

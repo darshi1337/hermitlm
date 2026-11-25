@@ -148,9 +148,10 @@ def test_best_of_n_picks_best_reward():
     from hermitlm.runtime.inference import HermitInference
 
     engine = HermitInference("checkpoints/best_model.pt", "data/tokenizer.json", device="cpu")
-    best, scores = engine.best_of_n("hello crab", n=2, max_tokens=5)
+    best, scores, expected = engine.best_of_n("hello crab", n=2, max_tokens=5)
     assert isinstance(best, str) and best
     assert len(scores) == 2
+    assert expected is None or isinstance(expected, float)
 
 
 def test_math_reply_uses_crab_intro(monkeypatch, tmp_path):

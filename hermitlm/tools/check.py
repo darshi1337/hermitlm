@@ -20,6 +20,7 @@ from hermitlm.tools.decision_model import (
     PROMPT_TEMPLATES,
     chat_prompt,
     get_fine_option_ids,
+    get_label_ids,
     get_option_ids,
 )
 from hermitlm.training.model import HermitLM
@@ -63,6 +64,14 @@ def main() -> None:
         if selection:
             print(f"PASS  probe: selected layer {selection['layer']}, "
                   f"solvers={[h['solver'] for h in selection['heads'].values()]}")
+        heads = (selection or {}).get("heads", {})
+        for name, key in (("yes", "head_yes"), ("score", "head_score")):
+            if key in probe or name in heads:
+                print(f"PASS  auxiliary_head.{name}: present")
+        labels = probe.get("score_labels")
+        if labels:
+            used, ids = get_label_ids(tokenizer, labels)
+            print(f"PASS  score_labels: {used} -> {ids}")
     if os.path.exists(TOOL_PROBE_PATH):
         tool = torch.load(TOOL_PROBE_PATH, map_location="cpu", weights_only=True)
         if tool.get("selection"):

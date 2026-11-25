@@ -72,3 +72,30 @@ def test_web_probe_scores_match_artifact():
     assert torch.allclose(api_proba.double(), web_proba.double(), atol=1e-6)
     assert OPTION_LETTERS[int(api_proba.argmax())] == web["options"][int(web_proba.argmax())]
     assert debias_level(web["priors"], web["prior_lambda"]) == "L0"
+
+
+@pytest.mark.skipif(
+    not os.path.exists("web/probe.json") or not os.path.exists("checkpoints/decision_probe.pt"),
+    reason="requires the shipped probe artifact",
+)
+def test_yes_head_parity_between_api_and_browser():
+    """The yes/no head exported for the browser matches probe.predict_yes()."""
+    from hermitlm.tools.heads import FittedHead
+    from hermitlm.tools.prior import apply_prior
+
+    artifact = torch.load("checkpoints/decision_probe.pt", map_location="cpu", weights_only=True)
+    web = json.loads(Path("web/probe.json").read_text(encoding="utf-8"))
+    head = FittedHead.from_dict(artifact["head_yes"])
+    hidden = torch.randn(len(web["head_yes"]["weight"][0]), generator=torch.Generator().manual_seed(1))
+
+    api_lp = apply_prior(
+        head.log_probs(hidden.unsqueeze(0)),
+        torch.tensor(web["priors"]["yes"]),
+        float(web["prior_lambda"]),
+    )[0]
+    logits = torch.tensor(web["head_yes"]["weight"]) @ hidden + torch.tensor(web["head_yes"]["bias"])
+    scaled = logits / web["temperature_yes"]
+    scaled = scaled - float(web["prior_lambda"]) * torch.log(
+        torch.tensor(web["priors"]["yes"]).clamp_min(1e-6)
+    )
+    assert torch.allclose(torch.exp(api_lp).double(), torch.softmax(scaled, dim=-1).double(), atol=1e-6)

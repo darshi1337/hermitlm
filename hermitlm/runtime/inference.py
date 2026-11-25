@@ -6,8 +6,9 @@ from hermitlm.training.model import HermitLM
 
 
 class HermitInference:
-    def __init__(self, checkpoint_path, tokenizer_path, device="cpu"):
+    def __init__(self, checkpoint_path, tokenizer_path, device="cpu", probe=None):
         self.device = torch.device(device)
+        self.probe = probe  # optional ProbeDecisionModel with a score head
         self.tokenizer = Tokenizer.from_file(tokenizer_path)
 
         ckpt = torch.load(checkpoint_path, map_location=self.device, weights_only=True)
@@ -64,19 +65,35 @@ class HermitInference:
         """Generate n independent candidates with the same logic as chat()."""
         return [self.chat(user_input, temperature, top_k, max_tokens) for _ in range(max(1, n))]
 
-    def best_of_n(self, user_input, n=3, temperature=0.8, top_k=40, max_tokens=64):
-        """Generate n candidates, keep the best by persona reward.
+    def best_of_n(self, user_input, n=3, temperature=0.8, top_k=40, max_tokens=64, score_query=None):
+        """Generate n candidates and keep the best one.
 
-        Return (best_text, scores). n=1 skips reranking.
+        When the loaded probe carries a calibrated score head, candidates are
+        ranked by ``expected = sum(k * p_k)``. Otherwise the heuristic persona
+        reward is used. Returns ``(best_text, heuristic_scores, expected)``;
+        ``expected`` is None when neither ranker is available.
         """
-        candidates = self.chat_candidates(user_input, n, temperature, top_k, max_tokens)
-        if len(candidates) == 1:
-            return candidates[0], [0.0]
         from hermitlm.training.reward import score_response
 
+        candidates = self.chat_candidates(user_input, n, temperature, top_k, max_tokens)
         scores = [score_response(text) for text in candidates]
-        best = max(range(len(candidates)), key=lambda i: scores[i])
-        return candidates[best], scores
+        if len(candidates) == 1:
+            return candidates[0], [0.0], None
+
+        ranker = None
+        if getattr(self, "probe", None) is not None:
+            query = user_input if score_query is None else score_query
+            try:
+                ranked = [self.probe.predict_score(query, text) for text in candidates]
+                if all(value is not None for value in ranked):
+                    ranker = [value[0] for value in ranked]
+            except Exception:  # noqa: BLE001 - fall back to the heuristic
+                ranker = None
+        if ranker is None:
+            best = max(range(len(candidates)), key=lambda i: scores[i])
+            return candidates[best], scores, None
+        best = max(range(len(candidates)), key=lambda i: ranker[i])
+        return candidates[best], scores, ranker[best]
 
     def _format_prompt(self, user_input):
         return (

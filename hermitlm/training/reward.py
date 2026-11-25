@@ -123,3 +123,20 @@ def score_response(text):
     reward -= 3.0 * _break_character_penalty(text)
 
     return reward
+
+
+def context_score(query, text):
+    """Weak supervision for the reply-score head.
+
+    ``score_response`` only sees the reply, so it cannot tell whether the crab
+    actually answered the user. This adds a small bonus for topical overlap
+    between the user's message and the reply. The bonus is bounded so persona
+    style still dominates the score.
+    """
+    query_words = {
+        word for word in re.findall(r"[a-z']+", query.lower())
+        if len(word) > 2 and word not in _STOPWORDS
+    }
+    reply_words = set(re.findall(r"[a-z']+", text.lower()))
+    overlap = len(query_words & reply_words) / max(1, len(query_words))
+    return score_response(text) + 0.5 * min(1.0, overlap)

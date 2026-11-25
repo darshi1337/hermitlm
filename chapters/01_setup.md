@@ -210,7 +210,7 @@ pytest -q
 ruff check .
 ```
 
-The repository records 81 passed and 2 skipped tests. `python -m hermitlm.tools.check` validates token IDs, batch consistency, hidden layers, prompt-template hashes and artifact selection before a deploy.
+The repository records 89 passed and 2 skipped tests. `python -m hermitlm.tools.check` validates token IDs, batch consistency, hidden layers, prompt-template hashes and artifact selection before a deploy.
 
 ---
 

@@ -253,6 +253,8 @@ paired diff CI = percentile bootstrap of (stat_b − stat_a) on same draws
 | `scripts/export_onnx.py`, `quantize_onnx.py` | Browser artifacts |
 | `scripts/train_probe.py`, `train_tool_probe.py` | Head fitting |
 | `scripts/fit_probe_prior.py` | Label-free prior fitting into a probe artifact |
+| `scripts/train_yes_score_heads.py` | Yes/no and score head fitting |
+| `scripts/eval_aux_heads.py` | Score-head vs heuristic NLL report |
 | `scripts/eval.py`, `eval_decision.py` | Evaluation |
 | `scripts/retrain_all.sh`, `retrain_resume.ps1` | Pipeline runners |
 | `web/` | Browser UI and ONNX artifacts |
@@ -281,6 +283,8 @@ paired diff CI = percentile bootstrap of (stat_b − stat_a) on same draws
 | **Temperature** | Divides logits to sharpen or flatten sampling. |
 | **Batch prior (L0)** | Mean predicted class probability over an unlabelled pool; subtracted as `λ log π` to undo label bias. |
 | **Option rotation** | Repeats a multiple-choice prompt with the classes assigned to different letters and averages the result. |
+| **p_yes** | Calibrated probability that a message is out of scope; replaces the ad-hoc confused flag. |
+| **Expected score** | `sum(k * p_k)` over calibrated reply-quality levels, used to rerank best-of-N candidates. |
 | **top-k** | Keep only the k largest logits. |
 | **top-p** | Keep the smallest set reaching cumulative probability p. |
 | **EOS / BOS** | End-of-sequence and beginning-of-sequence markers. |
@@ -345,7 +349,9 @@ python scripts/eval_decision.py --method logit --max-n 400 --cal-n 200 \
 
 # refresh the shipped L0 prior and the browser probe
 python scripts/fit_probe_prior.py --max-n 4000
+python scripts/train_yes_score_heads.py --score-n 6000 --device xpu
 python scripts/export_probe.py --output web/probe.json
+python scripts/eval_aux_heads.py --out-dir eval_out/aux_heads
 
 # deploy diagnostics
 python -m hermitlm.tools.check

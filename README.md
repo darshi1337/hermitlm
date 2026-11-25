@@ -240,8 +240,12 @@ The decision stack includes label-free and supervised calibration pieces:
 - `DecisionModel.predict_proba(..., rotations=k)`: option-order rotation with two evenly spaced
   passes by default for the zero-shot constrained-decoding path. `eval_decision.py` reports the
   order-flip rate for `raw` vs `L0` in the `order_flip` section.
+- `scripts/train_yes_score_heads.py`: fits two more heads into the same pinned probe artifact.
+  `head_yes` gives a calibrated `p_yes` for out-of-scope escalation; `head_score` predicts a
+  context-aware reply-quality level whose expected value is `sum(k * p_k)`. Both are exported
+  to `web/probe.json` and applied identically in the API and browser.
 - `python -m hermitlm.tools.check`: validates label tokens, batch consistency, hidden layers,
-  prompt-template hashes and artifact selection before deploy.
+  prompt-template hashes, auxiliary heads and score-label tokenization before deploy.
 
 Artifact metadata now also pins the prompt-template hash, dtype and selected layer, so a
 probe cannot be silently paired with a changed prompt or precision.
@@ -256,8 +260,9 @@ the head-selection tooling remains available for future data improvements.
 `scripts/build_tool_data.py` writes synthetic tool data (templates plus hand-authored natural
 queries) to `data/tool_train.jsonl` / `data/tool_eval.jsonl`. `scripts/train_tool_probe.py` trains
 a 4-way head (math/web/faq/chat) into `checkpoints/decision_tool_probe.pt`. Routing order is
-tag, then keywords (93% precise when they fire), then the probe on the residue, then confused
-escalation. Training now includes 50 extra natural web queries and 28 hard negatives (chat/FAQ
+tag, then keywords (93% precise when they fire), then the probe on the residue, then out-of-scope
+escalation using the calibrated `p_yes` from `head_yes` (`HERMIT_YES_THRESHOLD`, default 0.5).
+Older probes without that head fall back to `p_confused`. Training now includes 50 extra natural web queries and 28 hard negatives (chat/FAQ
 messages containing web trigger words). Scores on the 80 hand-authored eval queries after the
 latest retrain: probe **0.7250** (math 0.80, web 0.65, faq 0.60, chat 0.85), up from 0.6125 —
 the web class went from 0.15 to 0.65.
@@ -267,10 +272,12 @@ the web class went from 0.15 to 0.65.
 `POST /chat` now does more than generate one reply:
 
 - Best-of-N (`engine.best_of_n`, `HERMIT_BEST_OF`, default 3). The API samples N candidates and
-keeps the best by persona reward. Lower the value to 1 for less latency.
+keeps the best by the score head's `expected` value; it falls back to the heuristic persona
+reward when the artifact has no score head. The chosen candidate's expected score is written
+to `intent_log.expected_score`. Lower the value to 1 for less latency.
 - Clarifying gate (`HERMIT_CLARIFY`, default on, threshold 0.75). When no tool fires and intent
-confidence lands below the threshold without confusion, the API asks which of the top two
-intents the user means instead of guessing.
+confidence lands below the threshold without out-of-scope evidence, the API asks which of the
+top two intents the user means instead of guessing.
 - Persona auto-router. Coarse intent maps to UI persona mode (needs to hungry, sense to guard,
 body and condition to sleepy). The API returns the persona and prefixes the prompt with
 `[<persona> crab]` (for example `[hungry crab]`), matching the prefixed variants that
@@ -280,10 +287,13 @@ body and condition to sleepy). The API returns the persona and prefixes the prom
 
 ```bash
 python scripts/train_probe.py --per-class 1500 --per-fine 400 --out checkpoints/decision_probe.pt
+python scripts/fit_probe_prior.py --max-n 4000
+python scripts/train_yes_score_heads.py --score-n 6000 --device xpu
 python scripts/train_tool_probe.py --out checkpoints/decision_tool_probe.pt
 python scripts/eval_decision.py --method probe --max-n 5000 --cal-n 1000 --bootstrap 1000 --out-dir eval_out/decision_probe
 python scripts/eval_decision.py --eval data/human_eval.jsonl --method probe --max-n 126 --cal-n 60 --out-dir eval_out/human
 python scripts/export_probe.py --output web/probe.json   # also runs in deploy CI
+python scripts/eval_aux_heads.py --out-dir eval_out/aux_heads
 python -m hermitlm.tools.check                           # pre-deploy diagnostics
 ```
 
@@ -333,7 +343,8 @@ synthesis. `Enter` sends and `Esc` stops generation.
 Every reply also shows a probe decision-model intent chip (`web/intent.js` + `web/probe.json`).
 Classification costs a single forward pass over the prompt. The probe ships a label-free `L0`
 batch prior at `lambda = 0.5`, applied identically in the API and browser; the classifier reports
-`level: "L0"` when it is active. A high out-of-scope score links to a web search.
+`level: "L0"` when it is active. A high `p_yes` from the calibrated yes/no head links to a web
+search.
 The chip shows coarse and fine intent with confidence. Low confidence asks a clarifying question
 with quick-reply chips instead of guessing. Settings shows per-intent session counts.
 
@@ -380,14 +391,15 @@ pip install onnx onnxscript onnxruntime
 pip install torch --index-url https://download.pytorch.org/whl/xpu
 # NVIDIA CUDA instead: pip install torch --index-url https://download.pytorch.org/whl/cu121
 
-pytest tests/          # 81 passed, 2 skipped
+pytest tests/          # 89 passed, 2 skipped
 ruff check .           # clean
 python -m hermitlm.tools.check
 ```
 
 Create a `.env` with the documented keys (`HERMIT_CHECKPOINT`, `HERMIT_TOKENIZER`, `HERMIT_DEVICE`,
 `HERMIT_TRAIN_DEVICE`, `HERMIT_TEMPERATURE`, `HERMIT_TOP_K`, `HERMIT_MAX_TOKENS`,
-`HERMIT_PROBE`, `HERMIT_CONFUSED_THRESHOLD`, `HERMIT_TOOL_PROBE`, `HERMIT_TOOL_THRESHOLD`,
+`HERMIT_PROBE`, `HERMIT_CONFUSED_THRESHOLD`, `HERMIT_YES_THRESHOLD`, `HERMIT_TOOL_PROBE`,
+`HERMIT_TOOL_THRESHOLD`,
 `HERMIT_BEST_OF`, `HERMIT_CLARIFY`, `HERMIT_CLARIFY_THRESHOLD`, `HERMIT_PERSONA_PROMPT`,
 `WOLFRAM_APP_ID`, …). Never commit `.env`.
 

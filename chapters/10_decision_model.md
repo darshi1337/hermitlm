@@ -106,7 +106,7 @@ scores   = W x + b
 log p_c  = log( exp(scores_c/T) / Σ_j exp(scores_j/T) )
 ```
 
-The shipped artifact uses the older "legacy" form (`decision_model.py:225-241`): `scores = linear(hidden) / temperature`, then `log_softmax`.
+The shipped artifact uses the older "legacy" form (`decision_model.py:263-279`): `scores = linear(hidden) / temperature`, then `log_softmax`.
 
 ### Shipped head shapes and temperatures
 
@@ -121,15 +121,15 @@ From `checkpoints/decision_probe.pt` and `web/probe.json`:
 
 ### Prediction
 
-`decision_model.py:331-336`:
+`decision_model.py:411-416`:
 
 ```python
-331:    def predict(self, query: str) -> tuple[str, dict[str, float], float]:
-332:        h = self._hidden(query, self.layer)
-333:        proba7 = torch.exp(self._log_probs(self.head7, h, "coarse"))[0]
-334:        proba = {letter: float(p) for letter, p in zip(OPTION_LETTERS, proba7.tolist())}
-335:        p_confused = float(torch.exp(self._log_probs(self.head_bin, h, "confused"))[0, 1])
-336:        return max(OPTION_LETTERS, key=lambda letter: proba[letter]), proba, p_confused
+411:    def predict(self, query: str) -> tuple[str, dict[str, float], float]:
+412:        h = self._hidden(query, self.layer)
+413:        proba7 = torch.exp(self._log_probs(self.head7, h, "coarse"))[0]
+414:        proba = {letter: float(p) for letter, p in zip(OPTION_LETTERS, proba7.tolist())}
+415:        p_confused = float(torch.exp(self._log_probs(self.head_bin, h, "confused"))[0, 1])
+416:        return max(OPTION_LETTERS, key=lambda letter: proba[letter]), proba, p_confused
 ```
 
 For a zero hidden vector, the coarse head emits only its biases. Those biases are `[-0.01427, -0.08197, -0.01813, 0.0085, -0.00159, -0.0419, 0.06219]`, and after division by `T = 1.23006` plus softmax the largest class is `g` (mind) at **0.1517**. The binary head's biases give `p_confused = sigmoid((0.00603 − 0.06934)/1.33109) = 0.4881`.
@@ -269,6 +269,27 @@ combined = mean(unrotated over s)
 compares predictions. On the zero-shot path the flip rate drops from `1.0` (single pass) to
 `0.60` with L0 rotation; probe heads use a fixed prompt and therefore report `rotations: 1`.
 
+### Yes/no and score heads
+
+Two extra heads live in the same pinned artifact, so a stale head file still fails the SHA-256
+check. `scripts/train_yes_score_heads.py` fits both on frozen final-layer hidden states and
+exports them for the browser.
+
+- `head_yes`: a 2-way classifier trained on `type == "confused"` with balanced sampling. Class 1
+  means "yes, this is out of scope". Its temperature is fitted with `fit_temperature()` (binary
+  targets get Platt smoothing). `classify_intent()` returns `p_yes`, and the router escalates when
+  `p_yes >= HERMIT_YES_THRESHOLD` (0.5). Older artifacts fall back to `p_confused`.
+- `head_score`: a 5-way classifier over reply-quality levels. Weak supervision comes from
+  `context_score(query, reply)` in `reward.py` — the persona reward plus a bounded topical
+  overlap bonus — fitted on replies sampled from the model itself so training matches runtime.
+  Levels are rank-based bins with strictly increasing centres. The ranker uses
+  `expected = sum(k * p_k)`; it beats the heuristic reward on human eval NLL
+  (1.2578 vs 1.3780 in `eval_out/aux_heads/report.md`).
+
+`HermitInference.best_of_n()` ranks candidates by `expected` when the probe has a score head and
+falls back to `score_response()` otherwise. `POST /chat` logs the chosen candidate's `expected`
+in `intent_log.expected_score`.
+
 ---
 
 ## Metrics
@@ -350,7 +371,7 @@ Loading a head after a retrain or a prompt-template change raises an error inste
 
 ## Export to the browser
 
-`decision_model.export_probe()` (`decision_model.py:387-445`) writes `web/probe.json` with `options`, `names`, `fine_options`, the three heads and their temperatures, the `priors` / `prior_lambda` pair, and the hashes. `scripts/export_probe.py` is a 23-line wrapper. Priors are exported for both selection-format and legacy artifacts.
+`decision_model.export_probe()` (`decision_model.py:496-577`) writes `web/probe.json` with `options`, `names`, `fine_options`, the three heads and their temperatures, the `head_yes` / `head_score` pair with `score_levels` / `score_labels`, the `priors` / `prior_lambda` pair, and the hashes. `scripts/export_probe.py` is a 23-line wrapper. All heads are exported for both selection-format and legacy artifacts.
 
 When a head has standardization, `FittedHead.effective()` (`heads.py:43-47`) folds it into plain weights for JSON:
 
@@ -359,7 +380,7 @@ w_eff = W / σ
 b_eff = b − (μ/σ) · Wᵀ
 ```
 
-Then the browser needs only a dot product, a prior subtraction and a softmax (`web/intent.js:9-73`).
+Then the browser needs only a dot product, a prior subtraction and a softmax (`web/intent.js:21-85`).
 
 ---
 
@@ -410,15 +431,17 @@ softmax ≈ [0.1799, 0.1659, 0.1529, 0.1410, 0.1300, 0.1198, 0.1105]
 | File and lines | What it does |
 |---|---|
 | `hermitlm/tools/decision_model.py:29-78` | Intent label sets and persona map |
-| `hermitlm/tools/decision_model.py:302-345` | Hidden-state extraction, prior application and prediction |
-| `hermitlm/tools/decision_model.py:111-160` | Option assignment, rotation shifts and prompt template |
+| `hermitlm/tools/decision_model.py:378-420` | Hidden-state extraction, prior application and prediction |
+| `hermitlm/tools/decision_model.py:111-184` | Label-token resolution, option rotation and prompt template |
 | `hermitlm/tools/heads.py:36-47` | Scoring, log-softmax, export folding |
 | `hermitlm/tools/heads.py:94-139` | Ridge, LDA, layer grid |
 | `hermitlm/tools/calibration.py:29-146` | Platt targets and temperature search |
 | `hermitlm/tools/prior.py:10-24` | Prior fit and correction |
 | `hermitlm/tools/metrics.py:26-120` | Accuracy, NLL, ECE, macro F1, bootstrap |
 | `scripts/train_probe.py:32-49` | Frozen hidden-state extraction |
-| `web/intent.js:9-73` | Browser-side probe inference |
+| `scripts/train_yes_score_heads.py` | Yes/no and score head fitting |
+| `scripts/eval_aux_heads.py` | Score-head vs heuristic NLL report |
+| `web/intent.js:21-85` | Browser-side probe inference |
 
 ---
 

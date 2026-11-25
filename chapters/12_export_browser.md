@@ -154,13 +154,16 @@ Not every array shrinks 4×. LayerNorm scales, biases and scale/zero-point param
 | `fine_options` | 21 sorted fine labels |
 | `head7`, `head_bin`, `head21` | weight and bias matrices |
 | `temperature7`, `temperature_bin`, `temperature21` | 1.23006, 1.33109, 0.66384 |
-| `priors` | label-free coarse/confused/fine priors fitted by `scripts/fit_probe_prior.py` |
+| `head_yes`, `temperature_yes` | calibrated out-of-scope head |
+| `head_score`, `temperature_score` | 5-way reply-quality head |
+| `score_levels`, `score_thresholds`, `score_labels` | level centres, bucket edges and label tokens (`0`–`4`) |
+| `priors` | label-free coarse/confused/fine/yes/score priors fitted by `scripts/fit_probe_prior.py` and `scripts/train_yes_score_heads.py` |
 | `prior_lambda` | 0.5 |
 | `schema_version` | 2 |
 | three SHA-256 hashes | checkpoint, tokenizer, prompt template |
 
-File size: 213,196 bytes. `export_probe()` emits `priors` for both selection-format and legacy
-head artifacts, so the browser and the API apply the same `L0` correction.
+File size: 262,502 bytes. `export_probe()` emits all heads and priors for both selection-format
+and legacy artifacts, so the browser and the API apply the same corrections.
 
 `scripts/write_asset_manifest.py:21-33` writes `asset-manifest.json` with the SHA-256 and byte size of `model.quant.onnx`, `tokenizer.json` and `probe.json`. The browser uses the model hash as the Cache API version (`web/model.js:9-18`):
 
@@ -213,7 +216,7 @@ Each generation step (`web/model.js:208-228`):
 
 `classify()` (`web/model.js:183-196`) uses the **same session** and reads `results.last_hidden.data`, so classification costs one extra forward pass and no extra download.
 
-The browser sampler implements temperature, top-k and top-p (chapter 8). `web/intent.js:34-73` runs the three heads with temperature scaling, the exported prior and softmax, and uses the same 0.9 / 0.75 thresholds as the API.
+The browser sampler implements temperature, top-k and top-p (chapter 8). `web/intent.js:37-85` runs the heads with temperature scaling, the exported priors and softmax. `p_yes` comes from `head_yes` when present (falling back to `head_bin`), and out-of-scope escalation uses `YES_THRESHOLD = 0.5`, matching `HERMIT_YES_THRESHOLD` in the API.
 
 ---
 
@@ -288,6 +291,7 @@ context capped at 512 tokens
 | `scripts/quantize_onnx.py:6-15` | uint8 dynamic quantization |
 | `scripts/export_probe.py:14-19` | Probe JSON export (includes priors) |
 | `scripts/fit_probe_prior.py` | Label-free prior fitting into a probe artifact |
+| `scripts/train_yes_score_heads.py` | Yes/no and score head fitting into the probe |
 | `scripts/write_asset_manifest.py:21-33` | SHA-256 asset manifest |
 | `web/model.js:9-18` | Version from manifest |
 | `web/model.js:157-173` | onnxruntime-web session |

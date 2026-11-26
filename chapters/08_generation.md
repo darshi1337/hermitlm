@@ -236,9 +236,8 @@ $$
 
 $$
 \begin{aligned}
-v_{k}   = k-th largest z \\
-z'_v  = z_{v}    if z_{v} \geq  v_{k} \\
--\infty\text{otherwise}
+v_k = \text{k-th largest }z \\
+z'_v = z_v \text{ if } z_v \geq v_k, \text{ else } -\infty
 \end{aligned}
 $$
 
@@ -256,8 +255,8 @@ With `−∞` entries the exponential is exactly 0.
 
 $$
 \begin{aligned}
-cutoff = min { k : \sum_{j=1..k} p_(j) \geq  topP } \\
-p'_i   = p_{i} / \sum_{j=1..cutoff} p_(j)\text{for kept i}
+\text{cutoff} = \min\{k : \sum_{j\leq k} p_j \geq p_{\text{top}}\} \\
+p'_i = p_i / \sum_{j\leq\text{cutoff}} p_j
 \end{aligned}
 $$
 
@@ -265,9 +264,8 @@ $$
 
 $$
 \begin{aligned}
-forward passes = max_{new\_tokens} \\
-at 80 tokens  = 80 passes over the growing context \\
-context at step t = prompt_{len} + t tokens, capped at 512
+\text{forward passes} = \text{max new tokens} = 80 \\
+\text{context at step }t = \min(\text{prompt len} + t, 512)
 \end{aligned}
 $$
 

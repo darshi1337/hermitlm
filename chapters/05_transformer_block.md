@@ -64,10 +64,8 @@ A LayerNorm over `d_model = 320` computes, for each token independently:
 
 $$
 \begin{aligned}
-\mu = (1/d) \sum_i x_{i} \\
-\sigma^2 = (1/d) \sum_i (x_{i} - \mu)^2 \\
-\hat{x}_i = (x_{i} - \mu) / \sqrt{\sigma^2 + \varepsilon} \\
-y_{i} = \gamma_{i} \cdot \hat{x}_i + \beta_{i}
+\mu = \frac{1}{d}\sum_i x_i, \qquad \sigma^2 = \frac{1}{d}\sum_i (x_i-\mu)^2 \\
+\hat{x}_i = \frac{x_i-\mu}{\sqrt{\sigma^2+\varepsilon}}, \qquad y_i = \gamma_i \hat{x}_i + \beta_i
 \end{aligned}
 $$
 
@@ -117,7 +115,7 @@ The formula is:
 
 $$
 \begin{aligned}
-FFN(x) = dropout( w3( silu(w2(x)) \odot  w1(x) ) )
+\operatorname{FFN}(x) = w_3\big(\operatorname{silu}(w_2 x) \odot w_1 x\big)
 \end{aligned}
 $$
 
@@ -216,10 +214,10 @@ For one token, one block:
 
 $$
 \begin{aligned}
-w1: 320 \times 800 = 256,000 \\
-w2: 320 \times 800 = 256,000 \\
-w3: 800 \times 320 = 256,000 \\
-total = 768,000 multiply-adds per token per block
+w_1: 320 \times 800 = 256{,}000 \\
+w_2: 320 \times 800 = 256{,}000 \\
+w_3: 800 \times 320 = 256{,}000 \\
+\text{total} = 768{,}000\text{ multiply-adds per token per block}
 \end{aligned}
 $$
 
@@ -227,7 +225,7 @@ For a full sequence of 512 tokens and 6 blocks:
 
 $$
 \begin{aligned}
-768,000 \times 512 \times 6 = 2,359,296,000 multiply-adds
+768{,}000 \times 512 \times 6 = 2{,}359{,}296{,}000\text{ multiply-adds}
 \end{aligned}
 $$
 
@@ -237,10 +235,10 @@ Counting the multiply-and-add as two floating-point operations gives 4,718,592,0
 
 $$
 \begin{aligned}
-per LayerNorm = \gamma (320) + \beta (320) = 640 \\
-inside 6 blocks = 12 LayerNorms = 7,680 \\
-final LayerNorm = 640 \\
-total LayerNorm parameters = 8,320
+\text{per LayerNorm} = 320 + 320 = 640 \\
+\text{12 in blocks} = 7{,}680 \\
+\text{final} = 640 \\
+\text{total} = 8{,}320
 \end{aligned}
 $$
 

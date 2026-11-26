@@ -210,11 +210,11 @@ Substituting `V=3774, D=320, P_max=512, L=6, F=800`:
 
 $$
 \begin{aligned}
-embedding   = 1,207,680 + 163,840          = 1,371,520 \\
-attention   = 6 \times (307,200 + 960 + 102,400 + 320) = 2,465,280 \\
-FFN         = 6 \times 768,000                  = 4,608,000 \\
-LayerNorm   = 6 \times 1,280 + 640              = 8,320 \\
-total       = 1,371,520 + 2,465,280 + 4,608,000 + 8,320 = 8,453,120
+\text{embedding} = 1{,}207{,}680 + 163{,}840 = 1{,}371{,}520 \\
+\text{attention} = 2{,}465{,}280 \\
+\text{FFN} = 4{,}608{,}000 \\
+\text{LayerNorm} = 8{,}320 \\
+\text{total} = 8{,}453{,}120
 \end{aligned}
 $$
 
@@ -224,9 +224,9 @@ If `ffn_hidden` changed from 800 to 1,024:
 
 $$
 \begin{aligned}
-new FFN = 6 \times 3 \times 320 \times 1,024 = 5,898,240 \\
-delta   = 5,898,240 - 4,608,000 = +1,290,240 \\
-new total = 8,453,120 + 1,290,240 = 9,743,360
+\text{new FFN} = 6 \times 3 \times 320 \times 1{,}024 = 5{,}898{,}240 \\
+\text{delta} = +1{,}290{,}240 \\
+\text{new total} = 9{,}743{,}360
 \end{aligned}
 $$
 
@@ -234,8 +234,8 @@ $$
 
 $$
 \begin{aligned}
-logits elements = B \times T \times V = 1 \times 512 \times 3,774 = 1,932,288 \\
-bytes at float32 = 1,932,288 \times 4 = 7,729,152 bytes \approx 7.7 MB
+\text{logits elements} = 1 \times 512 \times 3{,}774 = 1{,}932{,}288 \\
+\text{bytes} = 1{,}932{,}288 \times 4 = 7{,}729{,}152 \approx 7.7\text{ MB}
 \end{aligned}
 $$
 

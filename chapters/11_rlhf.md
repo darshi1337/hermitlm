@@ -52,11 +52,7 @@ The formula:
 
 $$
 \begin{aligned}
-R(text) &= 2.0 \cdot \min(overlap, 0.4) \\
-        &- 1.5 \cdot repetition \\
-        &- 1.0 \cdot length_{penalty} \\
-        &- 1.0 \cdot style_{penalty} \\
-        &- 3.0 \cdot break_{penalty}
+R = 2.0\,\min(\text{overlap}, 0.4) - 1.5\,\text{rep} - \text{len pen} - \text{style pen} - 3\,\text{break pen}
 \end{aligned}
 $$
 
@@ -226,9 +222,9 @@ Without clipping it would be −3.0. The clamp removed the extra incentive to ma
 
 $$
 \begin{aligned}
-rollouts      = 16 \times 200 = 3,200 replies \\
-minibatches   = 16 / 8 = 2 per epoch \\
-optimizer steps = 4 epochs \times 2 minibatches \times 200 iterations = 1,600
+\text{rollouts} = 16 \times 200 = 3{,}200 \\
+\text{minibatches} = 2\text{ per epoch} \\
+\text{steps} = 1{,}600
 \end{aligned}
 $$
 
@@ -325,9 +321,9 @@ If the policy preferred the rejected reply, `r_π − r_ref` would be negative a
 
 $$
 \begin{aligned}
-generations = 200 \times 4 \times 4 = 3,200 \\
-optimizer steps = 200 \\
-learning rate ratio to SFT peak = 5e-6 / 2e-4 = 1/40
+\text{generations} = 3{,}200 \\
+\text{steps} = 200 \\
+\text{LR ratio} = 1/40
 \end{aligned}
 $$
 
@@ -395,10 +391,10 @@ so DPO learns a reward function up to the scale factor `β`.
 
 $$
 \begin{aligned}
-maximum overlap credit = +0.8 \\
-maximum total reward   = +0.8      (all penalties zero) \\
-empty reply            = -3.0 \\
-each break phrase      = -3.0      (unbounded below)
+\text{max overlap credit} = +0.8 \\
+\text{max total reward} = +0.8 \\
+\text{empty reply} = -3.0 \\
+\text{each break phrase} = -3.0
 \end{aligned}
 $$
 

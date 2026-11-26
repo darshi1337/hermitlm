@@ -235,10 +235,10 @@ The 52 base byte symbols are the single-character tokens visible in `vocab`. The
 
 $$
 \begin{aligned}
-max_{seq\_len}          = 512 \\
-prompt above         = 10 tokens \\
-remaining for reply  = 502 tokens \\
-runtime max_{tokens}   = 80 tokens   (hermitlm/settings.py:17)
+\text{max seq len} = 512 \\
+\text{prompt} = 10\text{ tokens} \\
+\text{reply budget} = 502\text{ tokens} \\
+\text{runtime max} = 80
 \end{aligned}
 $$
 

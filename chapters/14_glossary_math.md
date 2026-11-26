@@ -78,9 +78,9 @@ $$
 
 $$
 \begin{aligned}
-h_{0} = tok_{emb}(idx) + pos_{emb}(arange(T)) \\
-w \sim  N(0, 0.02^2)\text{initialization} \\
-dropout keep probability p = 0.9        scale survivors by 1/0.9 = 1.1111\ldots
+h_0 = \text{tok emb} + \text{pos emb} \\
+w \sim \mathcal{N}(0, 0.02^2) \\
+\text{dropout scale} = 1/0.9 = 1.111
 \end{aligned}
 $$
 
@@ -88,13 +88,9 @@ $$
 
 $$
 \begin{aligned}
-head_{dim} = D/H = 320/8 = 40 \\
-Q, K, V  = split( x W_{qkv} ),  W_{qkv} \in  R^{320\times 960} \\
-scores   = Q K^T / \sqrt{d}_k                  \sqrt{40} = 6.3246 \\
-masked   = scores with future positions set to -\infty \\
-weights  = softmax(masked, dim=-1) \\
-out      = weights V \to concat heads \to W_{out} \\
-params per block = (320\times 960 + 960) + (320\times 320 + 320) = 410,880
+d_{\text{head}} = 320/8 = 40 \\
+Q, K, V = \operatorname{split}(x W_{\text{qkv}}) \\
+\text{scores} = QK^T/\sqrt{40}
 \end{aligned}
 $$
 
@@ -187,22 +183,7 @@ $$
 
 $$
 \begin{aligned}
-R = 2\cdot \min(overlap,0.4) - 1.5\cdot rep - len_{pen} - style_{pen} - 3\cdot break_{pen} \\
-\text{PPO:} \\
-kl_{t}   = \log \pi_{old} - \log \pi_{ref} \\
-r_{t}    = -0.15\cdot kl_{t}  (+ reward at final token) \\
-\delta_{t}    = r_{t} + \gammaV_{t+1} - V_{t} \\
-\hat{A}_t    = \delta_{t} + \gamma\lambda\hat{A}_{t+1} \\
-R_{t}    = \hat{A}_t + V_{t} \\
-r_{t}(\theta) = \exp(\log \pi_{new} - \log \pi_{old}) \\
-L_{pol}  = -mean \min(r \hat{A}, clip(r,0.8,1.2) \hat{A}) \\
-L_{val}  = mean(V_{new} - R)^2 \\
-L      = L_{pol} + 0.5 L_{val} - 0.01 H \\
-\text{DPO:} \\
-\ell_\pi(y|x) = \sum  m_{t} \log \pi(y_{t}|x,y_{<t}) / \sum  m_{t} \\
-r_\pi      = \ell_\pi(chosen) - \ell_\pi(rejected) \\
-r_{ref}    = \ell_{ref}(chosen) - \ell_{ref}(rejected) \\
-L_{DPO}    = -\log \sigma(\beta(r_\pi - r_{ref})),  \beta = 0.1
+R = 2\min(\text{overlap}, 0.4) - 1.5\,\text{rep} - \text{len pen} - \text{style pen} - 3\,\text{break pen}
 \end{aligned}
 $$
 
@@ -210,11 +191,9 @@ $$
 
 $$
 \begin{aligned}
-scale      = (r_{max} - r_{min})/255 \\
-zero_{point} = round(-r_{min}/scale) clipped to [0,255] \\
-q          = clip(round(r/scale) + zero_{point}, 0, 255) \\
-r_{hat}      = scale\cdot (q - zero_{point}) \\
-size ratio = 36,282,163 / 9,215,272 = 3.94\times
+\text{scale} = (r_{\max} - r_{\min})/255 \\
+\text{zero point} = \operatorname{round}(-r_{\min}/\text{scale}) \\
+q = \operatorname{clip}\big(\operatorname{round}(r/\text{scale}) + \text{zero point}, 0, 255\big)
 \end{aligned}
 $$
 
@@ -222,9 +201,9 @@ $$
 
 $$
 \begin{aligned}
-perplexity = \exp(mean masked CE) \approx \exp(0.657) = 1.929 \\
-tool rate  = hits / checks = 2/3 \\
-paired diff CI = percentile bootstrap of (stat_{b} - stat_{a}) on same draws
+\text{PPL} = 1.929 \\
+\text{tool rate} = 2/3 \\
+\text{paired CI} = \text{bootstrap of } (\text{stat}_b - \text{stat}_a)
 \end{aligned}
 $$
 

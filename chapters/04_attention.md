@@ -52,10 +52,10 @@ With `d_model = 320` and `n_heads = 8`:
 
 $$
 \begin{aligned}
-head_{dim} = 320 \div 8 = 40 \\
-qkv weight = (3 \times 320) \times 320 = 960 \times 320 = 307,200 \\
-qkv bias   = 960 \\
-total qkv  = 308,160 parameters per block
+\text{head dim} = 320 / 8 = 40 \\
+W_{\text{qkv}} = (3 \times 320) \times 320 = 307{,}200 \\
+\text{qkv bias} = 960 \\
+\text{total qkv} = 308{,}160
 \end{aligned}
 $$
 
@@ -107,8 +107,8 @@ Softmax with very large scores becomes nearly one-hot. One weight goes to 1, all
 
 $$
 \begin{aligned}
-Var(q \cdot k) = d \\
-Var((q \cdot k)/\sqrt{d}) = d / d = 1
+\operatorname{Var}(q \cdot k) = d \\
+\operatorname{Var}\!\left((q \cdot k)/\sqrt{d}\right) = 1
 \end{aligned}
 $$
 
@@ -227,8 +227,7 @@ This 4-vector is the new representation of token 1 after this head. Eight heads 
 
 $$
 \begin{aligned}
-d_{model} = n_{heads} \times head_{dim} \\
-320     = 8 \times 40
+d_{\text{model}} = n_{\text{heads}} \times d_{\text{head}} = 8 \times 40 = 320
 \end{aligned}
 $$
 
@@ -238,10 +237,10 @@ Each head sees a 40-dimensional slice. Together they cover all 320 dimensions.
 
 $$
 \begin{aligned}
-qkv Linear : 320 \times (3 \times 320) + 3 \times 320 = 307,200 + 960 = 308,160 \\
-out Linear : 320 \times 320 + 320           = 102,400 + 320 = 102,720 \\
-attention total per block              = 410,880 \\
-6 blocks                               = 2,465,280
+\text{qkv layer} = 320 \times 960 + 960 = 308{,}160 \\
+\text{out layer} = 320 \times 320 + 320 = 102{,}720 \\
+\text{total per block} = 410{,}880 \\
+\text{six blocks} = 2{,}465{,}280
 \end{aligned}
 $$
 
@@ -249,10 +248,10 @@ $$
 
 $$
 \begin{aligned}
-QK^T per block      = 2 \times T \times T \times D = 2 \times 512 \times 512 \times 320 = 167,772,160 \\
-AV per block       = 2 \times T \times T \times D = 167,772,160 \\
-attention per block                   = 335,544,320 \\
-6 blocks                              = 2,013,265,920
+\text{QK per block} = 2 \times 512 \times 512 \times 320 = 167{,}772{,}160 \\
+\text{AV per block} = 167{,}772{,}160 \\
+\text{attention per block} = 335{,}544{,}320 \\
+\text{six blocks} = 2{,}013{,}265{,}920
 \end{aligned}
 $$
 
@@ -262,7 +261,7 @@ Compare with the feed-forward network (chapter 5): about 4,718,592,000 multiply-
 
 $$
 \begin{aligned}
-softmax(z_{i}) = \exp(z_{i} - \max(z)) / \sum_j \exp(z_{j} - \max(z))
+\operatorname{softmax}(z_i) = \frac{\exp(z_i - \max z)}{\sum_j \exp(z_j - \max z)}
 \end{aligned}
 $$
 

@@ -377,11 +377,10 @@ Other shipped template numbers:
 
 $$
 \begin{aligned}
-checkpoint_{sha256}       = c52c0f231e4f26ac35b25b47a24668f71898e3f76e1906da45ecdf4753937dcc \\
-tokenizer_{sha256}        = 2cb03484072364356f20275281d3d06036a995fc0e09102e8e19b9cad691ce9a \\
-prompt_{template\_sha256}  = 56b5189815dd3d6fea57e8b562446d564bb264083fd965473040419742edc30d \\
-schema_{version}          = 2 \\
-dtype                   = torch.float32
+\text{checkpoint sha} = c52c0f23\ldots \\
+\text{tokenizer sha} = 2cb03484\ldots \\
+\text{prompt sha} = 56b51898\ldots \\
+\text{schema} = 2, \quad \text{dtype} = \text{float32}
 \end{aligned}
 $$
 
@@ -412,11 +411,11 @@ Then the browser needs only a dot product, a prior subtraction and a softmax (`w
 
 $$
 \begin{aligned}
-head7     = 7 \times 320 + 7     = 2,247 \\
-head_{bin}  = 2 \times 320 + 2     = 642 \\
-head21    = 21 \times 320 + 21   = 6,741 \\
-tool head = 4 \times 320 + 4     = 1,284 \\
-total     = 10,914 numbers
+\text{head7} = 7 \times 320 + 7 = 2{,}247 \\
+\text{head bin} = 2 \times 320 + 2 = 642 \\
+\text{head21} = 21 \times 320 + 21 = 6{,}741 \\
+\text{tool head} = 4 \times 320 + 4 = 1{,}284 \\
+\text{total} = 10{,}914
 \end{aligned}
 $$
 
@@ -426,9 +425,11 @@ That is 0.13% of the 8,453,120-parameter chat model.
 
 $$
 \begin{aligned}
-raw float32 matrices = (7 + 2 + 21 + 2 + 5) \times 320 \times 4 + (7 + 2 + 21 + 2 + 5) \times 4 = 47,508 bytes \\
-web/probe.json       = 262,502 bytes \\
-ratio                = 5.5\times (decimal text is larger than binary)
+\text{weights} = 37 \times 320 \times 4 = 47{,}360\text{ bytes} \\
+\text{biases} = 37 \times 4 = 148\text{ bytes} \\
+\text{total} = 47{,}508\text{ bytes} \\
+\text{web JSON} = 262{,}502\text{ bytes} \\
+\text{ratio} = 5.5\times
 \end{aligned}
 $$
 
@@ -436,10 +437,10 @@ $$
 
 $$
 \begin{aligned}
-cal_{n}      = \min(1000, 5000 \div 2) = 1,000 \\
-test rows  = 5,000 - 1,000 = 4,000 \\
-confused support = 268 \\
-rate = 268 / 4,000 = 0.067 = 6.7\%
+n_{\text{cal}} = \min(1000, 5000/2) = 1{,}000 \\
+\text{test rows} = 4{,}000 \\
+\text{confused support} = 268 \\
+\text{rate} = 268 / 4{,}000 = 6.7\%
 \end{aligned}
 $$
 

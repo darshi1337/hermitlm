@@ -252,11 +252,11 @@ The browser has its own local math fallback (`web/math.js:204-229`) that handles
 
 $$
 \begin{aligned}
-math: 0.80 \times 20 = 16 correct \\
-web:  0.65 \times 20 = 13 correct \\
-faq:  0.60 \times 20 = 12 correct \\
-chat: 0.85 \times 20 = 17 correct \\
-total = 58 / 80 = 0.725
+\text{math} = 0.80 \times 20 = 16 \\
+\text{web} = 0.65 \times 20 = 13 \\
+\text{faq} = 0.60 \times 20 = 12 \\
+\text{chat} = 0.85 \times 20 = 17 \\
+\text{total} = 58 / 80 = 0.725
 \end{aligned}
 $$
 
@@ -264,9 +264,9 @@ $$
 
 $$
 \begin{aligned}
-head weights = (4 \times 320 + 4) floats = 1,284 \\
-bytes at float32 = 1,284 \times 4 = 5,136 \\
-file size = 7,685 bytes (includes metadata and hashes)
+\text{head weights} = 4 \times 320 + 4 = 1{,}284 \\
+\text{bytes} = 1{,}284 \times 4 = 5{,}136 \\
+\text{file size} = 7{,}685\text{ bytes}
 \end{aligned}
 $$
 
@@ -276,7 +276,7 @@ For `n` checks with firing probabilities `p₁ … pₙ`, the probability that c
 
 $$
 \begin{aligned}
-P(decided at k) = (\prod_{i<k} (1 - p_{i})) \times p_{k}
+P(\text{decide at }k) = \Big(\prod_{i<k}(1-p_i)\Big) p_k
 \end{aligned}
 $$
 

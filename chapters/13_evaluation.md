@@ -334,9 +334,9 @@ This matches the report. Macro F1 punishes the five classes the zero-shot prompt
 
 $$
 \begin{aligned}
-loss     = 0.6540815 \\
-PPL      = e^{0.6540815} = 1.9234 \\
-per-token surprise = 0.6541 nats \approx 0.943 bits
+\text{loss} = 0.6540815 \\
+\text{PPL} = 1.9234 \\
+\text{surprise} = 0.6541\text{ nats} \approx 0.943\text{ bits}
 \end{aligned}
 $$
 
@@ -344,9 +344,7 @@ $$
 
 $$
 \begin{aligned}
-(0.80\times 20 + 0.65\times 20 + 0.60\times 20 + 0.85\times 20) / 80 \\
-= (16 + 13 + 12 + 17) / 80 \\
-= 58/80 = 0.725
+(0.80\times20 + 0.65\times20 + 0.60\times20 + 0.85\times20)/80 = 58/80 = 0.725
 \end{aligned}
 $$
 

@@ -271,9 +271,9 @@ The shipped best checkpoint metadata:
 
 $$
 \begin{aligned}
-step       = 24,200 \\
-eval_{loss}  = 0.6540815222263336 \\
-perplexity = \exp(0.6540815) = 1.9234
+\text{step} = 24{,}200 \\
+\text{eval loss} = 0.6540815 \\
+\text{perplexity} = 1.9234
 \end{aligned}
 $$
 
@@ -289,10 +289,10 @@ $$
 
 $$
 \begin{aligned}
-rows / batch     = 95,000 / 32 = 2,968.75 batches per pass \\
-max_{steps}        = 32,000 \\
-sequences seen   = 32,000 \times 32 = 1,024,000 \\
-passes over data = 1,024,000 / 95,000 = 10.78 epochs
+\text{rows per batch} = 95{,}000 / 32 = 2{,}968.75 \\
+\text{max steps} = 32{,}000 \\
+\text{sequences seen} = 1{,}024{,}000 \\
+\text{passes} = 10.78
 \end{aligned}
 $$
 
@@ -300,8 +300,8 @@ $$
 
 $$
 \begin{aligned}
-upper bound per step  = B \times T = 32 \times 512 = 16,384 \\
-upper bound total     = 16,384 \times 32,000 = 524,288,000 positions
+\text{per step} = 32 \times 512 = 16{,}384 \\
+\text{total upper bound} = 524{,}288{,}000
 \end{aligned}
 $$
 
@@ -311,9 +311,9 @@ Real rows are about 20 words, so actual processed tokens are much fewer. `max_se
 
 $$
 \begin{aligned}
-eval calls  = floor((32,000 - 1)/200) = 159 \\
-save points = steps 1,000 \ldots 31,000 = 31 opportunities \\
-observed artifacts stop at step 29,000 because the shipped run ended at 30,000
+\text{eval calls} = 159 \\
+\text{save points} = 31 \\
+\text{last artifact} = \text{step }29{,}000
 \end{aligned}
 $$
 
@@ -321,8 +321,8 @@ $$
 
 $$
 \begin{aligned}
-warmup fraction = 800/32,000 = 0.025 = 2.5\% \\
-peak / floor    = 2e-4 / 2e-5 = 10\times
+\text{warmup} = 800 / 32{,}000 = 2.5\% \\
+\text{peak / floor} = 2
 \end{aligned}
 $$
 
@@ -330,9 +330,9 @@ $$
 
 $$
 \begin{aligned}
-p = (16,000 - 800)/(32,000 - 800) = 15,200/31,200 = 0.487179 \\
-c = \frac{1}{2}(1 + \cos(\pi \times 0.487179)) = \frac{1}{2}(1 + 0.04027) = 0.52014 \\
-\eta = 2e-5 + (2e-4 - 2e-5) \times 0.52014 = 1.1362e-4
+p = 0.487179 \\
+c = \tfrac12\big(1+\cos(\pi p)\big) = 0.52014 \\
+\eta = 1.1362 \times 10^{-4}
 \end{aligned}
 $$
 

@@ -109,9 +109,9 @@ Every embedding starts as an independent sample from a normal distribution with:
 
 $$
 \begin{aligned}
-mean \mu = 0 \\
-standard deviation \sigma = 0.02 \\
-variance \sigma^2 = 0.0004
+\text{mean} = 0 \\
+\text{standard deviation} = \sigma = 0.02 \\
+\text{variance} = \sigma^2 = 0.0004
 \end{aligned}
 $$
 
@@ -196,9 +196,9 @@ It also overwrites `pad_id`, `bos_id` and `eos_id` from the tokenizer's special 
 
 $$
 \begin{aligned}
-P_{tok}  = V \times D = 3,774 \times 320 = 1,207,680 \\
-P_{pos}  = L_{max} \times D = 512 \times 320 = 163,840 \\
-P_{emb}  = P_{tok} + P_{pos} = 1,371,520
+P_{\text{tok}} = 3{,}774 \times 320 = 1{,}207{,}680 \\
+P_{\text{pos}} = 512 \times 320 = 163{,}840 \\
+P_{\text{emb}} = 1{,}371{,}520
 \end{aligned}
 $$
 
@@ -214,8 +214,8 @@ $$
 
 $$
 \begin{aligned}
-untied raw count = 8,453,120 + 1,207,680 = 9,660,800 \\
-saved fraction   = 1,207,680 / 9,660,800 = 0.1250 \to 12.5\%
+\text{untied count} = 8{,}453{,}120 + 1{,}207{,}680 = 9{,}660{,}800 \\
+\text{saved fraction} = 1{,}207{,}680 / 9{,}660{,}800 = 12.5\%
 \end{aligned}
 $$
 
@@ -225,7 +225,7 @@ With keep probability `p_keep = 0.9`, surviving activations are multiplied by:
 
 $$
 \begin{aligned}
-1 / p_{keep} = 1 / 0.9 = 1.111111\ldots
+1 / p_{\text{keep}} = 1 / 0.9 = 1.111\ldots
 \end{aligned}
 $$
 
@@ -235,9 +235,9 @@ This keeps the expected value of the layer unchanged during training.
 
 $$
 \begin{aligned}
-tokens in a batch   = B \times T = 32 \times 512 = 16,384 (upper bound) \\
-values before dropout = 16,384 \times 320 = 5,242,880 \\
-expected zeros at p=0.1 = 524,288
+\text{tokens per batch} = 32 \times 512 = 16{,}384 \\
+\text{values before dropout} = 16{,}384 \times 320 = 5{,}242{,}880 \\
+\text{expected zeros} = 524{,}288
 \end{aligned}
 $$
 

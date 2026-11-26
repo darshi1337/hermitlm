@@ -139,10 +139,10 @@ The reconstruction error is about 0.001, small compared with model weight noise.
 
 $$
 \begin{aligned}
-fp32 file     = 36,282,163 bytes \\
-uint8 file    =  9,215,272 bytes \\
-ratio         = 36,282,163 / 9,215,272 = 3.937\times  \\
-reduction     = 1 - 9,215,272/36,282,163 = 74.6\%
+\text{fp32} = 36{,}282{,}163\text{ bytes} \\
+\text{uint8} = 9{,}215{,}272\text{ bytes} \\
+\text{ratio} = 3.94\times \\
+\text{reduction} = 74.6\%
 \end{aligned}
 $$
 
@@ -267,9 +267,9 @@ For a 3,774 × 320 token-embedding matrix:
 
 $$
 \begin{aligned}
-fp32 = 3,774 \times 320 \times 4 = 4,830,720 bytes \\
-uint8 = 3,774 \times 320     = 1,207,680 bytes \\
-saved = 3,623,040 bytes
+\text{fp32 embedding} = 3{,}774 \times 320 \times 4 = 4{,}830{,}720\text{ bytes} \\
+\text{uint8 embedding} = 1{,}207{,}680\text{ bytes} \\
+\text{saved} = 3{,}623{,}040\text{ bytes}
 \end{aligned}
 $$
 
@@ -277,8 +277,8 @@ $$
 
 $$
 \begin{aligned}
-manifest hash = sha256(model.quant.onnx) \\
-cache name    = "hermit-assets-" + hash
+\text{manifest hash} = \operatorname{sha256}(\text{model.quant.onnx}) \\
+\text{cache name} = \text{hermit-assets-} + \text{hash}
 \end{aligned}
 $$
 

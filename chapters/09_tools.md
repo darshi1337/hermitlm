@@ -250,29 +250,29 @@ The browser has its own local math fallback (`web/math.js:204-229`) that handles
 
 ### Tool probe accuracy on the eval set
 
-$$ \Large \text{math} = 0.80 \times 20 = 16 $$
+$$ \Large \text{math accuracy} = \frac{16}{20} = 0.80 $$
 
-$$ \Large \text{web} = 0.65 \times 20 = 13 $$
+$$ \Large \text{web accuracy} = \frac{13}{20} = 0.65 $$
 
-$$ \Large \text{faq} = 0.60 \times 20 = 12 $$
+$$ \Large \text{faq accuracy} = \frac{12}{20} = 0.60 $$
 
-$$ \Large \text{chat} = 0.85 \times 20 = 17 $$
+$$ \Large \text{chat accuracy} = \frac{17}{20} = 0.85 $$
 
-$$ \Large \text{total} = 58 / 80 = 0.725 $$
+$$ \Large \text{overall accuracy} = \frac{16+13+12+17}{80} = \frac{58}{80} = 0.725 $$
 
 ### Probe artifact size
 
-$$ \Large \text{head weights} = 4 \times 320 + 4 = 1{,}284 $$
+$$ \Large \text{head parameters} = 4 \times 320 + 4 = 1{,}284 $$
 
-$$ \Large \text{bytes} = 1{,}284 \times 4 = 5{,}136 $$
+$$ \Large \text{weight and bias bytes} = 1{,}284 \times 4 = 5{,}136 $$
 
-$$ \Large \text{file size} = 7{,}685\text{ bytes} $$
+$$ \Large \text{probe file size} = 7{,}685 \text{ bytes} $$
 
 ### Routing order as a short-circuit
 
 For `n` checks with firing probabilities `p₁ … pₙ`, the probability that check `k` decides is:
 
-$$ \Large P(\text{decide at }k) = (\prod_{i<k}(1-p_i)) p_k $$
+$$ \Large P(\text{check } k \text{ decides}) = \left(\prod_{i=1}^{k-1}(1-p_i)\right) p_k $$
 
 High-precision checks go first so they handle most cases before the slower probe runs.
 

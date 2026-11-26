@@ -48,11 +48,11 @@ flowchart TD
 46:    ppl = math.exp(tot / max(1, n))
 ```
 
-$$ \Large perplexity = \exp(mean masked cross-entropy over at most 50 batches) $$
+$$ \Large \text{perplexity} = \exp\left(\frac{1}{N}\sum_{b=1}^{N}\text{CE}_b\right), \quad N \leq 50 $$
 
 Lower is better. `eval_out/report.json` records **1.929**. That implies an average per-token loss of:
 
-$$ \Large \ln(1.929) = 0.6570 $$
+$$ \Large \text{log perplexity} = \ln(1.929) = 0.6570 $$
 
 The shipped best checkpoint's stored eval loss is 0.6541 → `exp(0.6541) = 1.9234`. The small difference comes from different eval runs and batch counts.
 
@@ -215,39 +215,39 @@ All from `hermitlm/tools/metrics.py:26-74` (chapter 10 covered ECE and macro F1 
 
 ### Accuracy
 
-$$ \Large accuracy = (1/n) \sum_i 1[argmax p_{i} == y_{i}] $$
+$$ \Large \text{accuracy} = \frac{1}{n}\sum_{i=1}^{n}\mathbf{1}\left[\arg\max_c p_{i,c} = y_i\right] $$
 
 ### Negative log likelihood
 
-$$ \Large NLL = -(1/n) \sum_i \log( clamp(p_{i}[y_{i}], 10^{-12}) ) $$
+$$ \Large \text{NLL} = -\frac{1}{n}\sum_{i=1}^{n}\log\max\left(p_{i,y_i}, 10^{-12}\right) $$
 
 Clamping avoids infinite loss when the correct class gets probability 0.
 
 ### Per-class precision, recall, F1
 
-$$ \Large tp_{c} = \sum_i 1[y_{i} == c and pred_{i} == c] $$
+$$ \Large \text{TP}_c = \sum_{i=1}^{n}\mathbf{1}\left[y_i = c \;\text{and}\; \hat{y}_i = c\right] $$
 
-$$ \Large fp_{c} = \sum_i 1[y_{i} != c and pred_{i} == c] $$
+$$ \Large \text{FP}_c = \sum_{i=1}^{n}\mathbf{1}\left[y_i \neq c \;\text{and}\; \hat{y}_i = c\right] $$
 
-$$ \Large fn_{c} = \sum_i 1[y_{i} == c and pred_{i} != c] $$
+$$ \Large \text{FN}_c = \sum_{i=1}^{n}\mathbf{1}\left[y_i = c \;\text{and}\; \hat{y}_i \neq c\right] $$
 
-$$ \Large P_{c} = tp_{c} / (tp_{c} + fp_{c}) (0 if denominator is 0) $$
+$$ \Large P_c = \frac{\text{TP}_c}{\text{TP}_c+\text{FP}_c} $$
 
-$$ \Large R_{c} = tp_{c} / (tp_{c} + fn_{c}) $$
+If the denominator is zero, `P_c` is set to 0.
 
-$$ \Large F1_c = 2 P_{c} R_{c} / (P_{c} + R_{c}) $$
+$$ \Large R_c = \frac{\text{TP}_c}{\text{TP}_c+\text{FN}_c} $$
 
-$$ \Large macro F1 = (1/K) \sum_c F1_c $$
+$$ \Large F1_c = \frac{2 P_c R_c}{P_c+R_c} $$
+
+$$ \Large \text{macro F1} = \frac{1}{K}\sum_{c=1}^{K}F1_c $$
 
 ### Bootstrap interval
 
-$$ \Large \text{for each bootstrap sample:} $$
+Each of the `B` bootstrap samples draws `n` indices with replacement and recomputes the statistic:
 
-$$ \Large draw n sample indices with replacement $$
+$$ \Large \text{statistic}_b = \text{statistic}(\text{sample}_b), \quad b = 1,\ldots,B $$
 
-$$ \Large statistic_{b} = statistic(sample) $$
-
-$$ \Large CI = [percentile 2.5, percentile 97.5] $$
+$$ \Large \text{95\% CI} = \left[\text{2.5th percentile}, \text{97.5th percentile}\right] $$
 
 Defaults: `n_boot = 2000` in `metrics.py:81-83`, 1,000 in the eval script. The paired version computes `stat_calibrated − stat_uncalibrated` on identical draws, giving a tighter interval for the improvement.
 
@@ -255,7 +255,7 @@ Defaults: `n_boot = 2000` in `metrics.py:81-83`, 1,000 in the eval script. The p
 
 `eval_decision.py:332-343` tries `[0.3, 0.5, 0.7, 0.8, 0.9, 0.95]` and keeps the threshold with the best binary F1:
 
-$$ \Large F1 = 2 tp / (2 tp + fp + fn) $$
+$$ \Large \text{binary F1} = \frac{2\,\text{TP}}{2\,\text{TP}+\text{FP}+\text{FN}} $$
 
 The shipped confused detector selected 0.3 on template data. The runtime now uses the calibrated
 yes head for escalation (`HERMIT_YES_THRESHOLD = 0.5`); this grid only applies to the legacy
@@ -267,15 +267,15 @@ yes head for escalation (`HERMIT_YES_THRESHOLD = 0.5`); this grid only applies t
 
 Supports and F1 values inferred from `eval_out/decision/report.json`:
 
-$$ \Large accuracy = 214/1000 = 0.214 $$
+$$ \Large \text{accuracy} = \frac{214}{1{,}000} = 0.214 $$
 
-$$ \Large \text{only classes f and g score above zero:} $$
+Only classes `f` and `g` score above zero:
 
-$$ \Large class f F1 \approx 0.2095 $$
+$$ \Large F1_f \approx 0.2095 $$
 
-$$ \Large class g F1 \approx 0.3837 $$
+$$ \Large F1_g \approx 0.3837 $$
 
-$$ \Large macro F1 = (0+0+0+0+0+0.2095+0.3837)/7 = 0.5932/7 = 0.08474 \to 0.0847 $$
+$$ \Large \text{macro F1} = \frac{0+0+0+0+0+0.2095+0.3837}{7} = \frac{0.5932}{7} = 0.08474 \approx 0.0847 $$
 
 This matches the report. Macro F1 punishes the five classes the zero-shot prompt never predicts.
 
@@ -321,13 +321,13 @@ $$ \Large \text{surprise} = 0.6541\text{ nats} \approx 0.943\text{ bits} $$
 
 ### Tool probe accuracy from per-class counts
 
-$$ \Large (0.80\times20 + 0.65\times20 + 0.60\times20 + 0.85\times20)/80 = 58/80 = 0.725 $$
+$$ \Large \text{tool accuracy} = \frac{0.80(20)+0.65(20)+0.60(20)+0.85(20)}{80} = \frac{58}{80} = 0.725 $$
 
 ### Human eval test size
 
-$$ \Large n_{cal} = \min(60, 126 \div 2) = 60 $$
+$$ \Large \text{calibration rows} = \min(60, 126 \div 2) = 60 $$
 
-$$ \Large test = 126 - 60 = 66 $$
+$$ \Large \text{test rows} = 126 - 60 = 66 $$
 
 ---
 

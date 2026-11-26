@@ -100,11 +100,11 @@ The model is frozen. `forward_with_hidden_layers` (`model.py:155-168`) returns a
 
 For a hidden vector `h` and a head with weight matrix `W`, bias `b`, mean `μ`, standard deviation `σ` and temperature `T`:
 
-$$ \Large x = (h - \mu) / \sigma $$
+$$ \Large x = \frac{h-\mu}{\sigma} $$
 
-$$ \Large scores = W x + b $$
+$$ \Large s = W x + b $$
 
-$$ \Large \log p_{c} = \log( \exp(scores_{c}/T) / \sum_j \exp(scores_{j}/T) ) $$
+$$ \Large \log p_c = \frac{s_c}{T} - \log\sum_j \exp\left(\frac{s_j}{T}\right) $$
 
 The shipped artifact uses the older "legacy" form (`decision_model.py:263-279`): `scores = linear(hidden) / temperature`, then `log_softmax`.
 
@@ -153,9 +153,9 @@ That is what "no information" looks like: nearly a uniform guess.
 
 The formula is:
 
-$$ \Large A = X^TX + \alpha I $$
+$$ \Large A = X^T X + \alpha I $$
 
-$$ \Large W^T = A^{-1} X^T (Y - \bar{y}) $$
+$$ \Large W^T = A^{-1} X^T (Y-\bar{y}) $$
 
 $$ \Large b = \bar{y} $$
 
@@ -200,9 +200,9 @@ A head can rank classes correctly but still report silly probabilities. Calibrat
 
 For a class with `n_c` examples:
 
-$$ \Large target_{own} = (n_{c} + 1) / (n_{c} + 2) $$
+$$ \Large \text{target}_{\text{own}} = \frac{n_c+1}{n_c+2} $$
 
-$$ \Large target_{rest} = (1 - target_{own}) / (K - 1) $$
+$$ \Large \text{target}_{\text{rest}} = \frac{1-\text{target}_{\text{own}}}{K-1} $$
 
 Worked example from the tests (`tests/test_calibration.py:11-16`), labels `[0,0,0,1]` with `K = 2`:
 
@@ -215,9 +215,9 @@ So rows with label 0 get target `[0.8, 0.2]` and the label-1 row gets `[1/3, 2/3
 
 `calibration.py:81-146` searches `t = log T` in `[−3, 3]` to minimize:
 
-$$ \Large NLL(t) = CrossEntropy(scores \times \exp(-t), targets) $$
+$$ \Large \text{NLL}(t) = \text{cross-entropy}(s \cdot e^{-t}, \text{targets}) $$
 
-$$ \Large T* = \exp(t*) $$
+$$ \Large T^* = \exp(t^*) $$
 
 Binary heads and some multiclass cases use Platt targets instead of the raw labels. The search uses the golden ratio `φ⁻¹ = (√5 − 1)/2 ≈ 0.6180`, tolerance `1e-4`, at most 100 iterations. If the objective is flat, the function returns `T = 1.0`.
 
@@ -235,11 +235,13 @@ Larger T flattens the distribution.
 
 `hermitlm/tools/prior.py:10-24` fits a class prior from an unlabelled pool and applies:
 
-$$ \Large \pi_{c} = clamp(mean_{c}(p_{c}), 10^{-6}), normalized to sum 1 $$
+The pool's mean predicted probability for class `c` is written `\bar{p}_c`. It is clamped, normalized, then used to correct the log-probability:
 
-$$ \Large corrected_{c} = \log p_{c} - \lambda \log \pi_{c} $$
+$$ \Large \pi_c = \frac{\max(\bar{p}_c, 10^{-6})}{\sum_j \max(\bar{p}_j, 10^{-6})} $$
 
-$$ \Large final = softmax(corrected) $$
+$$ \Large \text{corrected}_c = \log p_c - \lambda \log \pi_c $$
+
+$$ \Large p = \text{softmax}(\text{corrected}) $$
 
 with `0 ≤ λ ≤ 1`. The browser does the same in `web/intent.js:21-32`.
 
@@ -256,13 +258,13 @@ position/letter bias. `option_assignment(shift)` rotates which class each letter
 forward pass is repeated for `rotation_shifts(k)` (two evenly spaced passes by default), and the
 per-class log-probabilities are averaged before the softmax:
 
-$$ \Large assignment = [a, b, c, d, e, f, g] shifted by s $$
+$$ \Large \text{assignment}_s = \text{rotate}([a,b,c,d,e,f,g], s) $$
 
-$$ \Large display_{logp} = log_{softmax}(logits[a..g] / T) $$
+$$ \Large \text{letter log-prob} = \log\,\text{softmax}\left(\frac{\text{letter logits}}{T}\right) $$
 
-$$ \Large unrotated[class] = display_{logp}[letter showing that class] $$
+$$ \Large \text{class score}_s(c) = \text{log-prob}_s\left(\text{letter}_s(c)\right) $$
 
-$$ \Large combined = mean(unrotated over s) $$
+$$ \Large \text{class score}(c) = \frac{1}{|S|}\sum_{s\in S} \text{class score}_s(c) $$
 
 `scripts/eval_decision.py` reports an `order_flip` section that permutes the assignment and
 compares predictions. On the zero-shot path the flip rate drops from `1.0` (single pass) to
@@ -306,7 +308,7 @@ All four live in `hermitlm/tools/metrics.py:26-74`.
 
 From `eval_out/decision/report.json`, all 1,000 zero-shot rows fall in the confidence bin `(0.10, 0.20]` with mean confidence `0.17` and accuracy `0.214`:
 
-$$ \Large ECE = 1.0 \times |0.17 - 0.214| = 0.044 $$
+$$ \Large \text{ECE} = 1.0 \times |0.17 - 0.214| = 0.044 $$
 
 That matches the report exactly. After calibrating with `T = 3`, mean confidence becomes `0.1516` and `ECE = |0.1516 − 0.214| = 0.0624`: NLL improved from 1.9497 to 1.9455 but ECE got worse.
 
@@ -314,11 +316,11 @@ That matches the report exactly. After calibrating with `T = 3`, mean confidence
 
 With `p = [[0.8, 0.2], [0.6, 0.4]]` and targets `[0, 0]`:
 
-$$ \Large NLL = -(\ln 0.8 + \ln 0.6)/2 = -(-0.2231 - 0.5108)/2 = 0.3670 $$
+$$ \Large \text{NLL} = -\frac{\ln 0.8 + \ln 0.6}{2} = -\frac{-0.2231 - 0.5108}{2} = 0.3670 $$
 
 With targets `[0, 1]`, predictions are `[0, 0]` (both argmax 0), so accuracy is `0.5`. ECE uses confidences `0.8` and `0.6` with correctness `1` and `0`:
 
-$$ \Large ECE = (|0.8 - 1| + |0.6 - 0|)/2 = (0.2 + 0.6)/2 = 0.4 $$
+$$ \Large \text{ECE} = \frac{|0.8-1| + |0.6-0|}{2} = \frac{0.2+0.6}{2} = 0.4 $$
 
 ### Bootstrap confidence intervals
 
@@ -350,13 +352,13 @@ Other shipped template numbers:
 
 `hermitlm/tools/artifacts.py:27-51,54-97` stores and verifies SHA-256 hashes of three things:
 
-$$ \Large \text{checkpoint sha} = c52c0f23\ldots $$
+$$ \Large \text{checkpoint fingerprint} = \texttt{c52c0f23}\ldots $$
 
-$$ \Large \text{tokenizer sha} = 2cb03484\ldots $$
+$$ \Large \text{tokenizer fingerprint} = \texttt{2cb03484}\ldots $$
 
-$$ \Large \text{prompt sha} = 56b51898\ldots $$
+$$ \Large \text{prompt fingerprint} = \texttt{56b51898}\ldots $$
 
-$$ \Large \text{schema} = 2, \quad \text{dtype} = \text{float32} $$
+$$ \Large \text{schema version} = 2, \quad \text{dtype} = \text{float32} $$
 
 Loading a head after a retrain or a prompt-template change raises an error instead of scoring with stale weights.
 
@@ -368,9 +370,9 @@ Loading a head after a retrain or a prompt-template change raises an error inste
 
 When a head has standardization, `FittedHead.effective()` (`heads.py:43-47`) folds it into plain weights for JSON:
 
-$$ \Large w_{eff} = W / \sigma $$
+$$ \Large w_{\text{eff}} = \frac{W}{\sigma} $$
 
-$$ \Large b_{eff} = b - (\mu/\sigma) \cdot W^T $$
+$$ \Large b_{\text{eff}} = b - \frac{\mu}{\sigma}W^T $$
 
 Then the browser needs only a dot product, a prior subtraction and a softmax (`web/intent.js:21-85`).
 
@@ -380,47 +382,47 @@ Then the browser needs only a dot product, a prior subtraction and a softmax (`w
 
 ### Number of head parameters
 
-$$ \Large \text{head7} = 7 \times 320 + 7 = 2{,}247 $$
+$$ \Large \text{coarse head parameters} = 7 \times 320 + 7 = 2{,}247 $$
 
-$$ \Large \text{head bin} = 2 \times 320 + 2 = 642 $$
+$$ \Large \text{binary head parameters} = 2 \times 320 + 2 = 642 $$
 
-$$ \Large \text{head21} = 21 \times 320 + 21 = 6{,}741 $$
+$$ \Large \text{fine head parameters} = 21 \times 320 + 21 = 6{,}741 $$
 
-$$ \Large \text{tool head} = 4 \times 320 + 4 = 1{,}284 $$
+$$ \Large \text{tool head parameters} = 4 \times 320 + 4 = 1{,}284 $$
 
-$$ \Large \text{total} = 10{,}914 $$
+$$ \Large \text{probe total} = 2{,}247+642+6{,}741+1{,}284 = 10{,}914 $$
 
 That is 0.13% of the 8,453,120-parameter chat model.
 
 ### Probe artifact size
 
-$$ \Large \text{weights} = 37 \times 320 \times 4 = 47{,}360\text{ bytes} $$
+$$ \Large \text{weight bytes} = 37 \times 320 \times 4 = 47{,}360 \text{ bytes} $$
 
-$$ \Large \text{biases} = 37 \times 4 = 148\text{ bytes} $$
+$$ \Large \text{bias bytes} = 37 \times 4 = 148 \text{ bytes} $$
 
-$$ \Large \text{total} = 47{,}508\text{ bytes} $$
+$$ \Large \text{probe bytes} = 47{,}360 + 148 = 47{,}508 \text{ bytes} $$
 
-$$ \Large \text{web JSON} = 262{,}502\text{ bytes} $$
+$$ \Large \text{browser JSON} = 262{,}502 \text{ bytes} $$
 
-$$ \Large \text{ratio} = 5.5\times $$
+$$ \Large \text{JSON to probe ratio} = \frac{262{,}502}{47{,}508} = 5.5\times $$
 
 ### Confusion rate from the eval split
 
-$$ \Large n_{\text{cal}} = \min(1000, 5000/2) = 1{,}000 $$
+$$ \Large \text{calibration rows} = \min\left(1{,}000, \frac{5{,}000}{2}\right) = 1{,}000 $$
 
-$$ \Large \text{test rows} = 4{,}000 $$
+$$ \Large \text{test rows} = 5{,}000 - 1{,}000 = 4{,}000 $$
 
-$$ \Large \text{confused support} = 268 $$
+$$ \Large \text{confused rows in test} = 268 $$
 
-$$ \Large \text{rate} = 268 / 4{,}000 = 6.7\% $$
+$$ \Large \text{confused rate} = \frac{268}{4{,}000} = 6.7\% $$
 
 ### Probability of an intent under the shipped temperature
 
 If the coarse head produces scores `[0.5, 0.4, 0.3, 0.2, 0.1, 0.0, −0.1]` and `T = 1.23006`:
 
-$$ \Large scaled = [0.4065, 0.3252, 0.2439, 0.1626, 0.0813, 0, -0.0813] $$
+$$ \Large \text{scaled scores} = [0.4065, 0.3252, 0.2439, 0.1626, 0.0813, 0, -0.0813] $$
 
-$$ \Large softmax \approx [0.1799, 0.1659, 0.1529, 0.1410, 0.1300, 0.1198, 0.1105] $$
+$$ \Large \text{probabilities} = \text{softmax}(\text{scaled scores}) \approx [0.1799, 0.1659, 0.1529, 0.1410, 0.1300, 0.1198, 0.1105] $$
 
 ---
 

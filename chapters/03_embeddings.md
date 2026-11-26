@@ -107,7 +107,7 @@ The same `hello` at position 7 would use `pos_emb(7)` instead, producing a diffe
 
 Every embedding starts as an independent sample from a normal distribution with:
 
-$$ \Large \text{mean} = 0 $$
+$$ \Large \text{mean weight} = 0 $$
 
 $$ \Large \text{standard deviation} = \sigma = 0.02 $$
 
@@ -192,27 +192,27 @@ It also overwrites `pad_id`, `bos_id` and `eos_id` from the tokenizer's special 
 
 ### Embedding parameter count
 
-$$ \Large P_{\text{tok}} = 3{,}774 \times 320 = 1{,}207{,}680 $$
+$$ \Large P_{\text{tokens}} = 3{,}774 \times 320 = 1{,}207{,}680 $$
 
-$$ \Large P_{\text{pos}} = 512 \times 320 = 163{,}840 $$
+$$ \Large P_{\text{positions}} = 512 \times 320 = 163{,}840 $$
 
-$$ \Large P_{\text{emb}} = 1{,}371{,}520 $$
+$$ \Large P_{\text{embeddings}} = 1{,}207{,}680 + 163{,}840 = 1{,}371{,}520 $$
 
 ### Fraction of the model
 
-$$ \Large 1,371,520 / 8,453,120 = 0.16225 \to 16.2\% $$
+$$ \Large \text{embedding share} = \frac{1{,}371{,}520}{8{,}453{,}120} = 0.16225 = 16.2\% $$
 
 ### Saved by weight tying
 
-$$ \Large \text{untied count} = 8{,}453{,}120 + 1{,}207{,}680 = 9{,}660{,}800 $$
+$$ \Large \text{untied parameter count} = 8{,}453{,}120 + 1{,}207{,}680 = 9{,}660{,}800 $$
 
-$$ \Large \text{saved fraction} = 1{,}207{,}680 / 9{,}660{,}800 = 12.5\% $$
+$$ \Large \text{saved by tying} = \frac{1{,}207{,}680}{9{,}660{,}800} = 12.5\% $$
 
 ### Dropout scaling
 
 With keep probability `p_keep = 0.9`, surviving activations are multiplied by:
 
-$$ \Large 1 / p_{\text{keep}} = 1 / 0.9 = 1.111\ldots $$
+$$ \Large \text{dropout scale} = \frac{1}{p_{\text{keep}}} = \frac{1}{0.9} = 1.111\ldots $$
 
 This keeps the expected value of the layer unchanged during training.
 
@@ -220,9 +220,9 @@ This keeps the expected value of the layer unchanged during training.
 
 $$ \Large \text{tokens per batch} = 32 \times 512 = 16{,}384 $$
 
-$$ \Large \text{values before dropout} = 16{,}384 \times 320 = 5{,}242{,}880 $$
+$$ \Large \text{values per batch} = 16{,}384 \times 320 = 5{,}242{,}880 $$
 
-$$ \Large \text{expected zeros} = 524{,}288 $$
+$$ \Large \text{expected zeros} = 0.1 \times 5{,}242{,}880 = 524{,}288 $$
 
 Real rows are short (about 20 words, well under 512 tokens), so the true number is smaller.
 

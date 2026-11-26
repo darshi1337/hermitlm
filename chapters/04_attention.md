@@ -50,13 +50,13 @@ flowchart TD
 
 With `d_model = 320` and `n_heads = 8`:
 
-$$ \Large \text{head dim} = 320 / 8 = 40 $$
+$$ \Large \text{head dim} = \frac{320}{8} = 40 $$
 
 $$ \Large W_{\text{qkv}} = (3 \times 320) \times 320 = 307{,}200 $$
 
-$$ \Large \text{qkv bias} = 960 $$
+$$ \Large \text{QKV bias parameters} = 3 \times 320 = 960 $$
 
-$$ \Large \text{total qkv} = 308{,}160 $$
+$$ \Large \text{QKV total} = 307{,}200 + 960 = 308{,}160 $$
 
 The forward pass (`model.py:19-38`):
 
@@ -104,9 +104,13 @@ If query and key components each have variance 1 and are independent, their dot 
 
 Softmax with very large scores becomes nearly one-hot. One weight goes to 1, all others to 0, and the gradient that would adjust the other weights vanishes. Dividing by `√d` restores variance 1 before the softmax:
 
-$$ \Large \text{Var}(q \cdot k) = d $$
+$$ \Large \text{Var}(q_i) = \text{Var}(k_i) = 1 \quad \text{for every component } i $$
 
-$$ \Large \text{Var}((q \cdot k)/\sqrt{d}) = 1 $$
+$$ \Large \text{Var}(q \cdot k) = d_{\text{head}} = 40 $$
+
+$$ \Large \text{standard deviation} = \sqrt{40} \approx 6.32 $$
+
+$$ \Large \text{Var}\left(\frac{q \cdot k}{\sqrt{d_{\text{head}}}}\right) = 1 $$
 
 In this model the embeddings start with σ = 0.02 (chapter 3), so raw scores are small at first. The scaling still matters as training grows the vector magnitudes.
 
@@ -151,11 +155,11 @@ The real head has 40 dimensions. For arithmetic we shrink it to 4. We use three 
 
 For token 2 looking at token 1:
 
-$$ \Large Q_{2} \cdot K_{1} = 0.5\times 0.1 + (-0.4)\times 0.5 + 0.2\times (-0.2) + 0.6\times 0.4 $$
+$$ \Large \text{score}(2,1) = Q_2 \cdot K_1 = 0.5(0.1) + (-0.4)(0.5) + 0.2(-0.2) + 0.6(0.4) $$
 
-$$ \Large = 0.05 - 0.20 - 0.04 + 0.24 $$
+$$ \Large \text{score}(2,1) = 0.05 - 0.20 - 0.04 + 0.24 = 0.05 $$
 
-$$ \Large = 0.05 $$
+
 
 All scores for the three queries:
 
@@ -183,11 +187,11 @@ For query 1 the surviving scores are `−0.155` and `0.240`:
 
 $$ \Large e^{-0.155} = 0.8565 $$
 
-$$ \Large e^{ 0.240} = 1.2712 $$
+$$ \Large e^{0.240} = 1.2712 $$
 
-$$ \Large sum = 2.1277 $$
+$$ \Large \text{sum} = 0.8565 + 1.2712 = 2.1277 $$
 
-$$ \Large weights = [0.8565/2.1277, 1.2712/2.1277] = [0.4025, 0.5975] $$
+$$ \Large \text{weights} = \left[\frac{0.8565}{2.1277}, \frac{1.2712}{2.1277}\right] = [0.4025, 0.5975] $$
 
 Query 1 pays about 40% attention to token 0 and 60% to itself.
 
@@ -201,13 +205,13 @@ Query 1 pays about 40% attention to token 0 and 60% to itself.
 
 For query 1:
 
-$$ \Large out_{1} = 0.4025 \times V_{0} + 0.5975 \times V_{1} $$
+$$ \Large \text{out}_1 = 0.4025\,V_0 + 0.5975\,V_1 $$
 
-$$ \Large = 0.4025 \times [0.4, 0.9,-0.1,0.2] + 0.5975 \times [-0.3,0.2,0.5,0.1] $$
+$$ \Large \text{out}_1 = 0.4025[0.4, 0.9, -0.1, 0.2] + 0.5975[-0.3, 0.2, 0.5, 0.1] $$
 
-$$ \Large = [0.1610, 0.3623,-0.0403,0.0805] + [-0.1793,0.1195,0.2988,0.0598] $$
+$$ \Large \text{out}_1 = [0.1610, 0.3623, -0.0403, 0.0805] + [-0.1793, 0.1195, 0.2988, 0.0598] $$
 
-$$ \Large = [-0.0182, 0.4818, 0.2585, 0.1403] $$
+$$ \Large \text{out}_1 = [-0.0182, 0.4818, 0.2585, 0.1403] $$
 
 This 4-vector is the new representation of token 1 after this head. Eight heads compute eight such vectors, which are concatenated back into 320 dimensions.
 
@@ -231,21 +235,21 @@ $$ \Large \text{total per block} = 410{,}880 $$
 
 $$ \Large \text{six blocks} = 2{,}465{,}280 $$
 
-### Multiply-adds for a full 512-token sequence
+### FLOPs for a full 512-token sequence
 
-$$ \Large \text{QK per block} = 2 \times 512 \times 512 \times 320 = 167{,}772{,}160 $$
+$$ \Large \text{QK FLOPs per block} = 2 \times 512 \times 512 \times 320 = 167{,}772{,}160 $$
 
-$$ \Large \text{AV per block} = 167{,}772{,}160 $$
+$$ \Large \text{AV FLOPs per block} = 167{,}772{,}160 $$
 
-$$ \Large \text{attention per block} = 335{,}544{,}320 $$
+$$ \Large \text{attention FLOPs per block} = 335{,}544{,}320 $$
 
-$$ \Large \text{six blocks} = 2{,}013{,}265{,}920 $$
+$$ \Large \text{attention FLOPs in six blocks} = 2{,}013{,}265{,}920 $$
 
-Compare with the feed-forward network (chapter 5): about 4,718,592,000 multiply-adds. Attention is roughly 30% of one forward pass at this sequence length.
+Compare with the feed-forward network (chapter 5): about 4,718,592,000 FLOPs. Attention is roughly 30% of one forward pass at this sequence length.
 
 ### Softmax with a masked score
 
-$$ \Large \text{softmax}(z_i) = \frac{\exp(z_i - \max z)}{\sum_j \exp(z_j - \max z)} $$
+$$ \Large \text{softmax}(z_i) = \frac{\exp(z_i - m)}{\sum_j \exp(z_j - m)}, \quad m = \max_j z_j $$
 
 Subtracting the maximum keeps the exponentials in a safe range. With `z = −∞`, `exp(−∞ − max) = 0` exactly.
 

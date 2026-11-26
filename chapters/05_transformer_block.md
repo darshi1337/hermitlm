@@ -62,9 +62,13 @@ Post-norm (normalize after adding) was common in early Transformers. Pre-norm is
 
 A LayerNorm over `d_model = 320` computes, for each token independently:
 
-$$ \Large \mu = \frac{1}{d}\sum_i x_i, \qquad \sigma^2 = \frac{1}{d}\sum_i (x_i-\mu)^2 $$
+$$ \Large \mu = \frac{1}{d}\sum_{i=1}^{d} x_i $$
 
-$$ \Large \hat{x}_i = \frac{x_i-\mu}{\sqrt{\sigma^2+\varepsilon}}, \qquad y_i = \gamma_i \hat{x}_i + \beta_i $$
+$$ \Large \sigma^2 = \frac{1}{d}\sum_{i=1}^{d}(x_i-\mu)^2 $$
+
+$$ \Large \hat{x}_i = \frac{x_i-\mu}{\sqrt{\sigma^2+\varepsilon}} $$
+
+$$ \Large y_i = \gamma_i \hat{x}_i + \beta_i $$
 
 PyTorch uses `ε = 1e-5` by default. `γ` (weight) and `β` (bias) are learned, one per dimension, so each LayerNorm has `2 × 320 = 640` parameters.
 
@@ -74,7 +78,7 @@ Take the toy vector `[1.0, 2.0, 6.0]` (used here with d=3 for readable arithmeti
 
 $$ \Large \mu = (1 + 2 + 6)/3 = 3 $$
 
-$$ \Large deviations = [-2, -1, 3] $$
+$$ \Large \text{deviations} = [-2, -1, 3] $$
 
 $$ \Large \sigma^2 = (4 + 1 + 9)/3 = 14/3 = 4.6667 $$
 
@@ -110,7 +114,7 @@ With the real 320-dimensional vectors from chapter 3, the same operation runs 32
 
 The formula is:
 
-$$ \Large \text{FFN}(x) = w_3\big(\text{silu}(w_2 x) \odot w_1 x\big) $$
+$$ \Large \text{FFN}(x) = w_3\left(\text{silu}(w_2 x) \odot w_1 x\right) $$
 
 | Symbol | Shape | Role |
 |---|---|---|
@@ -126,11 +130,11 @@ SwiGLU uses **three** matrices where a classic ReLU FFN uses two. That costs 50%
 
 For `z = 0.8`:
 
-$$ \Large silu(0.8) = 0.8 / (1 + e^{-0.8}) = 0.8 / (1 + 0.4493) = 0.8 / 1.4493 = 0.5521 $$
+$$ \Large \text{silu}(0.8) = \frac{0.8}{1 + e^{-0.8}} = \frac{0.8}{1 + 0.4493} = \frac{0.8}{1.4493} = 0.5521 $$
 
 For `z = −0.5`:
 
-$$ \Large silu(-0.5) = -0.5 / (1 + e^{0.5}) = -0.5 / (1 + 1.6487) = -0.5 / 2.6487 = -0.1888 $$
+$$ \Large \text{silu}(-0.5) = \frac{-0.5}{1 + e^{0.5}} = \frac{-0.5}{1 + 1.6487} = \frac{-0.5}{2.6487} = -0.1888 $$
 
 SiLU is smooth and lets small negative values through, unlike ReLU which clamps them to zero.
 
@@ -138,9 +142,9 @@ SiLU is smooth and lets small negative values through, unlike ReLU which clamps 
 
 Let `w1(x) = [0.5, −1.0]`, `w2(x) = [0.8, 0.4]`:
 
-$$ \Large silu(w2(x)) = [silu(0.8), silu(0.4)] = [0.5521, 0.2395] $$
+$$ \Large \text{silu}(w_2 x) = [\text{silu}(0.8), \text{silu}(0.4)] = [0.5521, 0.2395] $$
 
-$$ \Large gate product = [0.5 \times 0.5521, -1.0 \times 0.2395] = [0.2761, -0.2395] $$
+$$ \Large \text{gate product} = [0.5 \times 0.5521, -1.0 \times 0.2395] = [0.2761, -0.2395] $$
 
 The second component is suppressed by the gate. With real matrices the same thing happens across 800 channels.
 
@@ -178,7 +182,7 @@ All dropout layers are inactive when `model.eval()` is called in `hermitlm/runti
 
 If `y = x + f(x)`, then:
 
-$$ \Large \partial y/\partial x = I + \partial f/\partial x $$
+$$ \Large \frac{\partial y}{\partial x} = I + \frac{\partial f}{\partial x} $$
 
 The identity matrix `I` gives gradients a direct path backwards, even when `∂f/∂x` is small. This is why residual networks can be much deeper than plain stacks.
 
@@ -190,17 +194,17 @@ Pre-norm computes `x + f(LayerNorm(x))`. The sublayer always sees standardized i
 
 For one token, one block:
 
-$$ \Large w_1: 320 \times 800 = 256{,}000 $$
+$$ \Large \text{w1 parameters} = 320 \times 800 = 256{,}000 $$
 
-$$ \Large w_2: 320 \times 800 = 256{,}000 $$
+$$ \Large \text{w2 parameters} = 320 \times 800 = 256{,}000 $$
 
-$$ \Large w_3: 800 \times 320 = 256{,}000 $$
+$$ \Large \text{w3 parameters} = 800 \times 320 = 256{,}000 $$
 
-$$ \Large \text{total} = 768{,}000\text{ multiply-adds per token per block} $$
+$$ \Large \text{FFN total} = 3 \times 256{,}000 = 768{,}000 \text{ multiply-adds per token} $$
 
 For a full sequence of 512 tokens and 6 blocks:
 
-$$ \Large 768{,}000 \times 512 \times 6 = 2{,}359{,}296{,}000\text{ multiply-adds} $$
+$$ \Large 768{,}000 \times 512 \times 6 = 2{,}359{,}296{,}000 \text{ multiply-adds} $$
 
 Counting the multiply-and-add as two floating-point operations gives 4,718,592,000 FLOPs, matching chapter 4's comparison.
 
@@ -208,11 +212,11 @@ Counting the multiply-and-add as two floating-point operations gives 4,718,592,0
 
 $$ \Large \text{per LayerNorm} = 320 + 320 = 640 $$
 
-$$ \Large \text{12 in blocks} = 7{,}680 $$
+$$ \Large \text{12 block LayerNorms} = 12 \times 640 = 7{,}680 $$
 
-$$ \Large \text{final} = 640 $$
+$$ \Large \text{final LayerNorm} = 2 \times 320 = 640 $$
 
-$$ \Large \text{total} = 8{,}320 $$
+$$ \Large \text{all LayerNorms} = 7{,}680 + 640 = 8{,}320 $$
 
 ---
 

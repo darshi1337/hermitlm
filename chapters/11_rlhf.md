@@ -50,7 +50,7 @@ flowchart TD
 
 The formula:
 
-$$ \Large R = 2.0\,\min(\text{overlap}, 0.4) - 1.5\,\text{rep} - \text{len pen} - \text{style pen} - 3\,\text{break pen} $$
+$$ \Large R = 2.0\min(\text{overlap}, 0.4) - 1.5\,\text{repetition} - \text{length penalty} - \text{style penalty} - 3\,\text{break-phrase count} $$
 
 An empty reply returns `−3.0`.
 
@@ -126,11 +126,11 @@ The value head starts at zero, so initial value predictions are 0. When saving, 
 
 For each response token `t` (`ppo.py:202-204`):
 
-$$ \Large kl_{t} = \log \pi_{old}(a_{t}|s_{t}) - \log \pi_{ref}(a_{t}|s_{t}) $$
+$$ \Large \text{kl}_t = \log \pi_{\text{old}}(a_t|s_t) - \log \pi_{\text{ref}}(a_t|s_t) $$
 
-$$ \Large r_{t} = -0.15 \cdot kl_{t} $$
+$$ \Large r_t = -0.15\,\text{kl}_t $$
 
-$$ \Large r_{T} = r_{T} + score_{response}(reply) \text{(final response token only)} $$
+$$ \Large r_T \leftarrow r_T + \text{score}(\text{reply}) \quad \text{(final token only)} $$
 
 The k1 KL estimator is always non-negative in expectation. It penalizes moving away from the frozen SFT model. The persona reward is added only at the last token so it does not bias every step.
 
@@ -151,15 +151,15 @@ The k1 KL estimator is always non-negative in expectation. It penalizes moving a
 
 Formally, with `γ = 1.0` and `λ = 0.95`:
 
-$$ \Large \delta_{t} = r_{t} + \gamma V_{t+1} - V_{t} \text{with } V_T = 0 $$
+$$ \Large \delta_t = r_t + \gamma V_{t+1} - V_t, \quad V_T = 0 $$
 
-$$ \Large \hat{A}_t = \delta_{t} + \gamma\lambda \hat{A}_{t+1} \text{(backwards)} $$
+$$ \Large \hat{A}_t = \delta_t + \gamma\lambda\hat{A}_{t+1} \quad \text{(computed backwards)} $$
 
-$$ \Large R_{t} = \hat{A}_t + V_{t} $$
+$$ \Large R_t = \hat{A}_t + V_t $$
 
 Advantages are then whitened across all response positions (`ppo.py:224-227`):
 
-$$ \Large \hat{A}'_t = (\hat{A}_t - mean(\hat{A})) / \max(std(\hat{A}), 10^{-6}) $$
+$$ \Large \hat{A}'_t = \frac{\hat{A}_t - \text{mean}(\hat{A})}{\max(\text{std}(\hat{A}), 10^{-6})} $$
 
 ### The clipped objective
 
@@ -179,29 +179,29 @@ $$ \Large \hat{A}'_t = (\hat{A}_t - mean(\hat{A})) / \max(std(\hat{A}), 10^{-6})
 
 The formulas:
 
-$$ \Large r_{t}(\theta) = \exp(\log \pi_{new}(a_{t}|s_{t}) - \log \pi_{old}(a_{t}|s_{t})) $$
+$$ \Large \rho_t(\theta) = \exp\left(\log\pi_{\text{new}}(a_t|s_t) - \log\pi_{\text{old}}(a_t|s_t)\right) $$
 
-$$ \Large L_{policy} = -mean[ \min(r_{t} \hat{A}_t, clip(r_{t}, 0.8, 1.2) \hat{A}_t) ] $$
+$$ \Large L_{\text{policy}} = -\text{mean}\left[\min\left(\rho_t\hat{A}_t, \text{clip}(\rho_t,0.8,1.2)\hat{A}_t\right)\right] $$
 
-$$ \Large L_{value} = mean[ (V_{new},t - R_{t})^2 ] $$
+$$ \Large L_{\text{value}} = \text{mean}\left[(V_{\text{new},t} - R_t)^2\right] $$
 
-$$ \Large H = -\sum_v p_{v} \log p_{v} $$
+$$ \Large H = -\sum_v p_v \log p_v $$
 
-$$ \Large L_{total} = L_{policy} + 0.5 \cdot L_{value} - 0.01 \cdot H $$
+$$ \Large L_{\text{total}} = L_{\text{policy}} + 0.5L_{\text{value}} - 0.01H $$
 
-The clip prevents a single update from changing the policy too much. If `r_t` would push above 1.2 or below 0.8, the surrogate stops giving extra reward.
+The clip prevents a single update from changing the policy too much. If `ρ_t` would push above 1.2 or below 0.8, the surrogate stops giving extra reward.
 
 ### PPO worked example
 
 Suppose `π_old = 0.20`, `π_new = 0.30`, `Â = +2.0`:
 
-$$ \Large r = 0.30/0.20 = 1.5 $$
+$$ \Large \text{ratio} = \frac{0.30}{0.20} = 1.5 $$
 
-$$ \Large surr1 = 1.5 \times 2.0 = 3.0 $$
+$$ \Large \text{surr}_1 = 1.5 \times 2.0 = 3.0 $$
 
-$$ \Large clip(1.5, 0.8, 1.2) = 1.2 \to surr2 = 1.2 \times 2.0 = 2.4 $$
+$$ \Large \text{surr}_2 = \text{clip}(1.5,0.8,1.2)\times 2.0 = 1.2 \times 2.0 = 2.4 $$
 
-$$ \Large \min(3.0, 2.4) = 2.4 \to policy contribution = -2.4 $$
+$$ \Large \text{policy contribution} = -\min(3.0,2.4) = -2.4 $$
 
 Without clipping it would be −3.0. The clamp removed the extra incentive to make that large a jump.
 
@@ -209,9 +209,9 @@ Without clipping it would be −3.0. The clamp removed the extra incentive to ma
 
 $$ \Large \text{rollouts} = 16 \times 200 = 3{,}200 $$
 
-$$ \Large \text{minibatches} = 2\text{ per epoch} $$
+$$ \Large \text{minibatches per epoch} = \frac{16}{8} = 2 $$
 
-$$ \Large \text{steps} = 1{,}600 $$
+$$ \Large \text{optimizer steps} = 200 \times 4 \times 2 = 1{,}600 $$
 
 Checkpoints appear at iterations 50, 100, 150, 200 plus `ppo_final.pt`, matching the files on disk.
 
@@ -225,9 +225,9 @@ DPO skips the value network and the rollout loop. It needs only pairs of replies
 
 `dpo.py:17-34` samples `n = 4` candidates per prompt at `temperature = 0.8`, `top_k = 40`, `max_new_tokens = 48`. It keeps the best and worst by `score_response`, but only if:
 
-$$ \Large chosen_{text} \neq rejected_{text} $$
+$$ \Large \text{chosen text} \neq \text{rejected text} $$
 
-$$ \Large score(chosen) - score(rejected) \geq 0.15 $$
+$$ \Large \text{score}(\text{chosen}) - \text{score}(\text{rejected}) \geq 0.15 $$
 
 The margin filter drops ambiguous pairs.
 
@@ -255,13 +255,15 @@ The margin filter drops ambiguous pairs.
 
 Let `ℓ_π(y|x)` be the mean log-probability over **completion tokens only** (the prompt is masked out):
 
-$$ \Large \ell_\pi(y|x) = \sum_t m_{t} \log \pi(y_{t} | x, y_{<t}) / \sum_t m_{t} $$
+$$ \Large \ell_\pi(y|x) = \frac{\sum_t m_t \log \pi(y_t|x,y_{<t})}{\sum_t m_t} $$
 
-$$ \Large r_\pi = \ell_\pi(chosen|x) - \ell_\pi(rejected|x) $$
+$$ \Large r_\pi = \ell_\pi(\text{chosen}|x) - \ell_\pi(\text{rejected}|x) $$
 
-$$ \Large r_{ref} = \ell_{ref}(chosen|x) - \ell_{ref}(rejected|x) $$
+$$ \Large r_{\text{ref}} = \ell_{\text{ref}}(\text{chosen}|x) - \ell_{\text{ref}}(\text{rejected}|x) $$
 
-$$ \Large L_{DPO} = -\log \sigma( \beta \cdot (r_\pi - r_{ref}) ) \beta = 0.1 $$
+$$ \Large L_{\text{DPO}} = -\log\sigma\left(\beta(r_\pi - r_{\text{ref}})\right) $$
+
+$$ \Large \beta = 0.1 $$
 
 `σ(z) = 1/(1+e^(−z))`. Minimizing this loss increases the chosen log-probability relative to the reference and decreases the rejected one.
 
@@ -269,17 +271,21 @@ $$ \Large L_{DPO} = -\log \sigma( \beta \cdot (r_\pi - r_{ref}) ) \beta = 0.1 $$
 
 Suppose:
 
-$$ \Large \ell_\pi(chosen) = -0.30 \ell_\pi(rejected) = -0.80 \to r_\pi = 0.50 $$
+$$ \Large \ell_\pi(\text{chosen}) = -0.30, \quad \ell_\pi(\text{rejected}) = -0.80 $$
 
-$$ \Large \ell_{ref}(chosen) = -0.35 \ell_{ref}(rejected) = -0.45 \to r_{ref} = 0.10 $$
+$$ \Large r_\pi = -0.30 - (-0.80) = 0.50 $$
+
+$$ \Large \ell_{\text{ref}}(\text{chosen}) = -0.35, \quad \ell_{\text{ref}}(\text{rejected}) = -0.45 $$
+
+$$ \Large r_{\text{ref}} = -0.35 - (-0.45) = 0.10 $$
 
 Then:
 
-$$ \Large z = \beta (r_\pi - r_{ref}) = 0.1 \times 0.40 = 0.04 $$
+$$ \Large z = \beta(r_\pi - r_{\text{ref}}) = 0.1 \times 0.40 = 0.04 $$
 
-$$ \Large \sigma(0.04) = 1/(1 + e^{-0.04}) = 0.5100 $$
+$$ \Large \sigma(0.04) = \frac{1}{1+e^{-0.04}} = 0.5100 $$
 
-$$ \Large L_{DPO} = -\ln(0.5100) = 0.6733 $$
+$$ \Large L_{\text{DPO}} = -\ln(0.5100) = 0.6733 $$
 
 If the policy preferred the rejected reply, `r_π − r_ref` would be negative and the loss would be larger than `ln 2 ≈ 0.6931`.
 
@@ -295,11 +301,11 @@ If the policy preferred the rejected reply, `r_π − r_ref` would be negative a
 | dropout | 0.0 |
 | gradient clip | 1.0 |
 
-$$ \Large \text{generations} = 3{,}200 $$
+$$ \Large \text{generations} = 200 \times 4 \times 4 = 3{,}200 $$
 
-$$ \Large \text{steps} = 200 $$
+$$ \Large \text{training steps} = 200 $$
 
-$$ \Large \text{LR ratio} = 1/40 $$
+$$ \Large \text{learning-rate ratio} = \frac{5 \times 10^{-6}}{2 \times 10^{-4}} = \frac{1}{40} $$
 
 Logged losses in `logs/dpo_margin.log` move from about 0.69 to 0.60, with 3 or 4 pairs retained out of 4 at most checkpoints.
 
@@ -321,21 +327,21 @@ Logged losses in `logs/dpo_margin.log` move from about 0.69 to 0.60, with 3 or 4
 
 ### PPO optimizer-step count
 
-$$ \Large iterations \times epochs \times (batch/minibatch) = 200 \times 4 \times (16/8) = 1,600 $$
+$$ \Large 200 \times 4 \times \frac{16}{8} = 1{,}600 \text{ optimizer steps} $$
 
 ### KL estimator
 
-$$ \Large kl_{t} = \log \pi_{old} - \log \pi_{ref} $$
+$$ \Large \text{kl}_t = \log\pi_{\text{old}} - \log\pi_{\text{ref}} $$
 
-$$ \Large E[\text{kl}] \geq 0 \text{ (Gibbs)} $$
+$$ \Large \mathbb{E}[\text{kl}] \geq 0 \quad \text{(Gibbs' inequality)} $$
 
-$$ \Large penalty = kl_{coef} \times \sum_t kl_{t} = 0.15 \times \sum_t kl_{t} $$
+$$ \Large \text{total KL penalty} = 0.15\sum_t \text{kl}_t $$
 
 ### Clipping boundaries
 
-$$ \Large lower = 1 - \varepsilon = 0.8 $$
+$$ \Large \text{lower clip} = 1-\varepsilon = 0.8 $$
 
-$$ \Large upper = 1 + \varepsilon = 1.2 $$
+$$ \Large \text{upper clip} = 1+\varepsilon = 1.2 $$
 
 A probability ratio of 1.5 is clamped to 1.2; 0.6 is clamped to 0.8.
 
@@ -343,19 +349,19 @@ A probability ratio of 1.5 is clamped to 1.2; 0.6 is clamped to 0.8.
 
 The objective is equivalent to maximizing:
 
-$$ \Large \beta \cdot [(\log \pi(chosen) - \log \pi_{ref}(chosen)) \\ - (\log \pi(rejected) - \log \pi_{ref}(rejected))] $$
+$$ \Large \beta\left[(\log\pi(\text{chosen})-\log\pi_{\text{ref}}(\text{chosen})) - (\log\pi(\text{rejected})-\log\pi_{\text{ref}}(\text{rejected}))\right] $$
 
 so DPO learns a reward function up to the scale factor `β`.
 
 ### Reward bounds
 
-$$ \Large \text{max overlap credit} = +0.8 $$
+$$ \Large \text{maximum overlap credit} = 2 \times 0.4 = +0.8 $$
 
-$$ \Large \text{max total reward} = +0.8 $$
+$$ \Large \text{maximum total reward} = +0.8 $$
 
-$$ \Large \text{empty reply} = -3.0 $$
+$$ \Large \text{empty reply reward} = -3.0 $$
 
-$$ \Large \text{each break phrase} = -3.0 $$
+$$ \Large \text{each break phrase penalty} = -3.0 $$
 
 ---
 

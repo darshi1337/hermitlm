@@ -200,7 +200,17 @@ The method also restores the caller's training mode in a `finally` block (`model
 
 ### General parameter formula
 
-$$ \Large P = V\cdot D + P_{max}\cdot D + L\cdot (3D^2 + 3D + D^2 + D + 3DF) + L\cdot (4D) + 2D $$
+$$ \Large \text{embedding parameters} = V D + P_{\max} D $$
+
+$$ \Large \text{attention per block} = 4D^2 + 4D $$
+
+$$ \Large \text{FFN per block} = 3 D F $$
+
+$$ \Large \text{LayerNorm per block} = 4D $$
+
+$$ \Large \text{total} = V D + P_{\max} D + L\left(4D^2 + 8D + 3 D F\right) + 2D $$
+
+Here `8D` is the 4D of attention biases plus the 4D of LayerNorm weights and biases in each block.
 
 Substituting `V=3774, D=320, P_max=512, L=6, F=800`:
 
@@ -220,15 +230,15 @@ If `ffn_hidden` changed from 800 to 1,024:
 
 $$ \Large \text{new FFN} = 6 \times 3 \times 320 \times 1{,}024 = 5{,}898{,}240 $$
 
-$$ \Large \text{delta} = +1{,}290{,}240 $$
+$$ \Large \text{delta} = 5{,}898{,}240 - 4{,}608{,}000 = +1{,}290{,}240 $$
 
 $$ \Large \text{new total} = 9{,}743{,}360 $$
 
 ### Size of one forward pass output
 
-$$ \Large \text{logits elements} = 1 \times 512 \times 3{,}774 = 1{,}932{,}288 $$
+$$ \Large \text{logit values} = 1 \times 512 \times 3{,}774 = 1{,}932{,}288 $$
 
-$$ \Large \text{bytes} = 1{,}932{,}288 \times 4 = 7{,}729{,}152 \approx 7.7\text{ MB} $$
+$$ \Large \text{logit bytes} = 1{,}932{,}288 \times 4 = 7{,}729{,}152 \approx 7.7 \text{ MB} $$
 
 This is why the browser takes only the last position's 3,774 logits for sampling (`web/model.js:218-221`).
 

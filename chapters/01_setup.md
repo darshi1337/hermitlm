@@ -115,13 +115,13 @@ One training row looks like this:
 | File | Size | What it holds |
 |---|---:|---|
 | `checkpoints/best_model.pt` | 33,838,453 bytes | Shipped SFT model, step 24,200, eval loss 0.6541 |
-| `checkpoints/final_model.pt` | 32,900,609 bytes | Older 30,000-step run, vocab 2,831 |
-| `checkpoints/step_1000.pt` … `step_29000.pt` | ~32 MB each | Periodic saves |
-| `checkpoints/decision_probe.pt` | 42,409 bytes | 7-way, binary and 21-way linear heads |
+| `checkpoints/final_model.pt` | 34,126,593 bytes | Older 30,000-step run, vocab 2,831 |
+| `checkpoints/step_1000.pt` … `step_31000.pt` | ~32 MB each | Periodic saves |
+| `checkpoints/decision_probe.pt` | 95,529 bytes | 7-way, binary and 21-way linear heads |
 | `checkpoints/decision_tool_probe.pt` | 7,685 bytes | 4-way tool head |
 | `checkpoints/ppo/ppo_final.pt` | — | Optional PPO policy |
 | `checkpoints/dpo/dpo_final.pt` | — | Optional DPO policy |
-| `checkpoints/config.json` | 550 bytes | Hyperparameters of the current run |
+| `checkpoints/config.json` | 578 bytes | Hyperparameters of the current run |
 
 > ⚠️ The artifacts span three vocabulary eras: 2,833 (config default), 2,831 (older PPO/DPO/final run) and 3,774 (the shipped tokenizer and best model). Chapter 6 explains how `sync_config_with_tokenizer` resolves this.
 

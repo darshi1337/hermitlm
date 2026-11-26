@@ -112,11 +112,11 @@ $$ \Large e^{3.75} = 42.5211 $$
 
 $$ \Large e^{2.50} = 12.1825 $$
 
-$$ \Large sum = 54.7036 $$
+$$ \Large \text{sum} = 42.5211 + 12.1825 = 54.7036 $$
 
-$$ \Large p = [42.5211/54.7036, 12.1825/54.7036, 0, 0, 0] $$
+$$ \Large \text{probabilities} = \left[\frac{42.5211}{54.7036}, \frac{12.1825}{54.7036}, 0, 0, 0\right] = [0.7773, 0.2227, 0, 0, 0] $$
 
-$$ \Large = [0.7773, 0.2227, 0, 0, 0] $$
+
 
 The first token wins about 78% of the time and the second about 22%. No other token can ever be drawn.
 
@@ -220,7 +220,7 @@ Every SSE line gets its own `data:` prefix because tool results can be multi-lin
 
 ### Temperature scaling
 
-$$ \Large z_{v} = logit_{v} / T $$
+$$ \Large z_v = \frac{\text{logit}_v}{T} $$
 
 - `T < 1` increases the gaps between logits.
 - `T = 1` leaves them unchanged.
@@ -230,27 +230,27 @@ $$ \Large z_{v} = logit_{v} / T $$
 
 ### Top-k threshold
 
-$$ \Large v_k = \text{k-th largest }z $$
+$$ \Large v_k = \text{k-th largest value of } z $$
 
-$$ \Large z'_v = z_v \text{ if } z_v \geq v_k, \text{ else } -\infty $$
+$$ \Large z'_v = z_v \text{ when } z_v \geq v_k, \quad \text{otherwise } z'_v = -\infty $$
 
 ### Softmax after masking
 
-$$ \Large p_{v} = \exp(z'_v - \max(z')) / \sum_u \exp(z'_u - \max(z')) $$
+$$ \Large p_v = \frac{\exp(z'_v - m)}{\sum_u \exp(z'_u - m)}, \quad m = \max_u z'_u $$
 
 With `−∞` entries the exponential is exactly 0.
 
 ### Nucleus cutoff
 
-$$ \Large \text{cutoff} = \min\{k : \sum_{j\leq k} p_j \geq p_{\text{top}}\} $$
+$$ \Large \text{cutoff} = \min\left\{k : \sum_{j=1}^{k} p_j \geq p_{\text{top}}\right\} $$
 
-$$ \Large p'_i = p_i / \sum_{j\leq\text{cutoff}} p_j $$
+$$ \Large p'_i = \frac{p_i}{\sum_{j=1}^{\text{cutoff}} p_j} $$
 
 ### Cost of generation
 
-$$ \Large \text{forward passes} = \text{max new tokens} = 80 $$
+$$ \Large \text{forward passes} = \text{maximum new tokens} = 80 $$
 
-$$ \Large \text{context at step }t = \min(\text{prompt len} + t, 512) $$
+$$ \Large \text{context length at step } t = \min(\text{prompt length} + t, 512) $$
 
 The browser displays tokens per second from the count and elapsed time (`web/index.html:716-739`).
 

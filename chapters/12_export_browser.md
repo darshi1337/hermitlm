@@ -113,35 +113,37 @@ The quantized graph contains:
 
 For a real value `r` mapped to an unsigned 8-bit integer `q ∈ [0, 255]`:
 
-$$ \Large scale = (r_{max} - r_{min}) / (q_{max} - q_{min}) $$
+$$ \Large \text{scale} = \frac{r_{\max}-r_{\min}}{q_{\max}-q_{\min}} $$
 
-$$ \Large zero_{point} = clip( round(q_{min} - r_{min} / scale), 0, 255 ) $$
+$$ \Large \text{zero point} = \text{clip}\left(\text{round}\left(q_{\min} - \frac{r_{\min}}{\text{scale}}\right), 0, 255\right) $$
 
-$$ \Large q = clip( round(r / scale) + zero_{point}, 0, 255 ) $$
+$$ \Large q = \text{clip}\left(\text{round}\left(\frac{r}{\text{scale}}\right) + \text{zero point}, 0, 255\right) $$
 
-$$ \Large r_{hat} = scale \times (q - zero_{point}) $$
+$$ \Large \hat{r} = \text{scale} \times (q - \text{zero point}) $$
 
 Worked example with weights in `[−0.5, 0.5]`:
 
-$$ \Large scale = (0.5 - (-0.5)) / 255 = 1/255 = 0.00392157 $$
+$$ \Large \text{scale} = \frac{0.5-(-0.5)}{255} = \frac{1}{255} = 0.00392157 $$
 
-$$ \Large zero_{point} = round(0 - (-0.5)/0.00392157) = round(127.5) = 128 $$
+$$ \Large \text{zero point} = \text{round}\left(0-\frac{-0.5}{0.00392157}\right) = \text{round}(127.5) = 128 $$
 
-$$ \Large r = 0.25 \to q = round(0.25/0.00392157) + 128 = 64 + 128 = 192 $$
+$$ \Large r = 0.25 $$
 
-$$ \Large r_{hat} = 0.00392157 \times (192 - 128) = 0.25098 $$
+$$ \Large q = \text{round}\left(\frac{0.25}{0.00392157}\right)+128 = 64+128 = 192 $$
+
+$$ \Large \hat{r} = 0.00392157 \times (192-128) = 0.25098 $$
 
 The reconstruction error is about 0.001, small compared with model weight noise.
 
 ### Size math
 
-$$ \Large \text{fp32} = 36{,}282{,}163\text{ bytes} $$
+$$ \Large \text{fp32 size} = 36{,}282{,}163 \text{ bytes} $$
 
-$$ \Large \text{uint8} = 9{,}215{,}272\text{ bytes} $$
+$$ \Large \text{uint8 size} = 9{,}215{,}272 \text{ bytes} $$
 
-$$ \Large \text{ratio} = 3.94\times $$
+$$ \Large \text{compression ratio} = \frac{36{,}282{,}163}{9{,}215{,}272} = 3.94\times $$
 
-$$ \Large \text{reduction} = 74.6\% $$
+$$ \Large \text{size reduction} = 1-\frac{9{,}215{,}272}{36{,}282{,}163} = 74.6\% $$
 
 Not every array shrinks 4×. LayerNorm scales, biases and scale/zero-point parameters stay float32, which is why the ratio is below 4.
 
@@ -247,13 +249,13 @@ Vendored runtime: `web/vendor/` pins onnxruntime-web **1.19.2** with SHA-256 che
 
 ### Bytes per weight
 
-$$ \Large fp32 weight = 4 bytes $$
+$$ \Large \text{fp32 weight} = 4 \text{ bytes} $$
 
-$$ \Large uint8 weight = 1 byte $$
+$$ \Large \text{uint8 weight} = 1 \text{ byte} $$
 
-$$ \Large naive saving = 3 bytes per weight = 75\% $$
+$$ \Large \text{naive saving} = \frac{4-1}{4} = 75\% $$
 
-$$ \Large observed saving = 74.6\% $$
+$$ \Large \text{observed saving} = 74.6\% $$
 
 The 0.4 percentage-point gap is metadata and float32 parameters that were not quantized.
 
@@ -261,15 +263,15 @@ The 0.4 percentage-point gap is metadata and float32 parameters that were not qu
 
 For a 3,774 × 320 token-embedding matrix:
 
-$$ \Large \text{fp32 embedding} = 3{,}774 \times 320 \times 4 = 4{,}830{,}720\text{ bytes} $$
+$$ \Large \text{fp32 embedding} = 3{,}774 \times 320 \times 4 = 4{,}830{,}720 \text{ bytes} $$
 
-$$ \Large \text{uint8 embedding} = 1{,}207{,}680\text{ bytes} $$
+$$ \Large \text{uint8 embedding} = 3{,}774 \times 320 \times 1 = 1{,}207{,}680 \text{ bytes} $$
 
-$$ \Large \text{saved} = 3{,}623{,}040\text{ bytes} $$
+$$ \Large \text{saved} = 4{,}830{,}720 - 1{,}207{,}680 = 3{,}623{,}040 \text{ bytes} $$
 
 ### Cache key
 
-$$ \Large \text{manifest hash} = \text{sha256}(\text{model.quant.onnx}) $$
+$$ \Large \text{manifest hash} = \text{SHA-256}(\text{model.quant.onnx}) $$
 
 $$ \Large \text{cache name} = \text{hermit-assets-} + \text{hash} $$
 
@@ -277,11 +279,11 @@ Without the manifest, `DEFAULT_ASSET_VERSION = "v2"` is used and the cache name 
 
 ### Browser token work
 
-$$ \Large one step = one full forward over (prompt_{len} + generated_{so\_far}) tokens $$
+$$ \Large \text{one decode step} = \text{one forward pass over } (\text{prompt length} + \text{generated so far}) \text{ tokens} $$
 
-$$ \Large 80 generated tokens = 80 forwards $$
+$$ \Large 80 \text{ generated tokens} = 80 \text{ forward passes} $$
 
-$$ \Large context capped at 512 tokens $$
+$$ \Large \text{context length} = \min(\text{prompt length} + t, 512) $$
 
 ---
 

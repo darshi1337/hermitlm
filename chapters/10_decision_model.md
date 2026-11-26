@@ -100,11 +100,13 @@ The model is frozen. `forward_with_hidden_layers` (`model.py:155-168`) returns a
 
 For a hidden vector `h` and a head with weight matrix `W`, bias `b`, mean `μ`, standard deviation `σ` and temperature `T`:
 
-```
-x        = (h − μ) / σ
-scores   = W x + b
-log p_c  = log( exp(scores_c/T) / Σ_j exp(scores_j/T) )
-```
+$$
+\begin{aligned}
+x        = (h - \mu) / \sigma \\
+scores   = W x + b \\
+\log p_{c}  = \log( \exp(scores_{c}/T) / \sum_j \exp(scores_{j}/T) )
+\end{aligned}
+$$
 
 The shipped artifact uses the older "legacy" form (`decision_model.py:263-279`): `scores = linear(hidden) / temperature`, then `log_softmax`.
 
@@ -153,11 +155,13 @@ That is what "no information" looks like: nearly a uniform guess.
 
 The formula is:
 
-```
-A   = XᵀX + αI
-Wᵀ  = A⁻¹ Xᵀ (Y − ȳ)
-b   = ȳ
-```
+$$
+\begin{aligned}
+A   = X^TX + \alpha I \\
+W^T  = A^{-1} X^T (Y - \bar{y}) \\
+b   = \bar{y}
+\end{aligned}
+$$
 
 where `Y` is a one-hot label matrix and `ȳ` is the vector of class frequencies.
 
@@ -200,10 +204,12 @@ A head can rank classes correctly but still report silly probabilities. Calibrat
 
 For a class with `n_c` examples:
 
-```
-target_own  = (n_c + 1) / (n_c + 2)
-target_rest = (1 − target_own) / (K − 1)
-```
+$$
+\begin{aligned}
+target_{own}  = (n_{c} + 1) / (n_{c} + 2) \\
+target_{rest} = (1 - target_{own}) / (K - 1)
+\end{aligned}
+$$
 
 Worked example from the tests (`tests/test_calibration.py:11-16`), labels `[0,0,0,1]` with `K = 2`:
 
@@ -216,10 +222,12 @@ So rows with label 0 get target `[0.8, 0.2]` and the label-1 row gets `[1/3, 2/3
 
 `calibration.py:81-146` searches `t = log T` in `[−3, 3]` to minimize:
 
-```
-NLL(t) = CrossEntropy(scores × exp(−t), targets)
-T*     = exp(t*)
-```
+$$
+\begin{aligned}
+NLL(t) = CrossEntropy(scores \times \exp(-t), targets) \\
+T*     = \exp(t*)
+\end{aligned}
+$$
 
 Binary heads and some multiclass cases use Platt targets instead of the raw labels. The search uses the golden ratio `φ⁻¹ = (√5 − 1)/2 ≈ 0.6180`, tolerance `1e-4`, at most 100 iterations. If the objective is flat, the function returns `T = 1.0`.
 
@@ -237,11 +245,13 @@ Larger T flattens the distribution.
 
 `hermitlm/tools/prior.py:10-24` fits a class prior from an unlabelled pool and applies:
 
-```
-π_c        = clamp(mean_c(p_c), 1e-6), normalized to sum 1
-corrected_c = log p_c − λ log π_c
+$$
+\begin{aligned}
+\pi_{c}        = clamp(mean_{c}(p_{c}), 1e-6), normalized to sum 1 \\
+corrected_{c} = \log p_{c} - \lambda \log \pi_{c} \\
 final       = softmax(corrected)
-```
+\end{aligned}
+$$
 
 with `0 ≤ λ ≤ 1`. The browser does the same in `web/intent.js:21-32`.
 
@@ -258,12 +268,14 @@ position/letter bias. `option_assignment(shift)` rotates which class each letter
 forward pass is repeated for `rotation_shifts(k)` (two evenly spaced passes by default), and the
 per-class log-probabilities are averaged before the softmax:
 
-```
-assignment = [a, b, c, d, e, f, g] shifted by s
-display_logp = log_softmax(logits[a..g] / T)
-unrotated[class] = display_logp[letter showing that class]
+$$
+\begin{aligned}
+assignment = [a, b, c, d, e, f, g] shifted by s \\
+display_{logp} = log_{softmax}(logits[a..g] / T) \\
+unrotated[class] = display_{logp}[letter showing that class] \\
 combined = mean(unrotated over s)
-```
+\end{aligned}
+$$
 
 `scripts/eval_decision.py` reports an `order_flip` section that permutes the assignment and
 compares predictions. On the zero-shot path the flip rate drops from `1.0` (single pass) to
@@ -307,9 +319,11 @@ All four live in `hermitlm/tools/metrics.py:26-74`.
 
 From `eval_out/decision/report.json`, all 1,000 zero-shot rows fall in the confidence bin `(0.10, 0.20]` with mean confidence `0.17` and accuracy `0.214`:
 
-```
-ECE = 1.0 × |0.17 − 0.214| = 0.044
-```
+$$
+\begin{aligned}
+ECE = 1.0 \times |0.17 - 0.214| = 0.044
+\end{aligned}
+$$
 
 That matches the report exactly. After calibrating with `T = 3`, mean confidence becomes `0.1516` and `ECE = |0.1516 − 0.214| = 0.0624`: NLL improved from 1.9497 to 1.9455 but ECE got worse.
 
@@ -317,15 +331,19 @@ That matches the report exactly. After calibrating with `T = 3`, mean confidence
 
 With `p = [[0.8, 0.2], [0.6, 0.4]]` and targets `[0, 0]`:
 
-```
-NLL = −(ln 0.8 + ln 0.6)/2 = −(−0.2231 − 0.5108)/2 = 0.3670
-```
+$$
+\begin{aligned}
+NLL = -(\ln 0.8 + \ln 0.6)/2 = -(-0.2231 - 0.5108)/2 = 0.3670
+\end{aligned}
+$$
 
 With targets `[0, 1]`, predictions are `[0, 0]` (both argmax 0), so accuracy is `0.5`. ECE uses confidences `0.8` and `0.6` with correctness `1` and `0`:
 
-```
-ECE = (|0.8 − 1| + |0.6 − 0|)/2 = (0.2 + 0.6)/2 = 0.4
-```
+$$
+\begin{aligned}
+ECE = (|0.8 - 1| + |0.6 - 0|)/2 = (0.2 + 0.6)/2 = 0.4
+\end{aligned}
+$$
 
 ### Bootstrap confidence intervals
 
@@ -357,13 +375,15 @@ Other shipped template numbers:
 
 `hermitlm/tools/artifacts.py:27-51,54-97` stores and verifies SHA-256 hashes of three things:
 
-```
-checkpoint_sha256       = c52c0f231e4f26ac35b25b47a24668f71898e3f76e1906da45ecdf4753937dcc
-tokenizer_sha256        = 2cb03484072364356f20275281d3d06036a995fc0e09102e8e19b9cad691ce9a
-prompt_template_sha256  = 56b5189815dd3d6fea57e8b562446d564bb264083fd965473040419742edc30d
-schema_version          = 2
+$$
+\begin{aligned}
+checkpoint_{sha256}       = c52c0f231e4f26ac35b25b47a24668f71898e3f76e1906da45ecdf4753937dcc \\
+tokenizer_{sha256}        = 2cb03484072364356f20275281d3d06036a995fc0e09102e8e19b9cad691ce9a \\
+prompt_{template\_sha256}  = 56b5189815dd3d6fea57e8b562446d564bb264083fd965473040419742edc30d \\
+schema_{version}          = 2 \\
 dtype                   = torch.float32
-```
+\end{aligned}
+$$
 
 Loading a head after a retrain or a prompt-template change raises an error instead of scoring with stale weights.
 
@@ -375,10 +395,12 @@ Loading a head after a retrain or a prompt-template change raises an error inste
 
 When a head has standardization, `FittedHead.effective()` (`heads.py:43-47`) folds it into plain weights for JSON:
 
-```
-w_eff = W / σ
-b_eff = b − (μ/σ) · Wᵀ
-```
+$$
+\begin{aligned}
+w_{eff} = W / \sigma \\
+b_{eff} = b - (\mu/\sigma) \cdot W^T
+\end{aligned}
+$$
 
 Then the browser needs only a dot product, a prior subtraction and a softmax (`web/intent.js:21-85`).
 
@@ -388,41 +410,49 @@ Then the browser needs only a dot product, a prior subtraction and a softmax (`w
 
 ### Number of head parameters
 
-```
-head7     = 7 × 320 + 7     = 2,247
-head_bin  = 2 × 320 + 2     = 642
-head21    = 21 × 320 + 21   = 6,741
-tool head = 4 × 320 + 4     = 1,284
+$$
+\begin{aligned}
+head7     = 7 \times 320 + 7     = 2,247 \\
+head_{bin}  = 2 \times 320 + 2     = 642 \\
+head21    = 21 \times 320 + 21   = 6,741 \\
+tool head = 4 \times 320 + 4     = 1,284 \\
 total     = 10,914 numbers
-```
+\end{aligned}
+$$
 
 That is 0.13% of the 8,453,120-parameter chat model.
 
 ### Probe artifact size
 
-```
-raw float32 matrices = (7 + 2 + 21 + 2 + 5) × 320 × 4 + (7 + 2 + 21 + 2 + 5) × 4 = 47,508 bytes
-web/probe.json       = 262,502 bytes
-ratio                = 5.5× (decimal text is larger than binary)
-```
+$$
+\begin{aligned}
+raw float32 matrices = (7 + 2 + 21 + 2 + 5) \times 320 \times 4 + (7 + 2 + 21 + 2 + 5) \times 4 = 47,508 bytes \\
+web/probe.json       = 262,502 bytes \\
+ratio                = 5.5\times (decimal text is larger than binary)
+\end{aligned}
+$$
 
 ### Confusion rate from the eval split
 
-```
-cal_n      = min(1000, 5000 // 2) = 1,000
-test rows  = 5,000 − 1,000 = 4,000
-confused support = 268
-rate = 268 / 4,000 = 0.067 = 6.7%
-```
+$$
+\begin{aligned}
+cal_{n}      = \min(1000, 5000 \div 2) = 1,000 \\
+test rows  = 5,000 - 1,000 = 4,000 \\
+confused support = 268 \\
+rate = 268 / 4,000 = 0.067 = 6.7\%
+\end{aligned}
+$$
 
 ### Probability of an intent under the shipped temperature
 
 If the coarse head produces scores `[0.5, 0.4, 0.3, 0.2, 0.1, 0.0, −0.1]` and `T = 1.23006`:
 
-```
-scaled = [0.4065, 0.3252, 0.2439, 0.1626, 0.0813, 0, −0.0813]
-softmax ≈ [0.1799, 0.1659, 0.1529, 0.1410, 0.1300, 0.1198, 0.1105]
-```
+$$
+\begin{aligned}
+scaled = [0.4065, 0.3252, 0.2439, 0.1626, 0.0813, 0, -0.0813] \\
+softmax \approx [0.1799, 0.1659, 0.1529, 0.1410, 0.1300, 0.1198, 0.1105]
+\end{aligned}
+$$
 
 ---
 

@@ -212,29 +212,35 @@ For a batch of two rows of lengths 10 and 7, `T = 10`. The second row has `atten
 
 BPE greedily joins the most frequent adjacent pair. For a pair `(a,b)` with count `c(a,b)` over all adjacent pairs, the chosen merge is:
 
-```
-merge* = argmax_(a,b) c(a,b)
-```
+$$
+\begin{aligned}
+merge* = \arg\max_{a,b} c(a,b)
+\end{aligned}
+$$
 
 The rank stored in `tokenizer.json` is the order of those choices. At inference, the tokenizer repeatedly picks the allowed merge with the **smallest rank**.
 
 ### Vocabulary coverage
 
-```
-vocab size = special tokens + base bytes + learned merges
+$$
+\begin{aligned}
+vocab size = special tokens + base bytes + learned merges \\
 3,774      = 3             + 52          + 3,719
-```
+\end{aligned}
+$$
 
 The 52 base byte symbols are the single-character tokens visible in `vocab`. The remaining 256 − 52 byte values only appear inside longer tokens, which is why the vocabulary has fewer than `3 + 256 + 3,719` entries.
 
 ### Sequence length budget
 
-```
-max_seq_len          = 512
-prompt above         = 10 tokens
-remaining for reply  = 502 tokens
-runtime max_tokens   = 80 tokens   (hermitlm/settings.py:17)
-```
+$$
+\begin{aligned}
+max_{seq\_len}          = 512 \\
+prompt above         = 10 tokens \\
+remaining for reply  = 502 tokens \\
+runtime max_{tokens}   = 80 tokens   (hermitlm/settings.py:17)
+\end{aligned}
+$$
 
 `hermitlm/runtime/inference.py:177` truncates generation context to the last 512 tokens, so a long chat keeps only its most recent part.
 

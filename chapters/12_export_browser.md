@@ -113,32 +113,38 @@ The quantized graph contains:
 
 For a real value `r` mapped to an unsigned 8-bit integer `q ∈ [0, 255]`:
 
-```
-scale      = (r_max − r_min) / (q_max − q_min)
-zero_point = clip( round(q_min − r_min / scale), 0, 255 )
-q          = clip( round(r / scale) + zero_point, 0, 255 )
-r_hat      = scale × (q − zero_point)
-```
+$$
+\begin{aligned}
+scale      = (r_{max} - r_{min}) / (q_{max} - q_{min}) \\
+zero_{point} = clip( round(q_{min} - r_{min} / scale), 0, 255 ) \\
+q          = clip( round(r / scale) + zero_{point}, 0, 255 ) \\
+r_{hat}      = scale \times (q - zero_{point})
+\end{aligned}
+$$
 
 Worked example with weights in `[−0.5, 0.5]`:
 
-```
-scale      = (0.5 − (−0.5)) / 255 = 1/255 = 0.00392157
-zero_point = round(0 − (−0.5)/0.00392157) = round(127.5) = 128
-r = 0.25  → q = round(0.25/0.00392157) + 128 = 64 + 128 = 192
-r_hat     = 0.00392157 × (192 − 128) = 0.25098
-```
+$$
+\begin{aligned}
+scale      = (0.5 - (-0.5)) / 255 = 1/255 = 0.00392157 \\
+zero_{point} = round(0 - (-0.5)/0.00392157) = round(127.5) = 128 \\
+r = 0.25  \to q = round(0.25/0.00392157) + 128 = 64 + 128 = 192 \\
+r_{hat}     = 0.00392157 \times (192 - 128) = 0.25098
+\end{aligned}
+$$
 
 The reconstruction error is about 0.001, small compared with model weight noise.
 
 ### Size math
 
-```
-fp32 file     = 36,282,163 bytes
-uint8 file    =  9,215,272 bytes
-ratio         = 36,282,163 / 9,215,272 = 3.937×
-reduction     = 1 − 9,215,272/36,282,163 = 74.6%
-```
+$$
+\begin{aligned}
+fp32 file     = 36,282,163 bytes \\
+uint8 file    =  9,215,272 bytes \\
+ratio         = 36,282,163 / 9,215,272 = 3.937\times  \\
+reduction     = 1 - 9,215,272/36,282,163 = 74.6\%
+\end{aligned}
+$$
 
 Not every array shrinks 4×. LayerNorm scales, biases and scale/zero-point parameters stay float32, which is why the ratio is below 4.
 
@@ -244,12 +250,14 @@ Vendored runtime: `web/vendor/` pins onnxruntime-web **1.19.2** with SHA-256 che
 
 ### Bytes per weight
 
-```
-fp32 weight      = 4 bytes
-uint8 weight     = 1 byte
-naive saving     = 3 bytes per weight = 75%
-observed saving  = 74.6%
-```
+$$
+\begin{aligned}
+fp32 weight      = 4 bytes \\
+uint8 weight     = 1 byte \\
+naive saving     = 3 bytes per weight = 75\% \\
+observed saving  = 74.6\%
+\end{aligned}
+$$
 
 The 0.4 percentage-point gap is metadata and float32 parameters that were not quantized.
 
@@ -257,28 +265,34 @@ The 0.4 percentage-point gap is metadata and float32 parameters that were not qu
 
 For a 3,774 × 320 token-embedding matrix:
 
-```
-fp32 = 3,774 × 320 × 4 = 4,830,720 bytes
-uint8 = 3,774 × 320     = 1,207,680 bytes
+$$
+\begin{aligned}
+fp32 = 3,774 \times 320 \times 4 = 4,830,720 bytes \\
+uint8 = 3,774 \times 320     = 1,207,680 bytes \\
 saved = 3,623,040 bytes
-```
+\end{aligned}
+$$
 
 ### Cache key
 
-```
-manifest hash = sha256(model.quant.onnx)
+$$
+\begin{aligned}
+manifest hash = sha256(model.quant.onnx) \\
 cache name    = "hermit-assets-" + hash
-```
+\end{aligned}
+$$
 
 Without the manifest, `DEFAULT_ASSET_VERSION = "v2"` is used and the cache name is `hermit-assets-v2` (`web/model.js:7`).
 
 ### Browser token work
 
-```
-one step = one full forward over (prompt_len + generated_so_far) tokens
-80 generated tokens = 80 forwards
+$$
+\begin{aligned}
+one step = one full forward over (prompt_{len} + generated_{so\_far}) tokens \\
+80 generated tokens = 80 forwards \\
 context capped at 512 tokens
-```
+\end{aligned}
+$$
 
 ---
 

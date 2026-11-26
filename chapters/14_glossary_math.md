@@ -66,148 +66,167 @@ From `checkpoints/config.json` and `hermitlm/config.py`:
 
 ### Chapter 2 — Tokenization
 
-```
-BPE merge* = argmax_(a,b) count(a,b)
-vocab size = specials + base bytes + merges = 3 + 52 + 3,719 = 3,774
+$$
+\begin{aligned}
+BPE merge* = \arg\max_{a,b} count(a,b) \\
+vocab size = specials + base bytes + merges = 3 + 52 + 3,719 = 3,774 \\
 x = ids[:-1]      y = ids[1:]
-```
+\end{aligned}
+$$
 
 ### Chapter 3 — Embeddings
 
-```
-h_0 = tok_emb(idx) + pos_emb(arange(T))
-w ~ N(0, 0.02²)                         initialization
-dropout keep probability p = 0.9        scale survivors by 1/0.9 = 1.1111…
-```
+$$
+\begin{aligned}
+h_{0} = tok_{emb}(idx) + pos_{emb}(arange(T)) \\
+w \sim  N(0, 0.02^2)\text{initialization} \\
+dropout keep probability p = 0.9        scale survivors by 1/0.9 = 1.1111\ldots
+\end{aligned}
+$$
 
 ### Chapter 4 — Attention
 
-```
-head_dim = D/H = 320/8 = 40
-Q, K, V  = split( x W_qkv ),  W_qkv ∈ R^{320×960}
-scores   = Q Kᵀ / √d_k                  √40 = 6.3246
-masked   = scores with future positions set to −∞
-weights  = softmax(masked, dim=-1)
-out      = weights V → concat heads → W_out
-params per block = (320×960 + 960) + (320×320 + 320) = 410,880
-```
+$$
+\begin{aligned}
+head_{dim} = D/H = 320/8 = 40 \\
+Q, K, V  = split( x W_{qkv} ),  W_{qkv} \in  R^{320\times 960} \\
+scores   = Q K^T / \sqrt{d}_k                  \sqrt{40} = 6.3246 \\
+masked   = scores with future positions set to -\infty \\
+weights  = softmax(masked, dim=-1) \\
+out      = weights V \to concat heads \to W_{out} \\
+params per block = (320\times 960 + 960) + (320\times 320 + 320) = 410,880
+\end{aligned}
+$$
 
 ### Chapter 5 — Transformer block
 
-```
-μ = mean(x),  σ² = var(x)
-x̂ = (x − μ)/√(σ² + ε),  y = γ x̂ + β       LayerNorm
-silu(z) = z / (1 + e^(−z))
-FFN(x)  = w3( silu(w2(x)) ⊙ w1(x) )         SwiGLU
-x ← x + attn(norm1(x))                      residual 1
-x ← x + ffn(norm2(x))                       residual 2
-∂(x+f(x))/∂x = I + ∂f/∂x                   gradient highway
-```
+$$
+\begin{aligned}
+\mu = mean(x),  \sigma^2 = var(x) \\
+\hat{x} = (x - \mu)/\sqrt{\sigma^2 + \varepsilon},  y = \gamma \hat{x} + \beta\text{LayerNorm} \\
+silu(z) = z / (1 + e^{-z}) \\
+FFN(x)  = w3( silu(w2(x)) \odot  w1(x) )\text{SwiGLU} \\
+x \leftarrow  x + attn(norm1(x))                      residual 1 \\
+x \leftarrow  x + ffn(norm2(x))                       residual 2 \\
+\partial (x+f(x))/\partial x = I + \partial f/\partial x\text{gradient highway}
+\end{aligned}
+$$
 
 ### Chapter 6 — Full model
 
-```
-logits = lm_head( LayerNorm(block_6(…block_1(h_0))))
-P = V·D + P_max·D + L(3D² + 3D + D² + D + 3DF) + 4LD + 2D
-P = 8,453,120 unique; raw state_dict = 9,660,800
-```
+$$
+\begin{aligned}
+logits = lm_{head}( LayerNorm(block_{6}(\ldotsblock_{1}(h_{0})))) \\
+P = V\cdot D + P_{max}\cdot D + L(3D^2 + 3D + D^2 + D + 3DF) + 4LD + 2D \\
+P = 8,453,120 unique; raw state_{dict} = 9,660,800
+\end{aligned}
+$$
 
 ### Chapter 7 — Training
 
-```
-CE_ij  = −log q_{ij, y_ij}
-L_SFT  = Σ m_ij CE_ij / Σ m_ij               masked mean
-η_s    = η·s/W                                s < W
-p      = (s−W)/(M−W),  c = ½(1+cos πp)        s ≥ W
-η_s    = η_min + (η−η_min)·c
-
-AdamW:
-m_t = β₁ m_{t−1} + (1−β₁) g_t               β₁ = 0.9
-v_t = β₂ v_{t−1} + (1−β₂) g_t²              β₂ = 0.95
-θ_t = θ_{t−1} − η·m̂_t/(√v̂_t+ε) − η·λ·θ_{t−1}
-clip: g ← g · min(1, 1/‖g‖₂)
-```
+$$
+\begin{aligned}
+CE_{ij}  = -\log q_{ij, y_{ij}} \\
+L_{SFT}  = \sum  m_{ij} CE_{ij} / \sum  m_{ij}\text{masked mean} \\
+\eta_{s}    = \eta\cdot s/W                                s < W \\
+p      = (s-W)/(M-W),  c = \frac{1}{2}(1+cos \pip)        s \geq  W \\
+\eta_{s}    = \eta_{min} + (\eta-\eta_{min})\cdot c \\
+\text{AdamW:} \\
+m_{t} = \beta_{1} m_{t-1} + (1-\beta_{1}) g_{t}               \beta_{1} = 0.9 \\
+v_{t} = \beta_{2} v_{t-1} + (1-\beta_{2}) g_{t}^2              \beta_{2} = 0.95 \\
+\theta_{t} = \theta_{t-1} - \eta\cdot \hat{m}_t/(\sqrt{\hat{v}}_t+\varepsilon) - \eta\cdot \lambda\cdot \theta_{t-1} \\
+clip: g \leftarrow  g \cdot \min(1, 1/\|g\|_2)
+\end{aligned}
+$$
 
 ### Chapter 8 — Generation
 
-```
-z_v   = logit_v / T
-z'_v  = z_v if z_v ≥ k-th largest else −∞    top-k
-p_v   = exp(z'_v − max z') / Σ exp(z'_u − max z')
-cutoff = min { k : Σ_{j≤k} p_(j) ≥ topP }     top-p (browser)
-p'_i  = p_i / Σ kept p
-next  ~ multinomial(p') or inverse-CDF draw
-stop when next ∈ {eos_id, bos_id}
-```
+$$
+\begin{aligned}
+z_{v}   = logit_{v} / T \\
+z'_v  = z_{v} if z_{v} \geq  k-th largest else -\infty\text{top-k} \\
+p_{v}   = \exp(z'_v - max z') / \sum  \exp(z'_u - max z') \\
+cutoff = min { k : \sum_{j\leq k} p_(j) \geq  topP }\text{top-p (browser)} \\
+p'_i  = p_{i} / \sum\text{kept p} \\
+next  \sim  multinomial(p') or inverse-CDF draw \\
+stop when next \in  {eos_{id}, bos_{id}}
+\end{aligned}
+$$
 
 ### Chapter 9 — Tools
 
-```
-P(decided at k) = Π_{i<k}(1 − p_i) · p_k
-tool dispatch if probe confidence ≥ 0.5
-web escalation if p_yes ≥ 0.5
-clarify if confidence < 0.75 and p_yes < 0.5
-```
+$$
+\begin{aligned}
+P(decided at k) = \prod_{i<k}(1 - p_{i}) \cdot p_{k} \\
+tool dispatch if probe confidence \geq  0.5 \\
+web escalation if p_{yes} \geq  0.5 \\
+clarify if confidence < 0.75 and p_{yes} < 0.5
+\end{aligned}
+$$
 
 ### Chapter 10 — Decision model
 
-```
-x      = (h − μ)/σ
-scores = W x + b
-log p  = log_softmax(scores / T)
-
-ridge: A = XᵀX + αI,  Wᵀ = A⁻¹Xᵀ(Y − ȳ)
-Platt target: own = (n_c+1)/(n_c+2), rest = (1−own)/(K−1)
-temperature: T* = exp(argmin_t NLL(scores·e^{−t}, targets))
-prior: corrected = log p − λ log π, then softmax
-
-accuracy = mean(argmax p == y)
-NLL      = −mean(log clamp(p[i,y_i], 1e−12))
-ECE      = Σ_b (n_b/n)|mean conf_b − mean correct_b|
-macro F1 = (1/K) Σ_c 2P_cR_c/(P_c+R_c)
-CI       = percentile bootstrap, α = 0.05
-```
+$$
+\begin{aligned}
+x      = (h - \mu)/\sigma \\
+scores = W x + b \\
+\log p  = log_{softmax}(scores / T) \\
+ridge: A = X^TX + \alpha I,  W^T = A^{-1}X^T(Y - \bar{y}) \\
+Platt target: own = (n_{c}+1)/(n_{c}+2), rest = (1-own)/(K-1) \\
+temperature: T* = \exp(argmin_{t} NLL(scores\cdot e^{-t}, targets)) \\
+prior: corrected = \log p - \lambda \log \pi, then softmax \\
+accuracy = mean(argmax p == y) \\
+NLL      = -mean(\log clamp(p[i,y_{i}], 1e-12)) \\
+ECE      = \sum_b (n_{b}/n)|mean conf_{b} - mean correct_{b}| \\
+macro F1 = (1/K) \sum_c 2P_{cR\_c}/(P_{c}+R_{c}) \\
+CI       = percentile bootstrap, \alpha = 0.05
+\end{aligned}
+$$
 
 ### Chapter 11 — RLHF
 
-```
-R = 2·min(overlap,0.4) − 1.5·rep − len_pen − style_pen − 3·break_pen
-
-PPO:
-kl_t   = log π_old − log π_ref
-r_t    = −0.15·kl_t  (+ reward at final token)
-δ_t    = r_t + γV_{t+1} − V_t
-Â_t    = δ_t + γλÂ_{t+1}
-R_t    = Â_t + V_t
-r_t(θ) = exp(log π_new − log π_old)
-L_pol  = −mean min(r Â, clip(r,0.8,1.2) Â)
-L_val  = mean(V_new − R)²
-L      = L_pol + 0.5 L_val − 0.01 H
-
-DPO:
-ℓ_π(y|x) = Σ m_t log π(y_t|x,y_<t) / Σ m_t
-r_π      = ℓ_π(chosen) − ℓ_π(rejected)
-r_ref    = ℓ_ref(chosen) − ℓ_ref(rejected)
-L_DPO    = −log σ(β(r_π − r_ref)),  β = 0.1
-```
+$$
+\begin{aligned}
+R = 2\cdot \min(overlap,0.4) - 1.5\cdot rep - len_{pen} - style_{pen} - 3\cdot break_{pen} \\
+\text{PPO:} \\
+kl_{t}   = \log \pi_{old} - \log \pi_{ref} \\
+r_{t}    = -0.15\cdot kl_{t}  (+ reward at final token) \\
+\delta_{t}    = r_{t} + \gammaV_{t+1} - V_{t} \\
+\hat{A}_t    = \delta_{t} + \gamma\lambda\hat{A}_{t+1} \\
+R_{t}    = \hat{A}_t + V_{t} \\
+r_{t}(\theta) = \exp(\log \pi_{new} - \log \pi_{old}) \\
+L_{pol}  = -mean \min(r \hat{A}, clip(r,0.8,1.2) \hat{A}) \\
+L_{val}  = mean(V_{new} - R)^2 \\
+L      = L_{pol} + 0.5 L_{val} - 0.01 H \\
+\text{DPO:} \\
+\ell_\pi(y|x) = \sum  m_{t} \log \pi(y_{t}|x,y_{<t}) / \sum  m_{t} \\
+r_\pi      = \ell_\pi(chosen) - \ell_\pi(rejected) \\
+r_{ref}    = \ell_{ref}(chosen) - \ell_{ref}(rejected) \\
+L_{DPO}    = -\log \sigma(\beta(r_\pi - r_{ref})),  \beta = 0.1
+\end{aligned}
+$$
 
 ### Chapter 12 — Export
 
-```
-scale      = (r_max − r_min)/255
-zero_point = round(−r_min/scale) clipped to [0,255]
-q          = clip(round(r/scale) + zero_point, 0, 255)
-r_hat      = scale·(q − zero_point)
-size ratio = 36,282,163 / 9,215,272 = 3.94×
-```
+$$
+\begin{aligned}
+scale      = (r_{max} - r_{min})/255 \\
+zero_{point} = round(-r_{min}/scale) clipped to [0,255] \\
+q          = clip(round(r/scale) + zero_{point}, 0, 255) \\
+r_{hat}      = scale\cdot (q - zero_{point}) \\
+size ratio = 36,282,163 / 9,215,272 = 3.94\times
+\end{aligned}
+$$
 
 ### Chapter 13 — Evaluation
 
-```
-perplexity = exp(mean masked CE) ≈ exp(0.657) = 1.929
-tool rate  = hits / checks = 2/3
-paired diff CI = percentile bootstrap of (stat_b − stat_a) on same draws
-```
+$$
+\begin{aligned}
+perplexity = \exp(mean masked CE) \approx \exp(0.657) = 1.929 \\
+tool rate  = hits / checks = 2/3 \\
+paired diff CI = percentile bootstrap of (stat_{b} - stat_{a}) on same draws
+\end{aligned}
+$$
 
 ---
 

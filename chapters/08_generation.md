@@ -108,14 +108,15 @@ The second largest value is `v = 2.5`. Everything below becomes `−∞`:
 
 ### Step 3 — softmax
 
-```
-e^3.75 = 42.5211
-e^2.50 = 12.1825
-sum    = 54.7036
-
-p = [42.5211/54.7036, 12.1825/54.7036, 0, 0, 0]
-  = [0.7773,          0.2227,          0, 0, 0]
-```
+$$
+\begin{aligned}
+e^{3.75} = 42.5211 \\
+e^{2.50} = 12.1825 \\
+sum    = 54.7036 \\
+p = [42.5211/54.7036, 12.1825/54.7036, 0, 0, 0] \\
+= [0.7773,          0.2227,          0, 0, 0]
+\end{aligned}
+$$
 
 The first token wins about 78% of the time and the second about 22%. No other token can ever be drawn.
 
@@ -219,9 +220,11 @@ Every SSE line gets its own `data:` prefix because tool results can be multi-lin
 
 ### Temperature scaling
 
-```
-z_v = logit_v / T
-```
+$$
+\begin{aligned}
+z_{v} = logit_{v} / T
+\end{aligned}
+$$
 
 - `T < 1` increases the gaps between logits.
 - `T = 1` leaves them unchanged.
@@ -231,34 +234,42 @@ z_v = logit_v / T
 
 ### Top-k threshold
 
-```
-v_k   = k-th largest z
-z'_v  = z_v    if z_v >= v_k
-        −∞      otherwise
-```
+$$
+\begin{aligned}
+v_{k}   = k-th largest z \\
+z'_v  = z_{v}    if z_{v} \geq  v_{k} \\
+-\infty\text{otherwise}
+\end{aligned}
+$$
 
 ### Softmax after masking
 
-```
-p_v = exp(z'_v − max(z')) / Σ_u exp(z'_u − max(z'))
-```
+$$
+\begin{aligned}
+p_{v} = \exp(z'_v - \max(z')) / \sum_u \exp(z'_u - \max(z'))
+\end{aligned}
+$$
 
 With `−∞` entries the exponential is exactly 0.
 
 ### Nucleus cutoff
 
-```
-cutoff = min { k : Σ_{j=1..k} p_(j) >= topP }
-p'_i   = p_i / Σ_{j=1..cutoff} p_(j)   for kept i
-```
+$$
+\begin{aligned}
+cutoff = min { k : \sum_{j=1..k} p_(j) \geq  topP } \\
+p'_i   = p_{i} / \sum_{j=1..cutoff} p_(j)\text{for kept i}
+\end{aligned}
+$$
 
 ### Cost of generation
 
-```
-forward passes = max_new_tokens
-at 80 tokens  = 80 passes over the growing context
-context at step t = prompt_len + t tokens, capped at 512
-```
+$$
+\begin{aligned}
+forward passes = max_{new\_tokens} \\
+at 80 tokens  = 80 passes over the growing context \\
+context at step t = prompt_{len} + t tokens, capped at 512
+\end{aligned}
+$$
 
 The browser displays tokens per second from the count and elapsed time (`web/index.html:716-739`).
 

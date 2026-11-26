@@ -61,8 +61,8 @@ stay in persona when `p_yes` is low; an out-of-scope one escalates to web search
 ## 📖 How it works
 
 A 15-chapter textbook explains the project step by step, with analogies, worked calculations,
-annotated code and diagrams. Start at [chapters/00_overview.md](chapters/00_overview.md), or use
-the [chapter index](chapters/README.md).
+annotated code and diagrams. Formulas are written in LaTeX and render on GitHub; start at
+[chapters/00_overview.md](chapters/00_overview.md), or use the [chapter index](chapters/README.md).
 
 | Topic | Chapter |
 |---|---|
@@ -243,7 +243,7 @@ only that way. Left padding silently shifts positions and once cost 30 points of
 The decision stack includes label-free and supervised calibration pieces:
 
 - `hermitlm/tools/prior.py`: batch prior correction (`L0`). A prior fitted from an unlabelled
-  pool is applied as `log p - lambda * log pi`. `scripts/fit_probe_prior.py` fits it into the
+  pool is applied as $\log p - \lambda \log \pi$. `scripts/fit_probe_prior.py` fits it into the
   probe artifact; `export_probe.py` copies it to `web/probe.json`, so the API and browser apply
   the same correction. `classify_intent()` reports `level` (`raw` or `L0`) plus `rotations`.
 - `hermitlm/tools/heads.py` + `scripts/train_probe.py`: `L2` head selection over hidden layers,
@@ -255,7 +255,7 @@ The decision stack includes label-free and supervised calibration pieces:
   order-flip rate for `raw` vs `L0` in the `order_flip` section.
 - `scripts/train_yes_score_heads.py`: fits two more heads into the same pinned probe artifact.
   `head_yes` gives a calibrated `p_yes` for out-of-scope escalation; `head_score` predicts a
-  context-aware reply-quality level whose expected value is `sum(k * p_k)`. Both are exported
+  context-aware reply-quality level whose expected value is $\sum_k k\,p_k$. Both are exported
   to `web/probe.json` and applied identically in the API and browser.
 - `python -m hermitlm.tools.check`: validates label tokens, batch consistency, hidden layers,
   prompt-template hashes, auxiliary heads and score-label tokenization before deploy.
@@ -356,7 +356,7 @@ synthesis. `Enter` sends and `Esc` stops generation.
 
 Every reply also shows a probe decision-model intent chip (`web/intent.js` + `web/probe.json`).
 Classification costs a single forward pass over the prompt. The probe ships a label-free `L0`
-batch prior at `lambda = 0.5`, applied identically in the API and browser; the classifier reports
+batch prior at $\lambda = 0.5$, applied identically in the API and browser; the classifier reports
 `level: "L0"` when it is active. A high `p_yes` from the calibrated yes/no head links to a web
 search.
 The chip shows coarse and fine intent with confidence. Low confidence asks a clarifying question

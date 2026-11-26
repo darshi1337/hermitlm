@@ -48,15 +48,19 @@ flowchart TD
 46:    ppl = math.exp(tot / max(1, n))
 ```
 
-```
-perplexity = exp(mean masked cross-entropy over at most 50 batches)
-```
+$$
+\begin{aligned}
+perplexity = \exp(mean masked cross-entropy over at most 50 batches)
+\end{aligned}
+$$
 
 Lower is better. `eval_out/report.json` records **1.929**. That implies an average per-token loss of:
 
-```
-ln(1.929) = 0.6570
-```
+$$
+\begin{aligned}
+\ln(1.929) = 0.6570
+\end{aligned}
+$$
 
 The shipped best checkpoint's stored eval loss is 0.6541 → `exp(0.6541) = 1.9234`. The small difference comes from different eval runs and batch counts.
 
@@ -219,38 +223,46 @@ All from `hermitlm/tools/metrics.py:26-74` (chapter 10 covered ECE and macro F1 
 
 ### Accuracy
 
-```
-accuracy = (1/n) Σ_i 1[argmax p_i == y_i]
-```
+$$
+\begin{aligned}
+accuracy = (1/n) \sum_i 1[argmax p_{i} == y_{i}]
+\end{aligned}
+$$
 
 ### Negative log likelihood
 
-```
-NLL = −(1/n) Σ_i log( clamp(p_i[y_i], 1e−12) )
-```
+$$
+\begin{aligned}
+NLL = -(1/n) \sum_i \log( clamp(p_{i}[y_{i}], 1e-12) )
+\end{aligned}
+$$
 
 Clamping avoids infinite loss when the correct class gets probability 0.
 
 ### Per-class precision, recall, F1
 
-```
-tp_c = Σ_i 1[y_i == c and pred_i == c]
-fp_c = Σ_i 1[y_i != c and pred_i == c]
-fn_c = Σ_i 1[y_i == c and pred_i != c]
-P_c  = tp_c / (tp_c + fp_c)      (0 if denominator is 0)
-R_c  = tp_c / (tp_c + fn_c)
-F1_c = 2 P_c R_c / (P_c + R_c)
-macro F1 = (1/K) Σ_c F1_c
-```
+$$
+\begin{aligned}
+tp_{c} = \sum_i 1[y_{i} == c and pred_{i} == c] \\
+fp_{c} = \sum_i 1[y_{i} != c and pred_{i} == c] \\
+fn_{c} = \sum_i 1[y_{i} == c and pred_{i} != c] \\
+P_{c}  = tp_{c} / (tp_{c} + fp_{c})      (0 if denominator is 0) \\
+R_{c}  = tp_{c} / (tp_{c} + fn_{c}) \\
+F1_c = 2 P_{c} R_{c} / (P_{c} + R_{c}) \\
+macro F1 = (1/K) \sum_c F1_c
+\end{aligned}
+$$
 
 ### Bootstrap interval
 
-```
-for b in 1..n_boot:
-    draw n sample indices with replacement
-    statistic_b = statistic(sample)
+$$
+\begin{aligned}
+\text{for b in 1..n_boot:} \\
+draw n sample indices with replacement \\
+statistic_{b} = statistic(sample) \\
 CI = [percentile 2.5, percentile 97.5]
-```
+\end{aligned}
+$$
 
 Defaults: `n_boot = 2000` in `metrics.py:81-83`, 1,000 in the eval script. The paired version computes `stat_calibrated − stat_uncalibrated` on identical draws, giving a tighter interval for the improvement.
 
@@ -258,9 +270,11 @@ Defaults: `n_boot = 2000` in `metrics.py:81-83`, 1,000 in the eval script. The p
 
 `eval_decision.py:332-343` tries `[0.3, 0.5, 0.7, 0.8, 0.9, 0.95]` and keeps the threshold with the best binary F1:
 
-```
+$$
+\begin{aligned}
 F1 = 2 tp / (2 tp + fp + fn)
-```
+\end{aligned}
+$$
 
 The shipped confused detector selected 0.3 on template data. The runtime now uses the calibrated
 yes head for escalation (`HERMIT_YES_THRESHOLD = 0.5`); this grid only applies to the legacy
@@ -272,13 +286,15 @@ yes head for escalation (`HERMIT_YES_THRESHOLD = 0.5`); this grid only applies t
 
 Supports and F1 values inferred from `eval_out/decision/report.json`:
 
-```
-accuracy = 214/1000 = 0.214
-only classes f and g score above zero:
-  class f F1 ≈ 0.2095
-  class g F1 ≈ 0.3837
-macro F1 = (0+0+0+0+0+0.2095+0.3837)/7 = 0.5932/7 = 0.08474 → 0.0847
-```
+$$
+\begin{aligned}
+accuracy = 214/1000 = 0.214 \\
+\text{only classes f and g score above zero:} \\
+class f F1 \approx 0.2095 \\
+class g F1 \approx 0.3837 \\
+macro F1 = (0+0+0+0+0+0.2095+0.3837)/7 = 0.5932/7 = 0.08474 \to 0.0847
+\end{aligned}
+$$
 
 This matches the report. Macro F1 punishes the five classes the zero-shot prompt never predicts.
 
@@ -316,26 +332,32 @@ This matches the report. Macro F1 punishes the five classes the zero-shot prompt
 
 ### From loss to perplexity
 
-```
-loss     = 0.6540815
-PPL      = e^0.6540815 = 1.9234
-per-token surprise = 0.6541 nats ≈ 0.943 bits
-```
+$$
+\begin{aligned}
+loss     = 0.6540815 \\
+PPL      = e^{0.6540815} = 1.9234 \\
+per-token surprise = 0.6541 nats \approx 0.943 bits
+\end{aligned}
+$$
 
 ### Tool probe accuracy from per-class counts
 
-```
-(0.80×20 + 0.65×20 + 0.60×20 + 0.85×20) / 80
-= (16 + 13 + 12 + 17) / 80
+$$
+\begin{aligned}
+(0.80\times 20 + 0.65\times 20 + 0.60\times 20 + 0.85\times 20) / 80 \\
+= (16 + 13 + 12 + 17) / 80 \\
 = 58/80 = 0.725
-```
+\end{aligned}
+$$
 
 ### Human eval test size
 
-```
-n_cal = min(60, 126 // 2) = 60
-test  = 126 − 60 = 66
-```
+$$
+\begin{aligned}
+n_{cal} = \min(60, 126 \div 2) = 60 \\
+test  = 126 - 60 = 66
+\end{aligned}
+$$
 
 ---
 

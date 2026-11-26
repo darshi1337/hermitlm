@@ -50,12 +50,14 @@ flowchart TD
 
 With `d_model = 320` and `n_heads = 8`:
 
-```
-head_dim = 320 // 8 = 40
-qkv weight = (3 × 320) × 320 = 960 × 320 = 307,200
-qkv bias   = 960
+$$
+\begin{aligned}
+head_{dim} = 320 \div 8 = 40 \\
+qkv weight = (3 \times 320) \times 320 = 960 \times 320 = 307,200 \\
+qkv bias   = 960 \\
 total qkv  = 308,160 parameters per block
-```
+\end{aligned}
+$$
 
 The forward pass (`model.py:19-38`):
 
@@ -103,10 +105,12 @@ If query and key components each have variance 1 and are independent, their dot 
 
 Softmax with very large scores becomes nearly one-hot. One weight goes to 1, all others to 0, and the gradient that would adjust the other weights vanishes. Dividing by `√d` restores variance 1 before the softmax:
 
-```
-Var(q · k) = d
-Var((q · k)/√d) = d / d = 1
-```
+$$
+\begin{aligned}
+Var(q \cdot k) = d \\
+Var((q \cdot k)/\sqrt{d}) = d / d = 1
+\end{aligned}
+$$
 
 In this model the embeddings start with σ = 0.02 (chapter 3), so raw scores are small at first. The scaling still matters as training grows the vector magnitudes.
 
@@ -151,11 +155,13 @@ The real head has 40 dimensions. For arithmetic we shrink it to 4. We use three 
 
 For token 2 looking at token 1:
 
-```
-Q₂ · K₁ = 0.5×0.1 + (−0.4)×0.5 + 0.2×(−0.2) + 0.6×0.4
-        = 0.05 − 0.20 − 0.04 + 0.24
-        = 0.05
-```
+$$
+\begin{aligned}
+Q_{2} \cdot K_{1} = 0.5\times 0.1 + (-0.4)\times 0.5 + 0.2\times (-0.2) + 0.6\times 0.4 \\
+= 0.05 - 0.20 - 0.04 + 0.24 \\
+= 0.05
+\end{aligned}
+$$
 
 All scores for the three queries:
 
@@ -181,12 +187,14 @@ For query 1, the score to key 2 becomes `−∞`. For query 0, scores to keys 1 
 
 For query 1 the surviving scores are `−0.155` and `0.240`:
 
-```
-e^(−0.155) = 0.8565
-e^( 0.240) = 1.2712
-sum        = 2.1277
+$$
+\begin{aligned}
+e^{-0.155} = 0.8565 \\
+e^{ 0.240} = 1.2712 \\
+sum        = 2.1277 \\
 weights    = [0.8565/2.1277, 1.2712/2.1277] = [0.4025, 0.5975]
-```
+\end{aligned}
+$$
 
 Query 1 pays about 40% attention to token 0 and 60% to itself.
 
@@ -200,12 +208,14 @@ Query 1 pays about 40% attention to token 0 and 60% to itself.
 
 For query 1:
 
-```
-out₁ = 0.4025 × V₀ + 0.5975 × V₁
-     = 0.4025 × [0.4, 0.9,-0.1,0.2] + 0.5975 × [-0.3,0.2,0.5,0.1]
-     = [0.1610, 0.3623,-0.0403,0.0805] + [-0.1793,0.1195,0.2988,0.0598]
-     = [-0.0182, 0.4818, 0.2585, 0.1403]
-```
+$$
+\begin{aligned}
+out_{1} = 0.4025 \times V_{0} + 0.5975 \times V_{1} \\
+= 0.4025 \times [0.4, 0.9,-0.1,0.2] + 0.5975 \times [-0.3,0.2,0.5,0.1] \\
+= [0.1610, 0.3623,-0.0403,0.0805] + [-0.1793,0.1195,0.2988,0.0598] \\
+= [-0.0182, 0.4818, 0.2585, 0.1403]
+\end{aligned}
+$$
 
 This 4-vector is the new representation of token 1 after this head. Eight heads compute eight such vectors, which are concatenated back into 320 dimensions.
 
@@ -215,38 +225,46 @@ This 4-vector is the new representation of token 1 after this head. Eight heads 
 
 ### Multi-head split
 
-```
-d_model = n_heads × head_dim
-320     = 8 × 40
-```
+$$
+\begin{aligned}
+d_{model} = n_{heads} \times head_{dim} \\
+320     = 8 \times 40
+\end{aligned}
+$$
 
 Each head sees a 40-dimensional slice. Together they cover all 320 dimensions.
 
 ### Parameter count per block
 
-```
-qkv Linear : 320 × (3 × 320) + 3 × 320 = 307,200 + 960 = 308,160
-out Linear : 320 × 320 + 320           = 102,400 + 320 = 102,720
-attention total per block              = 410,880
+$$
+\begin{aligned}
+qkv Linear : 320 \times (3 \times 320) + 3 \times 320 = 307,200 + 960 = 308,160 \\
+out Linear : 320 \times 320 + 320           = 102,400 + 320 = 102,720 \\
+attention total per block              = 410,880 \\
 6 blocks                               = 2,465,280
-```
+\end{aligned}
+$$
 
 ### Multiply-adds for a full 512-token sequence
 
-```
-QKᵀ per block      = 2 × T × T × D = 2 × 512 × 512 × 320 = 167,772,160
-AV per block       = 2 × T × T × D = 167,772,160
-attention per block                   = 335,544,320
+$$
+\begin{aligned}
+QK^T per block      = 2 \times T \times T \times D = 2 \times 512 \times 512 \times 320 = 167,772,160 \\
+AV per block       = 2 \times T \times T \times D = 167,772,160 \\
+attention per block                   = 335,544,320 \\
 6 blocks                              = 2,013,265,920
-```
+\end{aligned}
+$$
 
 Compare with the feed-forward network (chapter 5): about 4,718,592,000 multiply-adds. Attention is roughly 30% of one forward pass at this sequence length.
 
 ### Softmax with a masked score
 
-```
-softmax(zᵢ) = exp(zᵢ − max(z)) / Σ_j exp(zⱼ − max(z))
-```
+$$
+\begin{aligned}
+softmax(z_{i}) = \exp(z_{i} - \max(z)) / \sum_j \exp(z_{j} - \max(z))
+\end{aligned}
+$$
 
 Subtracting the maximum keeps the exponentials in a safe range. With `z = −∞`, `exp(−∞ − max) = 0` exactly.
 

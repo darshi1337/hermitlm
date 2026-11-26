@@ -107,11 +107,11 @@ The same `hello` at position 7 would use `pos_emb(7)` instead, producing a diffe
 
 Every embedding starts as an independent sample from a normal distribution with:
 
-$$ \text{mean} = 0 $$
+$$ \Large \text{mean} = 0 $$
 
-$$ \text{standard deviation} = \sigma = 0.02 $$
+$$ \Large \text{standard deviation} = \sigma = 0.02 $$
 
-$$ \text{variance} = \sigma^2 = 0.0004 $$
+$$ \Large \text{variance} = \sigma^2 = 0.0004 $$
 
 About 68% of starting values land in `[−0.02, 0.02]` and about 95% in `[−0.04, 0.04]`. Training moves them from these small random values to useful directions.
 
@@ -192,37 +192,37 @@ It also overwrites `pad_id`, `bos_id` and `eos_id` from the tokenizer's special 
 
 ### Embedding parameter count
 
-$$ \text{P}{\text{tok}} = 3{,}774 \times 320 = 1{,}207{,}680 $$
+$$ \Large \text{P}{\text{tok}} = 3{,}774 \times 320 = 1{,}207{,}680 $$
 
-$$ \text{P}{\text{pos}} = 512 \times 320 = 163{,}840 $$
+$$ \Large \text{P}{\text{pos}} = 512 \times 320 = 163{,}840 $$
 
-$$ \text{P}{\text{emb}} = 1{,}371{,}520 $$
+$$ \Large \text{P}{\text{emb}} = 1{,}371{,}520 $$
 
 ### Fraction of the model
 
-$$ 1,371,520 / 8,453,120 = 0.16225 \to 16.2\% $$
+$$ \Large 1,371,520 / 8,453,120 = 0.16225 \to 16.2\% $$
 
 ### Saved by weight tying
 
-$$ \text{untied count} = 8{,}453{,}120 + 1{,}207{,}680 = 9{,}660{,}800 $$
+$$ \Large \text{untied count} = 8{,}453{,}120 + 1{,}207{,}680 = 9{,}660{,}800 $$
 
-$$ \text{saved fraction} = 1{,}207{,}680 / 9{,}660{,}800 = 12.5\% $$
+$$ \Large \text{saved fraction} = 1{,}207{,}680 / 9{,}660{,}800 = 12.5\% $$
 
 ### Dropout scaling
 
 With keep probability `p_keep = 0.9`, surviving activations are multiplied by:
 
-$$ 1 / \text{p}{\text{keep}} = 1 / 0.9 = 1.111\ldots $$
+$$ \Large 1 / \text{p}{\text{keep}} = 1 / 0.9 = 1.111\ldots $$
 
 This keeps the expected value of the layer unchanged during training.
 
 ### Values seen by the model
 
-$$ \text{tokens per batch} = 32 \times 512 = 16{,}384 $$
+$$ \Large \text{tokens per batch} = 32 \times 512 = 16{,}384 $$
 
-$$ \text{values before dropout} = 16{,}384 \times 320 = 5{,}242{,}880 $$
+$$ \Large \text{values before dropout} = 16{,}384 \times 320 = 5{,}242{,}880 $$
 
-$$ \text{expected zeros} = 524{,}288 $$
+$$ \Large \text{expected zeros} = 524{,}288 $$
 
 Real rows are short (about 20 words, well under 512 tokens), so the true number is smaller.
 

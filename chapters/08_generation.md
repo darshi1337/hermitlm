@@ -108,15 +108,15 @@ The second largest value is `v = 2.5`. Everything below becomes `−∞`:
 
 ### Step 3 — softmax
 
-$$ e^{3.75} = 42.5211 $$
+$$ \Large e^{3.75} = 42.5211 $$
 
-$$ e^{2.50} = 12.1825 $$
+$$ \Large e^{2.50} = 12.1825 $$
 
-$$ \text{sum} = 54.7036 $$
+$$ \Large \text{sum} = 54.7036 $$
 
-$$ p = [42.5211/54.7036, 12.1825/54.7036, 0, 0, 0] $$
+$$ \Large p = [42.5211/54.7036, 12.1825/54.7036, 0, 0, 0] $$
 
-$$ = [0.7773, 0.2227, 0, 0, 0] $$
+$$ \Large = [0.7773, 0.2227, 0, 0, 0] $$
 
 The first token wins about 78% of the time and the second about 22%. No other token can ever be drawn.
 
@@ -220,7 +220,7 @@ Every SSE line gets its own `data:` prefix because tool results can be multi-lin
 
 ### Temperature scaling
 
-$$ \text{z}{v} = \text{logit}{v} / T $$
+$$ \Large \text{z}{v} = \text{logit}{v} / T $$
 
 - `T < 1` increases the gaps between logits.
 - `T = 1` leaves them unchanged.
@@ -230,27 +230,27 @@ $$ \text{z}{v} = \text{logit}{v} / T $$
 
 ### Top-k threshold
 
-$$ \text{v k} = \text{k-th largest}z $$
+$$ \Large \text{v k} = \text{k-th largest}z $$
 
-$$ z'_v = \text{z v} \text{ if} \text{z v} \geq \text{v k}, \text{ else} -\infty $$
+$$ \Large z'_v = \text{z v} \text{ if} \text{z v} \geq \text{v k}, \text{ else} -\infty $$
 
 ### Softmax after masking
 
-$$ \text{p}{v} = \exp(z'_v - \max(z')) / \sum_u \exp(z'_u - \max(z')) $$
+$$ \Large \text{p}{v} = \exp(z'_v - \max(z')) / \sum_u \exp(z'_u - \max(z')) $$
 
 With `−∞` entries the exponential is exactly 0.
 
 ### Nucleus cutoff
 
-$$ \text{cutoff} = \min\{k : \sum_{j\leq k} \text{p j} \geq \text{p}{\text{top}}\} $$
+$$ \Large \text{cutoff} = \min\{k : \sum_{j\leq k} \text{p j} \geq \text{p}{\text{top}}\} $$
 
-$$ p'_i = \text{p i} / \sum_{j\leq\text{cutoff}} \text{p j} $$
+$$ \Large p'_i = \text{p i} / \sum_{j\leq\text{cutoff}} \text{p j} $$
 
 ### Cost of generation
 
-$$ \text{forward passes} = \text{max new tokens} = 80 $$
+$$ \Large \text{forward passes} = \text{max new tokens} = 80 $$
 
-$$ \text{context at step}t = \min(\text{prompt len} + t, 512) $$
+$$ \Large \text{context at step}t = \min(\text{prompt len} + t, 512) $$
 
 The browser displays tokens per second from the count and elapsed time (`web/index.html:716-739`).
 

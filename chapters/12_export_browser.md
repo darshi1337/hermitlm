@@ -113,35 +113,35 @@ The quantized graph contains:
 
 For a real value `r` mapped to an unsigned 8-bit integer `q ∈ [0, 255]`:
 
-$$ \text{scale} = (\text{r}{\text{max}} - \text{r}{\text{min}}) / (\text{q}{\text{max}} - \text{q}{\text{min}}) $$
+$$ \Large \text{scale} = (\text{r}{\text{max}} - \text{r}{\text{min}}) / (\text{q}{\text{max}} - \text{q}{\text{min}}) $$
 
-$$ \text{zero}{\text{point}} = \text{clip}( \text{round}(\text{q}{\text{min}} - \text{r}{\text{min}} / \text{scale}), 0, 255 ) $$
+$$ \Large \text{zero}{\text{point}} = \text{clip}( \text{round}(\text{q}{\text{min}} - \text{r}{\text{min}} / \text{scale}), 0, 255 ) $$
 
-$$ q = \text{clip}( \text{round}(r / \text{scale}) + \text{zero}{\text{point}}, 0, 255 ) $$
+$$ \Large q = \text{clip}( \text{round}(r / \text{scale}) + \text{zero}{\text{point}}, 0, 255 ) $$
 
-$$ \text{r}{\text{hat}} = \text{scale} \times (q - \text{zero}{\text{point}}) $$
+$$ \Large \text{r}{\text{hat}} = \text{scale} \times (q - \text{zero}{\text{point}}) $$
 
 Worked example with weights in `[−0.5, 0.5]`:
 
-$$ \text{scale} = (0.5 - (-0.5)) / 255 = 1/255 = 0.00392157 $$
+$$ \Large \text{scale} = (0.5 - (-0.5)) / 255 = 1/255 = 0.00392157 $$
 
-$$ \text{zero}{\text{point}} = \text{round}(0 - (-0.5)/0.00392157) = \text{round}(127.5) = 128 $$
+$$ \Large \text{zero}{\text{point}} = \text{round}(0 - (-0.5)/0.00392157) = \text{round}(127.5) = 128 $$
 
-$$ r = 0.25 \to q = \text{round}(0.25/0.00392157) + 128 = 64 + 128 = 192 $$
+$$ \Large r = 0.25 \to q = \text{round}(0.25/0.00392157) + 128 = 64 + 128 = 192 $$
 
-$$ \text{r}{\text{hat}} = 0.00392157 \times (192 - 128) = 0.25098 $$
+$$ \Large \text{r}{\text{hat}} = 0.00392157 \times (192 - 128) = 0.25098 $$
 
 The reconstruction error is about 0.001, small compared with model weight noise.
 
 ### Size math
 
-$$ \text{fp32} = 36{,}282{,}163\text{ bytes} $$
+$$ \Large \text{fp32} = 36{,}282{,}163\text{ bytes} $$
 
-$$ \text{uint8} = 9{,}215{,}272\text{ bytes} $$
+$$ \Large \text{uint8} = 9{,}215{,}272\text{ bytes} $$
 
-$$ \text{ratio} = 3.94\times $$
+$$ \Large \text{ratio} = 3.94\times $$
 
-$$ \text{reduction} = 74.6\% $$
+$$ \Large \text{reduction} = 74.6\% $$
 
 Not every array shrinks 4×. LayerNorm scales, biases and scale/zero-point parameters stay float32, which is why the ratio is below 4.
 
@@ -247,13 +247,13 @@ Vendored runtime: `web/vendor/` pins onnxruntime-web **1.19.2** with SHA-256 che
 
 ### Bytes per weight
 
-$$ \text{fp32} \text{weight} = 4 \text{bytes} $$
+$$ \Large \text{fp32} \text{weight} = 4 \text{bytes} $$
 
-$$ \text{uint8} \text{weight} = 1 \text{byte} $$
+$$ \Large \text{uint8} \text{weight} = 1 \text{byte} $$
 
-$$ \text{naive} \text{saving} = 3 \text{bytes} \text{per} \text{weight} = 75\% $$
+$$ \Large \text{naive} \text{saving} = 3 \text{bytes} \text{per} \text{weight} = 75\% $$
 
-$$ \text{observed} \text{saving} = 74.6\% $$
+$$ \Large \text{observed} \text{saving} = 74.6\% $$
 
 The 0.4 percentage-point gap is metadata and float32 parameters that were not quantized.
 
@@ -261,27 +261,27 @@ The 0.4 percentage-point gap is metadata and float32 parameters that were not qu
 
 For a 3,774 × 320 token-embedding matrix:
 
-$$ \text{fp32 embedding} = 3{,}774 \times 320 \times 4 = 4{,}830{,}720\text{ bytes} $$
+$$ \Large \text{fp32 embedding} = 3{,}774 \times 320 \times 4 = 4{,}830{,}720\text{ bytes} $$
 
-$$ \text{uint8 embedding} = 1{,}207{,}680\text{ bytes} $$
+$$ \Large \text{uint8 embedding} = 1{,}207{,}680\text{ bytes} $$
 
-$$ \text{saved} = 3{,}623{,}040\text{ bytes} $$
+$$ \Large \text{saved} = 3{,}623{,}040\text{ bytes} $$
 
 ### Cache key
 
-$$ \text{manifest hash} = \text{sha256}(\text{model.quant.onnx}) $$
+$$ \Large \text{manifest hash} = \text{sha256}(\text{model.quant.onnx}) $$
 
-$$ \text{cache name} = \text{hermit-assets-} + \text{hash} $$
+$$ \Large \text{cache name} = \text{hermit-assets-} + \text{hash} $$
 
 Without the manifest, `DEFAULT_ASSET_VERSION = "v2"` is used and the cache name is `hermit-assets-v2` (`web/model.js:7`).
 
 ### Browser token work
 
-$$ \text{one step} = \text{one forward over } (\text{prompt len} + \text{generated so far}) \text{ tokens} $$
+$$ \Large \text{one step} = \text{one forward over } (\text{prompt len} + \text{generated so far}) \text{ tokens} $$
 
-$$ 80 \text{generated} \text{tokens} = 80 \text{forwards} $$
+$$ \Large 80 \text{generated} \text{tokens} = 80 \text{forwards} $$
 
-$$ \text{context} \text{capped} \text{at} 512 \text{tokens} $$
+$$ \Large \text{context} \text{capped} \text{at} 512 \text{tokens} $$
 
 ---
 

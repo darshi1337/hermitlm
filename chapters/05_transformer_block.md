@@ -62,9 +62,9 @@ Post-norm (normalize after adding) was common in early Transformers. Pre-norm is
 
 A LayerNorm over `d_model = 320` computes, for each token independently:
 
-$$ \mu = \frac{1}{d}\sum_i \text{x i}, \qquad \sigma^2 = \frac{1}{d}\sum_i (\text{x i-}\mu)^2 $$
+$$ \Large \mu = \frac{1}{d}\sum_i \text{x i}, \qquad \sigma^2 = \frac{1}{d}\sum_i (\text{x i-}\mu)^2 $$
 
-$$ \hat{x}_i = \frac{\text{x i-}\mu}{\sqrt{\sigma^2+\varepsilon}}, \qquad \text{y i} = \gamma_i \hat{x}_i + \beta_i $$
+$$ \Large \hat{x}_i = \frac{\text{x i-}\mu}{\sqrt{\sigma^2+\varepsilon}}, \qquad \text{y i} = \gamma_i \hat{x}_i + \beta_i $$
 
 PyTorch uses `ε = 1e-5` by default. `γ` (weight) and `β` (bias) are learned, one per dimension, so each LayerNorm has `2 × 320 = 640` parameters.
 
@@ -72,15 +72,15 @@ PyTorch uses `ε = 1e-5` by default. `γ` (weight) and `β` (bias) are learned, 
 
 Take the toy vector `[1.0, 2.0, 6.0]` (used here with d=3 for readable arithmetic):
 
-$$ \mu = (1 + 2 + 6)/3 = 3 $$
+$$ \Large \mu = (1 + 2 + 6)/3 = 3 $$
 
-$$ \text{deviations} = [-2, -1, 3] $$
+$$ \Large \text{deviations} = [-2, -1, 3] $$
 
-$$ \sigma^2 = (4 + 1 + 9)/3 = 14/3 = 4.6667 $$
+$$ \Large \sigma^2 = (4 + 1 + 9)/3 = 14/3 = 4.6667 $$
 
-$$ \sigma = 2.1602 $$
+$$ \Large \sigma = 2.1602 $$
 
-$$ \hat{x} = [-2/2.1602, -1/2.1602, 3/2.1602] = [-0.9258, -0.4629, 1.3887] $$
+$$ \Large \hat{x} = [-2/2.1602, -1/2.1602, 3/2.1602] = [-0.9258, -0.4629, 1.3887] $$
 
 With `γ = 1` and `β = 0` (initial values), the output is `x̂`. The mean is now 0 and the variance is 1.
 
@@ -110,7 +110,7 @@ With the real 320-dimensional vectors from chapter 3, the same operation runs 32
 
 The formula is:
 
-$$ \text{FFN}(x) = \text{w 3}\big(\text{silu}(\text{w 2} x) \odot \text{w 1} x\big) $$
+$$ \Large \text{FFN}(x) = \text{w 3}\big(\text{silu}(\text{w 2} x) \odot \text{w 1} x\big) $$
 
 | Symbol | Shape | Role |
 |---|---|---|
@@ -126,11 +126,11 @@ SwiGLU uses **three** matrices where a classic ReLU FFN uses two. That costs 50%
 
 For `z = 0.8`:
 
-$$ \text{silu}(0.8) = 0.8 / (1 + e^{-0.8}) = 0.8 / (1 + 0.4493) = 0.8 / 1.4493 = 0.5521 $$
+$$ \Large \text{silu}(0.8) = 0.8 / (1 + e^{-0.8}) = 0.8 / (1 + 0.4493) = 0.8 / 1.4493 = 0.5521 $$
 
 For `z = −0.5`:
 
-$$ \text{silu}(-0.5) = -0.5 / (1 + e^{0.5}) = -0.5 / (1 + 1.6487) = -0.5 / 2.6487 = -0.1888 $$
+$$ \Large \text{silu}(-0.5) = -0.5 / (1 + e^{0.5}) = -0.5 / (1 + 1.6487) = -0.5 / 2.6487 = -0.1888 $$
 
 SiLU is smooth and lets small negative values through, unlike ReLU which clamps them to zero.
 
@@ -138,9 +138,9 @@ SiLU is smooth and lets small negative values through, unlike ReLU which clamps 
 
 Let `w1(x) = [0.5, −1.0]`, `w2(x) = [0.8, 0.4]`:
 
-$$ \text{silu}(\text{w2}(x)) = [\text{silu}(0.8), \text{silu}(0.4)] = [0.5521, 0.2395] $$
+$$ \Large \text{silu}(\text{w2}(x)) = [\text{silu}(0.8), \text{silu}(0.4)] = [0.5521, 0.2395] $$
 
-$$ \text{gate} \text{product} = [0.5 \times 0.5521, -1.0 \times 0.2395] = [0.2761, -0.2395] $$
+$$ \Large \text{gate} \text{product} = [0.5 \times 0.5521, -1.0 \times 0.2395] = [0.2761, -0.2395] $$
 
 The second component is suppressed by the gate. With real matrices the same thing happens across 800 channels.
 
@@ -178,7 +178,7 @@ All dropout layers are inactive when `model.eval()` is called in `hermitlm/runti
 
 If `y = x + f(x)`, then:
 
-$$ \partial y/\partial x = I + \partial f/\partial x $$
+$$ \Large \partial y/\partial x = I + \partial f/\partial x $$
 
 The identity matrix `I` gives gradients a direct path backwards, even when `∂f/∂x` is small. This is why residual networks can be much deeper than plain stacks.
 
@@ -190,29 +190,29 @@ Pre-norm computes `x + f(LayerNorm(x))`. The sublayer always sees standardized i
 
 For one token, one block:
 
-$$ \text{w 1}: 320 \times 800 = 256{,}000 $$
+$$ \Large \text{w 1}: 320 \times 800 = 256{,}000 $$
 
-$$ \text{w 2}: 320 \times 800 = 256{,}000 $$
+$$ \Large \text{w 2}: 320 \times 800 = 256{,}000 $$
 
-$$ \text{w 3}: 800 \times 320 = 256{,}000 $$
+$$ \Large \text{w 3}: 800 \times 320 = 256{,}000 $$
 
-$$ \text{total} = 768{,}000\text{ multiply-adds per token per block} $$
+$$ \Large \text{total} = 768{,}000\text{ multiply-adds per token per block} $$
 
 For a full sequence of 512 tokens and 6 blocks:
 
-$$ 768{,}000 \times 512 \times 6 = 2{,}359{,}296{,}000\text{ multiply-adds} $$
+$$ \Large 768{,}000 \times 512 \times 6 = 2{,}359{,}296{,}000\text{ multiply-adds} $$
 
 Counting the multiply-and-add as two floating-point operations gives 4,718,592,000 FLOPs, matching chapter 4's comparison.
 
 ### LayerNorm parameters
 
-$$ \text{per LayerNorm} = 320 + 320 = 640 $$
+$$ \Large \text{per LayerNorm} = 320 + 320 = 640 $$
 
-$$ \text{12 in blocks} = 7{,}680 $$
+$$ \Large \text{12 in blocks} = 7{,}680 $$
 
-$$ \text{final} = 640 $$
+$$ \Large \text{final} = 640 $$
 
-$$ \text{total} = 8{,}320 $$
+$$ \Large \text{total} = 8{,}320 $$
 
 ---
 

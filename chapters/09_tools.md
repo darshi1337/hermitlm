@@ -250,29 +250,29 @@ The browser has its own local math fallback (`web/math.js:204-229`) that handles
 
 ### Tool probe accuracy on the eval set
 
-$$ \text{math} = 0.80 \times 20 = 16 $$
+$$ \Large \text{math} = 0.80 \times 20 = 16 $$
 
-$$ \text{web} = 0.65 \times 20 = 13 $$
+$$ \Large \text{web} = 0.65 \times 20 = 13 $$
 
-$$ \text{faq} = 0.60 \times 20 = 12 $$
+$$ \Large \text{faq} = 0.60 \times 20 = 12 $$
 
-$$ \text{chat} = 0.85 \times 20 = 17 $$
+$$ \Large \text{chat} = 0.85 \times 20 = 17 $$
 
-$$ \text{total} = 58 / 80 = 0.725 $$
+$$ \Large \text{total} = 58 / 80 = 0.725 $$
 
 ### Probe artifact size
 
-$$ \text{head weights} = 4 \times 320 + 4 = 1{,}284 $$
+$$ \Large \text{head weights} = 4 \times 320 + 4 = 1{,}284 $$
 
-$$ \text{bytes} = 1{,}284 \times 4 = 5{,}136 $$
+$$ \Large \text{bytes} = 1{,}284 \times 4 = 5{,}136 $$
 
-$$ \text{file size} = 7{,}685\text{ bytes} $$
+$$ \Large \text{file size} = 7{,}685\text{ bytes} $$
 
 ### Routing order as a short-circuit
 
 For `n` checks with firing probabilities `p₁ … pₙ`, the probability that check `k` decides is:
 
-$$ P(\text{decide at }k) = \left(\prod_{i<k}(1-p_i)\right) p_k $$
+$$ \Large P(\text{decide at }k) = \left(\prod_{i<k}(1-p_i)\right) p_k $$
 
 High-precision checks go first so they handle most cases before the slower probe runs.
 

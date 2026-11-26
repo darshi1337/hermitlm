@@ -66,15 +66,15 @@ From `checkpoints/config.json` and `hermitlm/config.py`:
 
 ### Chapter 2 — Tokenization
 
-$$ \Large \text{BPE} \text{merge}* = \arg\max_{a,b} \text{count}(a,b) $$
+$$ \Large BPE merge* = \arg\max_{a,b} count(a,b) $$
 
-$$ \Large \text{vocab} \text{size} = \text{specials} + \text{base} \text{bytes} + \text{merges} = 3 + 52 + 3,719 = 3,774 $$
+$$ \Large vocab size = specials + base bytes + merges = 3 + 52 + 3,719 = 3,774 $$
 
-$$ \Large x = \text{ids}[:-1] y = \text{ids}[1:] $$
+$$ \Large x = ids[:-1] y = ids[1:] $$
 
 ### Chapter 3 — Embeddings
 
-$$ \Large \text{h 0} = \text{tok emb} + \text{pos emb} $$
+$$ \Large h_0 = \text{tok emb} + \text{pos emb} $$
 
 $$ \Large w \sim \mathcal{N}(0, 0.02^2) $$
 
@@ -82,109 +82,109 @@ $$ \Large \text{dropout scale} = 1/0.9 = 1.111 $$
 
 ### Chapter 4 — Attention
 
-$$ \Large \text{d}{\text{head}} = 320/8 = 40 $$
+$$ \Large d_{\text{head}} = 320/8 = 40 $$
 
-$$ \Large Q, K, V = \text{split}(x \text{W}{\text{qkv}}) $$
+$$ \Large Q, K, V = \text{split}(x W_{\text{qkv}}) $$
 
-$$ \Large \text{scores} = \text{QK}^T/\sqrt{40} $$
+$$ \Large \text{scores} = QK^T/\sqrt{40} $$
 
 ### Chapter 5 — Transformer block
 
-$$ \Large \mu = \text{mean}(x), \sigma^2 = \text{var}(x) $$
+$$ \Large \mu = mean(x), \sigma^2 = var(x) $$
 
 $$ \Large \hat{x} = (x - \mu)/\sqrt{\sigma^2 + \varepsilon}, y = \gamma \hat{x} + \beta\text{LayerNorm} $$
 
-$$ \Large \text{silu}(z) = z / (1 + e^{-z}) $$
+$$ \Large silu(z) = z / (1 + e^{-z}) $$
 
-$$ \Large \text{FFN}(x) = \text{w3}( \text{silu}(\text{w2}(x)) \odot \text{w1}(x) )\text{SwiGLU} $$
+$$ \Large FFN(x) = w3( silu(w2(x)) \odot w1(x) )\text{SwiGLU} $$
 
-$$ \Large x \text{arrow} x + \text{attn}(\text{norm1}(x)) \text{residual} 1 $$
+$$ \Large x arrow x + attn(norm1(x)) residual 1 $$
 
-$$ \Large x \text{arrow} x + \text{ffn}(\text{norm2}(x)) \text{residual} 2 $$
+$$ \Large x arrow x + ffn(norm2(x)) residual 2 $$
 
 $$ \Large \partial (x+f(x))/\partial x = I + \partial f/\partial x\text{gradient highway} $$
 
 ### Chapter 6 — Full model
 
-$$ \Large \text{logits} = \text{lm head}(\text{LayerNorm}(\text{block}_6(\ldots \text{block}_1(h_0)))) $$
+$$ \Large logits = lm_{head}( LayerNorm(block_{6}(\ldots \text{block}_{1}(h_{0})))) $$
 
-$$ \Large P = V\cdot D + \text{P}{\text{max}}\cdot D + L(3D^2 + 3D + D^2 + D + 3\text{DF}) + 4\text{LD} + 2D $$
+$$ \Large P = V\cdot D + P_{max}\cdot D + L(3D^2 + 3D + D^2 + D + 3DF) + 4LD + 2D $$
 
-$$ \Large P = 8,453,120 \text{unique}; \text{raw} \text{state}{\text{dict}} = 9,660,800 $$
+$$ \Large P = 8,453,120 unique; raw state_{dict} = 9,660,800 $$
 
 ### Chapter 7 — Training
 
-$$ \Large \text{CE}{\text{ij}} = -\log \text{q}{\text{ij}, \text{y}{\text{ij}}} $$
+$$ \Large CE_{ij} = -\log q_{ij, y_{ij}} $$
 
-$$ \Large \text{L}{\text{SFT}} = \sum \text{m}{\text{ij}} \text{CE}{\text{ij}} / \sum \text{m}{\text{ij}}\text{masked mean} $$
+$$ \Large L_{SFT} = \sum m_{ij} CE_{ij} / \sum m_{ij}\text{masked mean} $$
 
 $$ \Large \eta_{s} = \eta\cdot s/W s < W $$
 
-$$ \Large p = (\text{s-W})/(\text{M-W}), c = \frac{1}{2}(1+\text{cos} \pip) s \geq W $$
+$$ \Large p = (s-W)/(M-W), c = \frac{1}{2}(1+cos \pip) s \geq W $$
 
-$$ \Large \eta_{s} = \eta_{\text{min}} + (\eta-\eta_{\text{min}})\cdot c $$
+$$ \Large \eta_{s} = \eta_{min} + (\eta-\eta_{min})\cdot c $$
 
 $$ \Large \text{AdamW:} $$
 
-$$ \Large \text{m}{t} = \beta_{1} \text{m}{\text{t-1}} + (1-\beta_{1}) \text{g}{t} \beta_{1} = 0.9 $$
+$$ \Large m_{t} = \beta_{1} m_{t-1} + (1-\beta_{1}) g_{t} \beta_{1} = 0.9 $$
 
-$$ \Large \text{v}{t} = \beta_{2} \text{v}{\text{t-1}} + (1-\beta_{2}) \text{g}{t}^2 \beta_{2} = 0.95 $$
+$$ \Large v_{t} = \beta_{2} v_{t-1} + (1-\beta_{2}) g_{t}^2 \beta_{2} = 0.95 $$
 
-$$ \Large \theta_{t} = \theta_{\text{t-1}} - \eta\cdot \hat{m}_t/(\sqrt{\hat{v}}_t+\varepsilon) - \eta\cdot \lambda\cdot \theta_{\text{t-1}} $$
+$$ \Large \theta_{t} = \theta_{t-1} - \eta\cdot \hat{m}_t/(\sqrt{\hat{v}}_t+\varepsilon) - \eta\cdot \lambda\cdot \theta_{t-1} $$
 
-$$ \Large \text{clip}: g \text{arrow} g \cdot \min(1, 1/\|g\|_2) $$
+$$ \Large clip: g arrow g \cdot \min(1, 1/\|g\|_2) $$
 
 ### Chapter 8 — Generation
 
-$$ \Large \text{z}{v} = \text{logit}{v} / T $$
+$$ \Large z_{v} = logit_{v} / T $$
 
-$$ \Large z'_v = \text{z}{v} \text{if} \text{z}{v} \geq \text{k-th} \text{largest} \text{else} -\infty\text{top-k} $$
+$$ \Large z'_v = z_{v} if z_{v} \geq k-th largest else -\infty\text{top-k} $$
 
-$$ \Large \text{p}{v} = \exp(z'_v - \text{max} z') / \sum \exp(z'_u - \text{max} z') $$
+$$ \Large p_{v} = \exp(z'_v - max z') / \sum \exp(z'_u - max z') $$
 
-$$ \Large \text{cutoff} = \text{min} { k : \sum_{j\leq k} \text{p}(j) \geq \text{topP} }\text{top-p (browser)} $$
+$$ \Large cutoff = min { k : \sum_{j\leq k} p_(j) \geq topP }\text{top-p (browser)} $$
 
-$$ \Large p'_i = \text{p}{i} / \sum\text{kept p} $$
+$$ \Large p'_i = p_{i} / \sum\text{kept p} $$
 
-$$ \Large \text{next} \sim \text{multinomial}(p') \text{or} \text{inverse-CDF} \text{draw} $$
+$$ \Large next \sim multinomial(p') or inverse-CDF draw $$
 
-$$ \Large \text{stop} \text{when} \text{next} \in {\text{eos}{\text{id}}, \text{bos}{\text{id}}} $$
+$$ \Large stop when next \in {eos_{id}, bos_{id}} $$
 
 ### Chapter 9 — Tools
 
-$$ \Large P(\text{decided} \text{at} k) = \prod_{i<k}(1 - \text{p}{i}) \cdot \text{p}{k} $$
+$$ \Large P(decided at k) = \prod_{i<k}(1 - p_{i}) \cdot p_{k} $$
 
-$$ \Large \text{tool} \text{dispatch} \text{if} \text{probe} \text{confidence} \geq 0.5 $$
+$$ \Large tool dispatch if probe confidence \geq 0.5 $$
 
-$$ \Large \text{web} \text{escalation} \text{if} \text{p}{\text{yes}} \geq 0.5 $$
+$$ \Large web escalation if p_{yes} \geq 0.5 $$
 
-$$ \Large \text{clarify} \text{if} \text{confidence} < 0.75 \text{and} \text{p}{\text{yes}} < 0.5 $$
+$$ \Large clarify if confidence < 0.75 and p_{yes} < 0.5 $$
 
 ### Chapter 10 — Decision model
 
 $$ \Large x = (h - \mu)/\sigma $$
 
-$$ \Large \text{scores} = W x + b $$
+$$ \Large scores = W x + b $$
 
-$$ \Large \log p = \text{log}{\text{softmax}}(\text{scores} / T) $$
+$$ \Large \log p = log_{softmax}(scores / T) $$
 
-$$ \Large \text{ridge}: A = X^\text{TX} + \alpha I, W^T = A^{-1}X^T(Y - \bar{y}) $$
+$$ \Large ridge: A = X^TX + \alpha I, W^T = A^{-1}X^T(Y - \bar{y}) $$
 
-$$ \Large \text{Platt} \text{target}: \text{own} = (\text{n}{c}+1)/(\text{n}{c}+2), \text{rest} = (1-\text{own})/(\text{K-1}) $$
+$$ \Large Platt target: own = (n_{c}+1)/(n_{c}+2), rest = (1-own)/(K-1) $$
 
-$$ \Large \text{temperature}: T* = \exp(\text{argmin}{t} \text{NLL}(\text{scores}\cdot e^{-t}, \text{targets})) $$
+$$ \Large temperature: T* = \exp(argmin_{t} NLL(scores\cdot e^{-t}, targets)) $$
 
-$$ \Large \text{prior}: \text{corrected} = \log p - \lambda \log \pi, \text{then} \text{softmax} $$
+$$ \Large prior: corrected = \log p - \lambda \log \pi, then softmax $$
 
-$$ \Large \text{accuracy} = \text{mean}(\text{argmax} p == y) $$
+$$ \Large accuracy = mean(argmax p == y) $$
 
-$$ \Large \text{NLL} = -\text{mean}(\log \text{clamp}(p[i,\text{y}{i}], 1\text{e-12})) $$
+$$ \Large NLL = -mean(\log clamp(p[i,y_{i}], 10^{-12})) $$
 
-$$ \Large \text{ECE} = \sum_b (\text{n}{b}/n)|\text{mean} \text{conf}{b} - \text{mean} \text{correct}{b}| $$
+$$ \Large ECE = \sum_b (n_{b}/n)|mean conf_{b} - mean correct_{b}| $$
 
-$$ \Large \text{macro} \text{F1} = (1/K) \sum_c 2\text{P}{\text{cR}\_c}/(\text{P}{c}+\text{R}{c}) $$
+$$ \Large macro F1 = (1/K) \sum_c 2P_{cR\_c}/(P_{c}+R_{c}) $$
 
-$$ \Large \text{CI} = \text{percentile} \text{bootstrap}, \alpha = 0.05 $$
+$$ \Large CI = percentile bootstrap, \alpha = 0.05 $$
 
 ### Chapter 11 — RLHF
 
@@ -192,9 +192,9 @@ $$ \Large R = 2\min(\text{overlap}, 0.4) - 1.5\,\text{rep} - \text{len pen} - \t
 
 ### Chapter 12 — Export
 
-$$ \Large \text{scale} = (\text{r}{\max} - \text{r}{\min})/255 $$
+$$ \Large \text{scale} = (r_{\max} - r_{\min})/255 $$
 
-$$ \Large \text{zero point} = \text{round}(-\text{r}{\min}/\text{scale}) $$
+$$ \Large \text{zero point} = \text{round}(-r_{\min}/\text{scale}) $$
 
 $$ \Large q = \text{clip}\big(\text{round}(r/\text{scale}) + \text{zero point}, 0, 255\big) $$
 
@@ -204,7 +204,7 @@ $$ \Large \text{PPL} = 1.929 $$
 
 $$ \Large \text{tool rate} = 2/3 $$
 
-$$ \Large \text{paired CI} = \text{bootstrap of} (\text{stat}_b - \text{stat}_a) $$
+$$ \Large \text{paired CI} = \text{bootstrap of } (\text{stat}_b - \text{stat}_a) $$
 
 ---
 

@@ -113,23 +113,23 @@ The quantized graph contains:
 
 For a real value `r` mapped to an unsigned 8-bit integer `q ∈ [0, 255]`:
 
-$$ \Large \text{scale} = (\text{r}{\text{max}} - \text{r}{\text{min}}) / (\text{q}{\text{max}} - \text{q}{\text{min}}) $$
+$$ \Large scale = (r_{max} - r_{min}) / (q_{max} - q_{min}) $$
 
-$$ \Large \text{zero}{\text{point}} = \text{clip}( \text{round}(\text{q}{\text{min}} - \text{r}{\text{min}} / \text{scale}), 0, 255 ) $$
+$$ \Large zero_{point} = clip( round(q_{min} - r_{min} / scale), 0, 255 ) $$
 
-$$ \Large q = \text{clip}( \text{round}(r / \text{scale}) + \text{zero}{\text{point}}, 0, 255 ) $$
+$$ \Large q = clip( round(r / scale) + zero_{point}, 0, 255 ) $$
 
-$$ \Large \text{r}{\text{hat}} = \text{scale} \times (q - \text{zero}{\text{point}}) $$
+$$ \Large r_{hat} = scale \times (q - zero_{point}) $$
 
 Worked example with weights in `[−0.5, 0.5]`:
 
-$$ \Large \text{scale} = (0.5 - (-0.5)) / 255 = 1/255 = 0.00392157 $$
+$$ \Large scale = (0.5 - (-0.5)) / 255 = 1/255 = 0.00392157 $$
 
-$$ \Large \text{zero}{\text{point}} = \text{round}(0 - (-0.5)/0.00392157) = \text{round}(127.5) = 128 $$
+$$ \Large zero_{point} = round(0 - (-0.5)/0.00392157) = round(127.5) = 128 $$
 
-$$ \Large r = 0.25 \to q = \text{round}(0.25/0.00392157) + 128 = 64 + 128 = 192 $$
+$$ \Large r = 0.25 \to q = round(0.25/0.00392157) + 128 = 64 + 128 = 192 $$
 
-$$ \Large \text{r}{\text{hat}} = 0.00392157 \times (192 - 128) = 0.25098 $$
+$$ \Large r_{hat} = 0.00392157 \times (192 - 128) = 0.25098 $$
 
 The reconstruction error is about 0.001, small compared with model weight noise.
 
@@ -247,13 +247,13 @@ Vendored runtime: `web/vendor/` pins onnxruntime-web **1.19.2** with SHA-256 che
 
 ### Bytes per weight
 
-$$ \Large \text{fp32} \text{weight} = 4 \text{bytes} $$
+$$ \Large fp32 weight = 4 bytes $$
 
-$$ \Large \text{uint8} \text{weight} = 1 \text{byte} $$
+$$ \Large uint8 weight = 1 byte $$
 
-$$ \Large \text{naive} \text{saving} = 3 \text{bytes} \text{per} \text{weight} = 75\% $$
+$$ \Large naive saving = 3 bytes per weight = 75\% $$
 
-$$ \Large \text{observed} \text{saving} = 74.6\% $$
+$$ \Large observed saving = 74.6\% $$
 
 The 0.4 percentage-point gap is metadata and float32 parameters that were not quantized.
 
@@ -277,11 +277,11 @@ Without the manifest, `DEFAULT_ASSET_VERSION = "v2"` is used and the cache name 
 
 ### Browser token work
 
-$$ \Large \text{one step} = \text{one forward over } (\text{prompt len} + \text{generated so far}) \text{ tokens} $$
+$$ \Large one step = one full forward over (prompt_{len} + generated_{so\_far}) tokens $$
 
-$$ \Large 80 \text{generated} \text{tokens} = 80 \text{forwards} $$
+$$ \Large 80 generated tokens = 80 forwards $$
 
-$$ \Large \text{context} \text{capped} \text{at} 512 \text{tokens} $$
+$$ \Large context capped at 512 tokens $$
 
 ---
 

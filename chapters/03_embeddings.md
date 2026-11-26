@@ -192,11 +192,11 @@ It also overwrites `pad_id`, `bos_id` and `eos_id` from the tokenizer's special 
 
 ### Embedding parameter count
 
-$$ \Large \text{P}{\text{tok}} = 3{,}774 \times 320 = 1{,}207{,}680 $$
+$$ \Large P_{\text{tok}} = 3{,}774 \times 320 = 1{,}207{,}680 $$
 
-$$ \Large \text{P}{\text{pos}} = 512 \times 320 = 163{,}840 $$
+$$ \Large P_{\text{pos}} = 512 \times 320 = 163{,}840 $$
 
-$$ \Large \text{P}{\text{emb}} = 1{,}371{,}520 $$
+$$ \Large P_{\text{emb}} = 1{,}371{,}520 $$
 
 ### Fraction of the model
 
@@ -212,7 +212,7 @@ $$ \Large \text{saved fraction} = 1{,}207{,}680 / 9{,}660{,}800 = 12.5\% $$
 
 With keep probability `p_keep = 0.9`, surviving activations are multiplied by:
 
-$$ \Large 1 / \text{p}{\text{keep}} = 1 / 0.9 = 1.111\ldots $$
+$$ \Large 1 / p_{\text{keep}} = 1 / 0.9 = 1.111\ldots $$
 
 This keeps the expected value of the layer unchanged during training.
 

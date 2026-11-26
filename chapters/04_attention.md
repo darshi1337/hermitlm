@@ -52,7 +52,7 @@ With `d_model = 320` and `n_heads = 8`:
 
 $$ \Large \text{head dim} = 320 / 8 = 40 $$
 
-$$ \Large \text{W}{\text{qkv}} = (3 \times 320) \times 320 = 307{,}200 $$
+$$ \Large W_{\text{qkv}} = (3 \times 320) \times 320 = 307{,}200 $$
 
 $$ \Large \text{qkv bias} = 960 $$
 
@@ -151,7 +151,7 @@ The real head has 40 dimensions. For arithmetic we shrink it to 4. We use three 
 
 For token 2 looking at token 1:
 
-$$ \Large \text{Q}{2} \cdot \text{K}{1} = 0.5\times 0.1 + (-0.4)\times 0.5 + 0.2\times (-0.2) + 0.6\times 0.4 $$
+$$ \Large Q_{2} \cdot K_{1} = 0.5\times 0.1 + (-0.4)\times 0.5 + 0.2\times (-0.2) + 0.6\times 0.4 $$
 
 $$ \Large = 0.05 - 0.20 - 0.04 + 0.24 $$
 
@@ -185,9 +185,9 @@ $$ \Large e^{-0.155} = 0.8565 $$
 
 $$ \Large e^{ 0.240} = 1.2712 $$
 
-$$ \Large \text{sum} = 2.1277 $$
+$$ \Large sum = 2.1277 $$
 
-$$ \Large \text{weights} = [0.8565/2.1277, 1.2712/2.1277] = [0.4025, 0.5975] $$
+$$ \Large weights = [0.8565/2.1277, 1.2712/2.1277] = [0.4025, 0.5975] $$
 
 Query 1 pays about 40% attention to token 0 and 60% to itself.
 
@@ -201,7 +201,7 @@ Query 1 pays about 40% attention to token 0 and 60% to itself.
 
 For query 1:
 
-$$ \Large \text{out}{1} = 0.4025 \times \text{V}{0} + 0.5975 \times \text{V}{1} $$
+$$ \Large out_{1} = 0.4025 \times V_{0} + 0.5975 \times V_{1} $$
 
 $$ \Large = 0.4025 \times [0.4, 0.9,-0.1,0.2] + 0.5975 \times [-0.3,0.2,0.5,0.1] $$
 
@@ -217,7 +217,7 @@ This 4-vector is the new representation of token 1 after this head. Eight heads 
 
 ### Multi-head split
 
-$$ \Large \text{d}{\text{model}} = \text{n}{\text{heads}} \times \text{d}{\text{head}} = 8 \times 40 = 320 $$
+$$ \Large d_{\text{model}} = n_{\text{heads}} \times d_{\text{head}} = 8 \times 40 = 320 $$
 
 Each head sees a 40-dimensional slice. Together they cover all 320 dimensions.
 
@@ -245,7 +245,7 @@ Compare with the feed-forward network (chapter 5): about 4,718,592,000 multiply-
 
 ### Softmax with a masked score
 
-$$ \Large \text{softmax}(\text{z i}) = \frac{\exp(\text{z i} - \max z)}{\sum_j \exp(\text{z j} - \max z)} $$
+$$ \Large \text{softmax}(z_i) = \frac{\exp(z_i - \max z)}{\sum_j \exp(z_j - \max z)} $$
 
 Subtracting the maximum keeps the exponentials in a safe range. With `z = −∞`, `exp(−∞ − max) = 0` exactly.
 

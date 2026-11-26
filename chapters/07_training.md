@@ -118,25 +118,25 @@ That roughly matches an older 3/2/1 weighting scheme: heavy classes get about 9.
 
 Let `m_{ij}` be the attention mask and `q_{ij,v}` the softmax probability the model assigns to vocabulary item `v` at position `(i,j)`:
 
-$$ \Large \text{CE}{\text{ij}} = -\log \text{q}{\text{ij}, \text{y}{\text{ij}}} $$
+$$ \Large CE_{ij} = -\log q_{ij, y_{ij}} $$
 
-$$ \Large \text{L}{\text{SFT}} = \sum_{\text{ij}} \text{m}{\text{ij}} \cdot \text{CE}{\text{ij}} / \sum_{\text{ij}} \text{m}{\text{ij}} $$
+$$ \Large L_{SFT} = \sum_{ij} m_{ij} \cdot CE_{ij} / \sum_{ij} m_{ij} $$
 
 ### Worked example
 
 Suppose a batch has two rows with 4 and 2 real tokens:
 
-$$ \Large \text{mask} = [[1, 1, 1, 1], $$
+$$ \Large mask = [[1, 1, 1, 1], $$
 
 $$ \Large [1, 1, 0, 0]] $$
 
 There are 6 ones. If the six per-token cross-entropies are `[0.5, 0.8, 0.3, 0.6, 0.9, 0.4]`:
 
-$$ \Large \text{numerator} = 0.5 + 0.8 + 0.3 + 0.6 + 0.9 + 0.4 = 3.5 $$
+$$ \Large numerator = 0.5 + 0.8 + 0.3 + 0.6 + 0.9 + 0.4 = 3.5 $$
 
-$$ \Large \text{denominator} = 6 $$
+$$ \Large denominator = 6 $$
 
-$$ \Large \text{loss} = 3.5 / 6 = 0.583333 $$
+$$ \Large loss = 3.5 / 6 = 0.583333 $$
 
 Padding positions contribute 0 to both sums, so they cannot lower or raise the loss.
 
@@ -173,7 +173,7 @@ $$ \Large s \geq 800: p = (s - W)/(M - W) $$
 
 $$ \Large c = \frac{1}{2}(1 + \cos(\pi p)) $$
 
-$$ \Large \eta_{s} = \eta_{\text{min}} + (\eta - \eta_{\text{min}}) \cdot c $$
+$$ \Large \eta_{s} = \eta_{min} + (\eta - \eta_{min}) \cdot c $$
 
 | Step | Phase | Learning rate |
 |---:|---|---:|
@@ -216,11 +216,11 @@ Warmup is `800 / 32,000 = 2.5%` of training. The final rate is not exactly `min_
 
 AdamW keeps two running averages per parameter:
 
-$$ \Large \text{m}{t} = \beta_{1} \text{m}{\text{t-1}} + (1 - \beta_{1}) \text{g}{t} \beta_{1} = 0.9 $$
+$$ \Large m_{t} = \beta_{1} m_{t-1} + (1 - \beta_{1}) g_{t} \beta_{1} = 0.9 $$
 
-$$ \Large \text{v}{t} = \beta_{2} \text{v}{\text{t-1}} + (1 - \beta_{2}) \text{g}{t}^2 \beta_{2} = 0.95 $$
+$$ \Large v_{t} = \beta_{2} v_{t-1} + (1 - \beta_{2}) g_{t}^2 \beta_{2} = 0.95 $$
 
-$$ \Large \theta_{t} = \theta_{\text{t-1}} - \eta \cdot \hat{m}_t / (\sqrt{\hat{v}}_t + \varepsilon) - \eta \cdot \lambda \cdot \theta_{\text{t-1}} $$
+$$ \Large \theta_{t} = \theta_{t-1} - \eta \cdot \hat{m}_t / (\sqrt{\hat{v}}_t + \varepsilon) - \eta \cdot \lambda \cdot \theta_{t-1} $$
 
 with bias corrections `m̂ = m/(1−β₁^t)` and `v̂ = v/(1−β₂^t)`, `ε = 1e-8`, and weight decay `λ = 0.1`.
 
@@ -292,7 +292,7 @@ $$ \Large \text{eval calls} = 159 $$
 
 $$ \Large \text{save points} = 31 $$
 
-$$ \Large \text{last artifact} = \text{step}29{,}000 $$
+$$ \Large \text{last artifact} = \text{step }29{,}000 $$
 
 ### Warmup fraction and peak ratio
 

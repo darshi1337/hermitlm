@@ -62,9 +62,9 @@ Post-norm (normalize after adding) was common in early Transformers. Pre-norm is
 
 A LayerNorm over `d_model = 320` computes, for each token independently:
 
-$$ \Large \mu = \frac{1}{d}\sum_i \text{x i}, \qquad \sigma^2 = \frac{1}{d}\sum_i (\text{x i-}\mu)^2 $$
+$$ \Large \mu = \frac{1}{d}\sum_i x_i, \qquad \sigma^2 = \frac{1}{d}\sum_i (x_i-\mu)^2 $$
 
-$$ \Large \hat{x}_i = \frac{\text{x i-}\mu}{\sqrt{\sigma^2+\varepsilon}}, \qquad \text{y i} = \gamma_i \hat{x}_i + \beta_i $$
+$$ \Large \hat{x}_i = \frac{x_i-\mu}{\sqrt{\sigma^2+\varepsilon}}, \qquad y_i = \gamma_i \hat{x}_i + \beta_i $$
 
 PyTorch uses `ε = 1e-5` by default. `γ` (weight) and `β` (bias) are learned, one per dimension, so each LayerNorm has `2 × 320 = 640` parameters.
 
@@ -74,7 +74,7 @@ Take the toy vector `[1.0, 2.0, 6.0]` (used here with d=3 for readable arithmeti
 
 $$ \Large \mu = (1 + 2 + 6)/3 = 3 $$
 
-$$ \Large \text{deviations} = [-2, -1, 3] $$
+$$ \Large deviations = [-2, -1, 3] $$
 
 $$ \Large \sigma^2 = (4 + 1 + 9)/3 = 14/3 = 4.6667 $$
 
@@ -110,7 +110,7 @@ With the real 320-dimensional vectors from chapter 3, the same operation runs 32
 
 The formula is:
 
-$$ \Large \text{FFN}(x) = \text{w 3}\big(\text{silu}(\text{w 2} x) \odot \text{w 1} x\big) $$
+$$ \Large \text{FFN}(x) = w_3\big(\text{silu}(w_2 x) \odot w_1 x\big) $$
 
 | Symbol | Shape | Role |
 |---|---|---|
@@ -126,11 +126,11 @@ SwiGLU uses **three** matrices where a classic ReLU FFN uses two. That costs 50%
 
 For `z = 0.8`:
 
-$$ \Large \text{silu}(0.8) = 0.8 / (1 + e^{-0.8}) = 0.8 / (1 + 0.4493) = 0.8 / 1.4493 = 0.5521 $$
+$$ \Large silu(0.8) = 0.8 / (1 + e^{-0.8}) = 0.8 / (1 + 0.4493) = 0.8 / 1.4493 = 0.5521 $$
 
 For `z = −0.5`:
 
-$$ \Large \text{silu}(-0.5) = -0.5 / (1 + e^{0.5}) = -0.5 / (1 + 1.6487) = -0.5 / 2.6487 = -0.1888 $$
+$$ \Large silu(-0.5) = -0.5 / (1 + e^{0.5}) = -0.5 / (1 + 1.6487) = -0.5 / 2.6487 = -0.1888 $$
 
 SiLU is smooth and lets small negative values through, unlike ReLU which clamps them to zero.
 
@@ -138,9 +138,9 @@ SiLU is smooth and lets small negative values through, unlike ReLU which clamps 
 
 Let `w1(x) = [0.5, −1.0]`, `w2(x) = [0.8, 0.4]`:
 
-$$ \Large \text{silu}(\text{w2}(x)) = [\text{silu}(0.8), \text{silu}(0.4)] = [0.5521, 0.2395] $$
+$$ \Large silu(w2(x)) = [silu(0.8), silu(0.4)] = [0.5521, 0.2395] $$
 
-$$ \Large \text{gate} \text{product} = [0.5 \times 0.5521, -1.0 \times 0.2395] = [0.2761, -0.2395] $$
+$$ \Large gate product = [0.5 \times 0.5521, -1.0 \times 0.2395] = [0.2761, -0.2395] $$
 
 The second component is suppressed by the gate. With real matrices the same thing happens across 800 channels.
 
@@ -190,11 +190,11 @@ Pre-norm computes `x + f(LayerNorm(x))`. The sublayer always sees standardized i
 
 For one token, one block:
 
-$$ \Large \text{w 1}: 320 \times 800 = 256{,}000 $$
+$$ \Large w_1: 320 \times 800 = 256{,}000 $$
 
-$$ \Large \text{w 2}: 320 \times 800 = 256{,}000 $$
+$$ \Large w_2: 320 \times 800 = 256{,}000 $$
 
-$$ \Large \text{w 3}: 800 \times 320 = 256{,}000 $$
+$$ \Large w_3: 800 \times 320 = 256{,}000 $$
 
 $$ \Large \text{total} = 768{,}000\text{ multiply-adds per token per block} $$
 

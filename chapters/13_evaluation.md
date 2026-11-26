@@ -48,7 +48,7 @@ flowchart TD
 46:    ppl = math.exp(tot / max(1, n))
 ```
 
-$$ \Large \text{perplexity} = \exp(\text{mean} \text{masked} \text{cross-entropy} \text{over} \text{at} \text{most} 50 \text{batches}) $$
+$$ \Large perplexity = \exp(mean masked cross-entropy over at most 50 batches) $$
 
 Lower is better. `eval_out/report.json` records **1.929**. That implies an average per-token loss of:
 
@@ -215,39 +215,39 @@ All from `hermitlm/tools/metrics.py:26-74` (chapter 10 covered ECE and macro F1 
 
 ### Accuracy
 
-$$ \Large \text{accuracy} = (1/n) \sum_i 1[\text{argmax} \text{p}{i} == \text{y}{i}] $$
+$$ \Large accuracy = (1/n) \sum_i 1[argmax p_{i} == y_{i}] $$
 
 ### Negative log likelihood
 
-$$ \Large \text{NLL} = -(1/n) \sum_i \log( \text{clamp}(\text{p}{i}[\text{y}{i}], 1\text{e-12}) ) $$
+$$ \Large NLL = -(1/n) \sum_i \log( clamp(p_{i}[y_{i}], 10^{-12}) ) $$
 
 Clamping avoids infinite loss when the correct class gets probability 0.
 
 ### Per-class precision, recall, F1
 
-$$ \Large \text{tp}{c} = \sum_i 1[\text{y}{i} == c \text{and} \text{pred}{i} == c] $$
+$$ \Large tp_{c} = \sum_i 1[y_{i} == c and pred_{i} == c] $$
 
-$$ \Large \text{fp}{c} = \sum_i 1[\text{y}{i} != c \text{and} \text{pred}{i} == c] $$
+$$ \Large fp_{c} = \sum_i 1[y_{i} != c and pred_{i} == c] $$
 
-$$ \Large \text{fn}{c} = \sum_i 1[\text{y}{i} == c \text{and} \text{pred}{i} != c] $$
+$$ \Large fn_{c} = \sum_i 1[y_{i} == c and pred_{i} != c] $$
 
-$$ \Large \text{P}{c} = \text{tp}{c} / (\text{tp}{c} + \text{fp}{c}) (0 \text{if} \text{denominator} \text{is} 0) $$
+$$ \Large P_{c} = tp_{c} / (tp_{c} + fp_{c}) (0 if denominator is 0) $$
 
-$$ \Large \text{R}{c} = \text{tp}{c} / (\text{tp}{c} + \text{fn}{c}) $$
+$$ \Large R_{c} = tp_{c} / (tp_{c} + fn_{c}) $$
 
-$$ \Large \text{F1}_c = 2 \text{P}{c} \text{R}{c} / (\text{P}{c} + \text{R}{c}) $$
+$$ \Large F1_c = 2 P_{c} R_{c} / (P_{c} + R_{c}) $$
 
-$$ \Large \text{macro} \text{F1} = (1/K) \sum_c \text{F1}_c $$
+$$ \Large macro F1 = (1/K) \sum_c F1_c $$
 
 ### Bootstrap interval
 
 $$ \Large \text{for each bootstrap sample:} $$
 
-$$ \Large \text{draw} n \text{sample} \text{indices} \text{with} \text{replacement} $$
+$$ \Large draw n sample indices with replacement $$
 
-$$ \Large \text{statistic}{b} = \text{statistic}(\text{sample}) $$
+$$ \Large statistic_{b} = statistic(sample) $$
 
-$$ \Large \text{CI} = [\text{percentile} 2.5, \text{percentile} 97.5] $$
+$$ \Large CI = [percentile 2.5, percentile 97.5] $$
 
 Defaults: `n_boot = 2000` in `metrics.py:81-83`, 1,000 in the eval script. The paired version computes `stat_calibrated − stat_uncalibrated` on identical draws, giving a tighter interval for the improvement.
 
@@ -255,7 +255,7 @@ Defaults: `n_boot = 2000` in `metrics.py:81-83`, 1,000 in the eval script. The p
 
 `eval_decision.py:332-343` tries `[0.3, 0.5, 0.7, 0.8, 0.9, 0.95]` and keeps the threshold with the best binary F1:
 
-$$ \Large \text{F1} = 2 \text{tp} / (2 \text{tp} + \text{fp} + \text{fn}) $$
+$$ \Large F1 = 2 tp / (2 tp + fp + fn) $$
 
 The shipped confused detector selected 0.3 on template data. The runtime now uses the calibrated
 yes head for escalation (`HERMIT_YES_THRESHOLD = 0.5`); this grid only applies to the legacy
@@ -267,15 +267,15 @@ yes head for escalation (`HERMIT_YES_THRESHOLD = 0.5`); this grid only applies t
 
 Supports and F1 values inferred from `eval_out/decision/report.json`:
 
-$$ \Large \text{accuracy} = 214/1000 = 0.214 $$
+$$ \Large accuracy = 214/1000 = 0.214 $$
 
 $$ \Large \text{only classes f and g score above zero:} $$
 
-$$ \Large \text{class} f \text{F1} \approx 0.2095 $$
+$$ \Large class f F1 \approx 0.2095 $$
 
-$$ \Large \text{class} g \text{F1} \approx 0.3837 $$
+$$ \Large class g F1 \approx 0.3837 $$
 
-$$ \Large \text{macro} \text{F1} = (0+0+0+0+0+0.2095+0.3837)/7 = 0.5932/7 = 0.08474 \to 0.0847 $$
+$$ \Large macro F1 = (0+0+0+0+0+0.2095+0.3837)/7 = 0.5932/7 = 0.08474 \to 0.0847 $$
 
 This matches the report. Macro F1 punishes the five classes the zero-shot prompt never predicts.
 
@@ -325,9 +325,9 @@ $$ \Large (0.80\times20 + 0.65\times20 + 0.60\times20 + 0.85\times20)/80 = 58/80
 
 ### Human eval test size
 
-$$ \Large \text{n}{\text{cal}} = \min(60, 126 \div 2) = 60 $$
+$$ \Large n_{cal} = \min(60, 126 \div 2) = 60 $$
 
-$$ \Large \text{test} = 126 - 60 = 66 $$
+$$ \Large test = 126 - 60 = 66 $$
 
 ---
 

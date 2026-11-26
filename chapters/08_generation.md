@@ -112,7 +112,7 @@ $$ \Large e^{3.75} = 42.5211 $$
 
 $$ \Large e^{2.50} = 12.1825 $$
 
-$$ \Large \text{sum} = 54.7036 $$
+$$ \Large sum = 54.7036 $$
 
 $$ \Large p = [42.5211/54.7036, 12.1825/54.7036, 0, 0, 0] $$
 
@@ -220,7 +220,7 @@ Every SSE line gets its own `data:` prefix because tool results can be multi-lin
 
 ### Temperature scaling
 
-$$ \Large \text{z}{v} = \text{logit}{v} / T $$
+$$ \Large z_{v} = logit_{v} / T $$
 
 - `T < 1` increases the gaps between logits.
 - `T = 1` leaves them unchanged.
@@ -230,27 +230,27 @@ $$ \Large \text{z}{v} = \text{logit}{v} / T $$
 
 ### Top-k threshold
 
-$$ \Large \text{v k} = \text{k-th largest}z $$
+$$ \Large v_k = \text{k-th largest }z $$
 
-$$ \Large z'_v = \text{z v} \text{ if} \text{z v} \geq \text{v k}, \text{ else} -\infty $$
+$$ \Large z'_v = z_v \text{ if } z_v \geq v_k, \text{ else } -\infty $$
 
 ### Softmax after masking
 
-$$ \Large \text{p}{v} = \exp(z'_v - \max(z')) / \sum_u \exp(z'_u - \max(z')) $$
+$$ \Large p_{v} = \exp(z'_v - \max(z')) / \sum_u \exp(z'_u - \max(z')) $$
 
 With `−∞` entries the exponential is exactly 0.
 
 ### Nucleus cutoff
 
-$$ \Large \text{cutoff} = \min\{k : \sum_{j\leq k} \text{p j} \geq \text{p}{\text{top}}\} $$
+$$ \Large \text{cutoff} = \min\{k : \sum_{j\leq k} p_j \geq p_{\text{top}}\} $$
 
-$$ \Large p'_i = \text{p i} / \sum_{j\leq\text{cutoff}} \text{p j} $$
+$$ \Large p'_i = p_i / \sum_{j\leq\text{cutoff}} p_j $$
 
 ### Cost of generation
 
 $$ \Large \text{forward passes} = \text{max new tokens} = 80 $$
 
-$$ \Large \text{context at step}t = \min(\text{prompt len} + t, 512) $$
+$$ \Large \text{context at step }t = \min(\text{prompt len} + t, 512) $$
 
 The browser displays tokens per second from the count and elapsed time (`web/index.html:716-739`).
 

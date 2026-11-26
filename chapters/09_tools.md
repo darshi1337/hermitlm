@@ -272,7 +272,7 @@ $$ \Large \text{file size} = 7{,}685\text{ bytes} $$
 
 For `n` checks with firing probabilities `p₁ … pₙ`, the probability that check `k` decides is:
 
-$$ \Large P(\text{decide at }k) = \left(\prod_{i<k}(1-p_i)\right) p_k $$
+$$ \Large P(\text{decide at }k) = (\prod_{i<k}(1-p_i)) p_k $$
 
 High-precision checks go first so they handle most cases before the slower probe runs.
 

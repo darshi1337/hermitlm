@@ -102,9 +102,9 @@ For a hidden vector `h` and a head with weight matrix `W`, bias `b`, mean `μ`, 
 
 $$ \Large x = (h - \mu) / \sigma $$
 
-$$ \Large \text{scores} = W x + b $$
+$$ \Large scores = W x + b $$
 
-$$ \Large \log \text{p}{c} = \log( \exp(\text{scores}{c}/T) / \sum_j \exp(\text{scores}{j}/T) ) $$
+$$ \Large \log p_{c} = \log( \exp(scores_{c}/T) / \sum_j \exp(scores_{j}/T) ) $$
 
 The shipped artifact uses the older "legacy" form (`decision_model.py:263-279`): `scores = linear(hidden) / temperature`, then `log_softmax`.
 
@@ -153,7 +153,7 @@ That is what "no information" looks like: nearly a uniform guess.
 
 The formula is:
 
-$$ \Large A = X^\text{TX} + \alpha I $$
+$$ \Large A = X^TX + \alpha I $$
 
 $$ \Large W^T = A^{-1} X^T (Y - \bar{y}) $$
 
@@ -200,9 +200,9 @@ A head can rank classes correctly but still report silly probabilities. Calibrat
 
 For a class with `n_c` examples:
 
-$$ \Large \text{target}{\text{own}} = (\text{n}{c} + 1) / (\text{n}{c} + 2) $$
+$$ \Large target_{own} = (n_{c} + 1) / (n_{c} + 2) $$
 
-$$ \Large \text{target}{\text{rest}} = (1 - \text{target}{\text{own}}) / (K - 1) $$
+$$ \Large target_{rest} = (1 - target_{own}) / (K - 1) $$
 
 Worked example from the tests (`tests/test_calibration.py:11-16`), labels `[0,0,0,1]` with `K = 2`:
 
@@ -215,7 +215,7 @@ So rows with label 0 get target `[0.8, 0.2]` and the label-1 row gets `[1/3, 2/3
 
 `calibration.py:81-146` searches `t = log T` in `[−3, 3]` to minimize:
 
-$$ \Large \text{NLL}(t) = \text{CrossEntropy}(\text{scores} \times \exp(-t), \text{targets}) $$
+$$ \Large NLL(t) = CrossEntropy(scores \times \exp(-t), targets) $$
 
 $$ \Large T* = \exp(t*) $$
 
@@ -235,11 +235,11 @@ Larger T flattens the distribution.
 
 `hermitlm/tools/prior.py:10-24` fits a class prior from an unlabelled pool and applies:
 
-$$ \Large \pi_{c} = \text{clamp}(\text{mean}{c}(\text{p}{c}), 1\text{e-6}), \text{normalized} \text{to} \text{sum} 1 $$
+$$ \Large \pi_{c} = clamp(mean_{c}(p_{c}), 10^{-6}), normalized to sum 1 $$
 
-$$ \Large \text{corrected}{c} = \log \text{p}{c} - \lambda \log \pi_{c} $$
+$$ \Large corrected_{c} = \log p_{c} - \lambda \log \pi_{c} $$
 
-$$ \Large \text{final} = \text{softmax}(\text{corrected}) $$
+$$ \Large final = softmax(corrected) $$
 
 with `0 ≤ λ ≤ 1`. The browser does the same in `web/intent.js:21-32`.
 
@@ -256,13 +256,13 @@ position/letter bias. `option_assignment(shift)` rotates which class each letter
 forward pass is repeated for `rotation_shifts(k)` (two evenly spaced passes by default), and the
 per-class log-probabilities are averaged before the softmax:
 
-$$ \Large \text{assignment} = [a, b, c, d, e, f, g] \text{shifted} \text{by} s $$
+$$ \Large assignment = [a, b, c, d, e, f, g] shifted by s $$
 
-$$ \Large \text{display}{\text{logp}} = \text{log}{\text{softmax}}(\text{logits}[a..g] / T) $$
+$$ \Large display_{logp} = log_{softmax}(logits[a..g] / T) $$
 
-$$ \Large \text{unrotated}[\text{class}] = \text{display}{\text{logp}}[\text{letter} \text{showing} \text{that} \text{class}] $$
+$$ \Large unrotated[class] = display_{logp}[letter showing that class] $$
 
-$$ \Large \text{combined} = \text{mean}(\text{unrotated} \text{over} s) $$
+$$ \Large combined = mean(unrotated over s) $$
 
 `scripts/eval_decision.py` reports an `order_flip` section that permutes the assignment and
 compares predictions. On the zero-shot path the flip rate drops from `1.0` (single pass) to
@@ -306,7 +306,7 @@ All four live in `hermitlm/tools/metrics.py:26-74`.
 
 From `eval_out/decision/report.json`, all 1,000 zero-shot rows fall in the confidence bin `(0.10, 0.20]` with mean confidence `0.17` and accuracy `0.214`:
 
-$$ \Large \text{ECE} = 1.0 \times |0.17 - 0.214| = 0.044 $$
+$$ \Large ECE = 1.0 \times |0.17 - 0.214| = 0.044 $$
 
 That matches the report exactly. After calibrating with `T = 3`, mean confidence becomes `0.1516` and `ECE = |0.1516 − 0.214| = 0.0624`: NLL improved from 1.9497 to 1.9455 but ECE got worse.
 
@@ -314,11 +314,11 @@ That matches the report exactly. After calibrating with `T = 3`, mean confidence
 
 With `p = [[0.8, 0.2], [0.6, 0.4]]` and targets `[0, 0]`:
 
-$$ \Large \text{NLL} = -(\ln 0.8 + \ln 0.6)/2 = -(-0.2231 - 0.5108)/2 = 0.3670 $$
+$$ \Large NLL = -(\ln 0.8 + \ln 0.6)/2 = -(-0.2231 - 0.5108)/2 = 0.3670 $$
 
 With targets `[0, 1]`, predictions are `[0, 0]` (both argmax 0), so accuracy is `0.5`. ECE uses confidences `0.8` and `0.6` with correctness `1` and `0`:
 
-$$ \Large \text{ECE} = (|0.8 - 1| + |0.6 - 0|)/2 = (0.2 + 0.6)/2 = 0.4 $$
+$$ \Large ECE = (|0.8 - 1| + |0.6 - 0|)/2 = (0.2 + 0.6)/2 = 0.4 $$
 
 ### Bootstrap confidence intervals
 
@@ -350,11 +350,11 @@ Other shipped template numbers:
 
 `hermitlm/tools/artifacts.py:27-51,54-97` stores and verifies SHA-256 hashes of three things:
 
-$$ \Large \text{checkpoint sha} = \text{c52}\text{c0}\text{f23}\ldots $$
+$$ \Large \text{checkpoint sha} = c52c0f23\ldots $$
 
-$$ \Large \text{tokenizer sha} = 2\text{cb03484}\ldots $$
+$$ \Large \text{tokenizer sha} = 2cb03484\ldots $$
 
-$$ \Large \text{prompt sha} = 56\text{b51898}\ldots $$
+$$ \Large \text{prompt sha} = 56b51898\ldots $$
 
 $$ \Large \text{schema} = 2, \quad \text{dtype} = \text{float32} $$
 
@@ -368,9 +368,9 @@ Loading a head after a retrain or a prompt-template change raises an error inste
 
 When a head has standardization, `FittedHead.effective()` (`heads.py:43-47`) folds it into plain weights for JSON:
 
-$$ \Large \text{w}{\text{eff}} = W / \sigma $$
+$$ \Large w_{eff} = W / \sigma $$
 
-$$ \Large \text{b}{\text{eff}} = b - (\mu/\sigma) \cdot W^T $$
+$$ \Large b_{eff} = b - (\mu/\sigma) \cdot W^T $$
 
 Then the browser needs only a dot product, a prior subtraction and a softmax (`web/intent.js:21-85`).
 
@@ -406,7 +406,7 @@ $$ \Large \text{ratio} = 5.5\times $$
 
 ### Confusion rate from the eval split
 
-$$ \Large \text{n}{\text{cal}} = \min(1000, 5000/2) = 1{,}000 $$
+$$ \Large n_{\text{cal}} = \min(1000, 5000/2) = 1{,}000 $$
 
 $$ \Large \text{test rows} = 4{,}000 $$
 
@@ -418,9 +418,9 @@ $$ \Large \text{rate} = 268 / 4{,}000 = 6.7\% $$
 
 If the coarse head produces scores `[0.5, 0.4, 0.3, 0.2, 0.1, 0.0, −0.1]` and `T = 1.23006`:
 
-$$ \Large \text{scaled} = [0.4065, 0.3252, 0.2439, 0.1626, 0.0813, 0, -0.0813] $$
+$$ \Large scaled = [0.4065, 0.3252, 0.2439, 0.1626, 0.0813, 0, -0.0813] $$
 
-$$ \Large \text{softmax} \approx [0.1799, 0.1659, 0.1529, 0.1410, 0.1300, 0.1198, 0.1105] $$
+$$ \Large softmax \approx [0.1799, 0.1659, 0.1529, 0.1410, 0.1300, 0.1198, 0.1105] $$
 
 ---
 

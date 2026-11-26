@@ -200,7 +200,7 @@ The method also restores the caller's training mode in a `finally` block (`model
 
 ### General parameter formula
 
-$$ \Large P = V\cdot D + \text{P}{\text{max}}\cdot D + L\cdot (3D^2 + 3D + D^2 + D + 3\text{DF}) + L\cdot (4D) + 2D $$
+$$ \Large P = V\cdot D + P_{max}\cdot D + L\cdot (3D^2 + 3D + D^2 + D + 3DF) + L\cdot (4D) + 2D $$
 
 Substituting `V=3774, D=320, P_max=512, L=6, F=800`:
 

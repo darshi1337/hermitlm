@@ -212,13 +212,13 @@ For a batch of two rows of lengths 10 and 7, `T = 10`. The second row has `atten
 
 BPE greedily joins the most frequent adjacent pair. For a pair `(a,b)` with count `c(a,b)` over all adjacent pairs, the chosen merge is:
 
-$$ \Large \text{merge}* = \arg\max_{a,b} c(a,b) $$
+$$ \Large merge* = \arg\max_{a,b} c(a,b) $$
 
 The rank stored in `tokenizer.json` is the order of those choices. At inference, the tokenizer repeatedly picks the allowed merge with the **smallest rank**.
 
 ### Vocabulary coverage
 
-$$ \Large \text{vocab} \text{size} = \text{special} \text{tokens} + \text{base} \text{bytes} + \text{learned} \text{merges} $$
+$$ \Large vocab size = special tokens + base bytes + learned merges $$
 
 $$ \Large 3,774 = 3 + 52 + 3,719 $$
 

@@ -200,44 +200,35 @@ The method also restores the caller's training mode in a `finally` block (`model
 
 ### General parameter formula
 
-$$
-\begin{aligned}
-P = V\cdot D + P_{max}\cdot D + L\cdot (3D^2 + 3D + D^2 + D + 3DF) + L\cdot (4D) + 2D
-\end{aligned}
-$$
+$$ P = V\cdot D + \text{P}{\text{max}}\cdot D + L\cdot (3D^2 + 3D + D^2 + D + 3\text{DF}) + L\cdot (4D) + 2D $$
 
 Substituting `V=3774, D=320, P_max=512, L=6, F=800`:
 
-$$
-\begin{aligned}
-\text{embedding} = 1{,}207{,}680 + 163{,}840 = 1{,}371{,}520 \\
-\text{attention} = 2{,}465{,}280 \\
-\text{FFN} = 4{,}608{,}000 \\
-\text{LayerNorm} = 8{,}320 \\
-\text{total} = 8{,}453{,}120
-\end{aligned}
-$$
+$$ \text{embedding} = 1{,}207{,}680 + 163{,}840 = 1{,}371{,}520 $$
+
+$$ \text{attention} = 2{,}465{,}280 $$
+
+$$ \text{FFN} = 4{,}608{,}000 $$
+
+$$ \text{LayerNorm} = 8{,}320 $$
+
+$$ \text{total} = 8{,}453{,}120 $$
 
 ### With a different FFN size
 
 If `ffn_hidden` changed from 800 to 1,024:
 
-$$
-\begin{aligned}
-\text{new FFN} = 6 \times 3 \times 320 \times 1{,}024 = 5{,}898{,}240 \\
-\text{delta} = +1{,}290{,}240 \\
-\text{new total} = 9{,}743{,}360
-\end{aligned}
-$$
+$$ \text{new FFN} = 6 \times 3 \times 320 \times 1{,}024 = 5{,}898{,}240 $$
+
+$$ \text{delta} = +1{,}290{,}240 $$
+
+$$ \text{new total} = 9{,}743{,}360 $$
 
 ### Size of one forward pass output
 
-$$
-\begin{aligned}
-\text{logits elements} = 1 \times 512 \times 3{,}774 = 1{,}932{,}288 \\
-\text{bytes} = 1{,}932{,}288 \times 4 = 7{,}729{,}152 \approx 7.7\text{ MB}
-\end{aligned}
-$$
+$$ \text{logits elements} = 1 \times 512 \times 3{,}774 = 1{,}932{,}288 $$
+
+$$ \text{bytes} = 1{,}932{,}288 \times 4 = 7{,}729{,}152 \approx 7.7\text{ MB} $$
 
 This is why the browser takes only the last position's 3,774 logits for sampling (`web/model.js:218-221`).
 

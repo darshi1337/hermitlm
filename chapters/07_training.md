@@ -118,33 +118,25 @@ That roughly matches an older 3/2/1 weighting scheme: heavy classes get about 9.
 
 Let `m_{ij}` be the attention mask and `q_{ij,v}` the softmax probability the model assigns to vocabulary item `v` at position `(i,j)`:
 
-$$
-\begin{aligned}
-CE_{ij} = -\log q_{ij, y_{ij}} \\
-L_{SFT}   = \sum_{ij} m_{ij} \cdot CE_{ij} / \sum_{ij} m_{ij}
-\end{aligned}
-$$
+$$ \text{CE}{\text{ij}} = -\log \text{q}{\text{ij}, \text{y}{\text{ij}}} $$
+
+$$ \text{L}{\text{SFT}} = \sum_{\text{ij}} \text{m}{\text{ij}} \cdot \text{CE}{\text{ij}} / \sum_{\text{ij}} \text{m}{\text{ij}} $$
 
 ### Worked example
 
 Suppose a batch has two rows with 4 and 2 real tokens:
 
-$$
-\begin{aligned}
-mask = [[1, 1, 1, 1], \\
-[1, 1, 0, 0]]
-\end{aligned}
-$$
+$$ \text{mask} = [[1, 1, 1, 1], $$
+
+$$ [1, 1, 0, 0]] $$
 
 There are 6 ones. If the six per-token cross-entropies are `[0.5, 0.8, 0.3, 0.6, 0.9, 0.4]`:
 
-$$
-\begin{aligned}
-numerator = 0.5 + 0.8 + 0.3 + 0.6 + 0.9 + 0.4 = 3.5 \\
-denominator = 6 \\
-loss = 3.5 / 6 = 0.583333
-\end{aligned}
-$$
+$$ \text{numerator} = 0.5 + 0.8 + 0.3 + 0.6 + 0.9 + 0.4 = 3.5 $$
+
+$$ \text{denominator} = 6 $$
+
+$$ \text{loss} = 3.5 / 6 = 0.583333 $$
 
 Padding positions contribute 0 to both sums, so they cannot lower or raise the loss.
 
@@ -152,11 +144,7 @@ Padding positions contribute 0 to both sums, so they cannot lower or raise the l
 
 Perplexity is `exp(loss)`. The shipped best checkpoint has eval loss `0.6541` (`checkpoints/best_model.pt`):
 
-$$
-\begin{aligned}
-\exp(0.6541) = 1.9234
-\end{aligned}
-$$
+$$ \exp(0.6541) = 1.9234 $$
 
 `eval_out/report.json` records a perplexity proxy of 1.929, computed as `exp(mean loss)` over at most 50 batches (`scripts/eval.py:38-46`).
 
@@ -179,14 +167,13 @@ $$
 
 With `η = 2e-4`, `η_min = 2e-5`, `W = 800`, `M = 32,000`:
 
-$$
-\begin{aligned}
-s < 800:     \eta_{s} = \eta \cdot s / W \\
-s \geq  800:     p = (s - W)/(M - W) \\
-c = \frac{1}{2}(1 + \cos(\pi p)) \\
-\eta_{s} = \eta_{min} + (\eta - \eta_{min}) \cdot c
-\end{aligned}
-$$
+$$ s < 800: \eta_{s} = \eta \cdot s / W $$
+
+$$ s \geq 800: p = (s - W)/(M - W) $$
+
+$$ c = \frac{1}{2}(1 + \cos(\pi p)) $$
+
+$$ \eta_{s} = \eta_{\text{min}} + (\eta - \eta_{\text{min}}) \cdot c $$
 
 | Step | Phase | Learning rate |
 |---:|---|---:|
@@ -229,13 +216,11 @@ Warmup is `800 / 32,000 = 2.5%` of training. The final rate is not exactly `min_
 
 AdamW keeps two running averages per parameter:
 
-$$
-\begin{aligned}
-m_{t} = \beta_{1} m_{t-1} + (1 - \beta_{1}) g_{t}          \beta_{1} = 0.9 \\
-v_{t} = \beta_{2} v_{t-1} + (1 - \beta_{2}) g_{t}^2         \beta_{2} = 0.95 \\
-\theta_{t} = \theta_{t-1} - \eta \cdot \hat{m}_t / (\sqrt{\hat{v}}_t + \varepsilon) - \eta \cdot \lambda \cdot \theta_{t-1}
-\end{aligned}
-$$
+$$ \text{m}{t} = \beta_{1} \text{m}{\text{t-1}} + (1 - \beta_{1}) \text{g}{t} \beta_{1} = 0.9 $$
+
+$$ \text{v}{t} = \beta_{2} \text{v}{\text{t-1}} + (1 - \beta_{2}) \text{g}{t}^2 \beta_{2} = 0.95 $$
+
+$$ \theta_{t} = \theta_{\text{t-1}} - \eta \cdot \hat{m}_t / (\sqrt{\hat{v}}_t + \varepsilon) - \eta \cdot \lambda \cdot \theta_{\text{t-1}} $$
 
 with bias corrections `m̂ = m/(1−β₁^t)` and `v̂ = v/(1−β₂^t)`, `ε = 1e-8`, and weight decay `λ = 0.1`.
 
@@ -269,13 +254,11 @@ Mixed precision is enabled only on CUDA (`train.py:158-159`). XPU and CPU use th
 
 The shipped best checkpoint metadata:
 
-$$
-\begin{aligned}
-\text{step} = 24{,}200 \\
-\text{eval loss} = 0.6540815 \\
-\text{perplexity} = 1.9234
-\end{aligned}
-$$
+$$ \text{step} = 24{,}200 $$
+
+$$ \text{eval loss} = 0.6540815 $$
+
+$$ \text{perplexity} = 1.9234 $$
 
 `final_model.pt` comes from an older 30,000-step run with vocabulary 2,831 and a loss list of length 30,000. Its first losses are around 8.07 and its last around 0.65.
 
@@ -287,54 +270,43 @@ $$
 
 ### Batches and passes
 
-$$
-\begin{aligned}
-\text{rows per batch} = 95{,}000 / 32 = 2{,}968.75 \\
-\text{max steps} = 32{,}000 \\
-\text{sequences seen} = 1{,}024{,}000 \\
-\text{passes} = 10.78
-\end{aligned}
-$$
+$$ \text{rows per batch} = 95{,}000 / 32 = 2{,}968.75 $$
+
+$$ \text{max steps} = 32{,}000 $$
+
+$$ \text{sequences seen} = 1{,}024{,}000 $$
+
+$$ \text{passes} = 10.78 $$
 
 ### Token positions
 
-$$
-\begin{aligned}
-\text{per step} = 32 \times 512 = 16{,}384 \\
-\text{total upper bound} = 524{,}288{,}000
-\end{aligned}
-$$
+$$ \text{per step} = 32 \times 512 = 16{,}384 $$
+
+$$ \text{total upper bound} = 524{,}288{,}000 $$
 
 Real rows are about 20 words, so actual processed tokens are much fewer. `max_seq_len=512` is a ceiling, not the typical length.
 
 ### Evaluation and saving frequency
 
-$$
-\begin{aligned}
-\text{eval calls} = 159 \\
-\text{save points} = 31 \\
-\text{last artifact} = \text{step }29{,}000
-\end{aligned}
-$$
+$$ \text{eval calls} = 159 $$
+
+$$ \text{save points} = 31 $$
+
+$$ \text{last artifact} = \text{step}29{,}000 $$
 
 ### Warmup fraction and peak ratio
 
-$$
-\begin{aligned}
-\text{warmup} = 800 / 32{,}000 = 2.5\% \\
-\text{peak / floor} = 2
-\end{aligned}
-$$
+$$ \text{warmup} = 800 / 32{,}000 = 2.5\% $$
+
+$$ \text{peak / floor} = 2 $$
 
 ### Cosine coefficient at step 16,000
 
-$$
-\begin{aligned}
-p = 0.487179 \\
-c = \tfrac12\big(1+\cos(\pi p)\big) = 0.52014 \\
-\eta = 1.1362 \times 10^{-4}
-\end{aligned}
-$$
+$$ p = 0.487179 $$
+
+$$ c = \tfrac12\big(1+\cos(\pi p)\big) = 0.52014 $$
+
+$$ \eta = 1.1362 \times 10^{-4} $$
 
 ---
 

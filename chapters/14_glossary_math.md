@@ -66,146 +66,145 @@ From `checkpoints/config.json` and `hermitlm/config.py`:
 
 ### Chapter 2 — Tokenization
 
-$$
-\begin{aligned}
-BPE merge* = \arg\max_{a,b} count(a,b) \\
-vocab size = specials + base bytes + merges = 3 + 52 + 3,719 = 3,774 \\
-x = ids[:-1]      y = ids[1:]
-\end{aligned}
-$$
+$$ \text{BPE} \text{merge}* = \arg\max_{a,b} \text{count}(a,b) $$
+
+$$ \text{vocab} \text{size} = \text{specials} + \text{base} \text{bytes} + \text{merges} = 3 + 52 + 3,719 = 3,774 $$
+
+$$ x = \text{ids}[:-1] y = \text{ids}[1:] $$
 
 ### Chapter 3 — Embeddings
 
-$$
-\begin{aligned}
-h_0 = \text{tok emb} + \text{pos emb} \\
-w \sim \mathcal{N}(0, 0.02^2) \\
-\text{dropout scale} = 1/0.9 = 1.111
-\end{aligned}
-$$
+$$ \text{h 0} = \text{tok emb} + \text{pos emb} $$
+
+$$ w \sim \mathcal{N}(0, 0.02^2) $$
+
+$$ \text{dropout scale} = 1/0.9 = 1.111 $$
 
 ### Chapter 4 — Attention
 
-$$
-\begin{aligned}
-d_{\text{head}} = 320/8 = 40 \\
-Q, K, V = \operatorname{split}(x W_{\text{qkv}}) \\
-\text{scores} = QK^T/\sqrt{40}
-\end{aligned}
-$$
+$$ \text{d}{\text{head}} = 320/8 = 40 $$
+
+$$ Q, K, V = \text{split}(x \text{W}{\text{qkv}}) $$
+
+$$ \text{scores} = \text{QK}^T/\sqrt{40} $$
 
 ### Chapter 5 — Transformer block
 
-$$
-\begin{aligned}
-\mu = mean(x),  \sigma^2 = var(x) \\
-\hat{x} = (x - \mu)/\sqrt{\sigma^2 + \varepsilon},  y = \gamma \hat{x} + \beta\text{LayerNorm} \\
-silu(z) = z / (1 + e^{-z}) \\
-FFN(x)  = w3( silu(w2(x)) \odot  w1(x) )\text{SwiGLU} \\
-x \leftarrow  x + attn(norm1(x))                      residual 1 \\
-x \leftarrow  x + ffn(norm2(x))                       residual 2 \\
-\partial (x+f(x))/\partial x = I + \partial f/\partial x\text{gradient highway}
-\end{aligned}
-$$
+$$ \mu = \text{mean}(x), \sigma^2 = \text{var}(x) $$
+
+$$ \hat{x} = (x - \mu)/\sqrt{\sigma^2 + \varepsilon}, y = \gamma \hat{x} + \beta\text{LayerNorm} $$
+
+$$ \text{silu}(z) = z / (1 + e^{-z}) $$
+
+$$ \text{FFN}(x) = \text{w3}( \text{silu}(\text{w2}(x)) \odot \text{w1}(x) )\text{SwiGLU} $$
+
+$$ x \text{arrow} x + \text{attn}(\text{norm1}(x)) \text{residual} 1 $$
+
+$$ x \text{arrow} x + \text{ffn}(\text{norm2}(x)) \text{residual} 2 $$
+
+$$ \partial (x+f(x))/\partial x = I + \partial f/\partial x\text{gradient highway} $$
 
 ### Chapter 6 — Full model
 
-$$
-\begin{aligned}
-logits = lm_{head}( LayerNorm(block_{6}(\ldotsblock_{1}(h_{0})))) \\
-P = V\cdot D + P_{max}\cdot D + L(3D^2 + 3D + D^2 + D + 3DF) + 4LD + 2D \\
-P = 8,453,120 unique; raw state_{dict} = 9,660,800
-\end{aligned}
-$$
+$$ \text{logits} = \text{lm head}(\text{LayerNorm}(\text{block}_6(\ldots \text{block}_1(h_0)))) $$
+
+$$ P = V\cdot D + \text{P}{\text{max}}\cdot D + L(3D^2 + 3D + D^2 + D + 3\text{DF}) + 4\text{LD} + 2D $$
+
+$$ P = 8,453,120 \text{unique}; \text{raw} \text{state}{\text{dict}} = 9,660,800 $$
 
 ### Chapter 7 — Training
 
-$$
-\begin{aligned}
-CE_{ij}  = -\log q_{ij, y_{ij}} \\
-L_{SFT}  = \sum  m_{ij} CE_{ij} / \sum  m_{ij}\text{masked mean} \\
-\eta_{s}    = \eta\cdot s/W                                s < W \\
-p      = (s-W)/(M-W),  c = \frac{1}{2}(1+cos \pip)        s \geq  W \\
-\eta_{s}    = \eta_{min} + (\eta-\eta_{min})\cdot c \\
-\text{AdamW:} \\
-m_{t} = \beta_{1} m_{t-1} + (1-\beta_{1}) g_{t}               \beta_{1} = 0.9 \\
-v_{t} = \beta_{2} v_{t-1} + (1-\beta_{2}) g_{t}^2              \beta_{2} = 0.95 \\
-\theta_{t} = \theta_{t-1} - \eta\cdot \hat{m}_t/(\sqrt{\hat{v}}_t+\varepsilon) - \eta\cdot \lambda\cdot \theta_{t-1} \\
-clip: g \leftarrow  g \cdot \min(1, 1/\|g\|_2)
-\end{aligned}
-$$
+$$ \text{CE}{\text{ij}} = -\log \text{q}{\text{ij}, \text{y}{\text{ij}}} $$
+
+$$ \text{L}{\text{SFT}} = \sum \text{m}{\text{ij}} \text{CE}{\text{ij}} / \sum \text{m}{\text{ij}}\text{masked mean} $$
+
+$$ \eta_{s} = \eta\cdot s/W s < W $$
+
+$$ p = (\text{s-W})/(\text{M-W}), c = \frac{1}{2}(1+\text{cos} \pip) s \geq W $$
+
+$$ \eta_{s} = \eta_{\text{min}} + (\eta-\eta_{\text{min}})\cdot c $$
+
+$$ \text{AdamW:} $$
+
+$$ \text{m}{t} = \beta_{1} \text{m}{\text{t-1}} + (1-\beta_{1}) \text{g}{t} \beta_{1} = 0.9 $$
+
+$$ \text{v}{t} = \beta_{2} \text{v}{\text{t-1}} + (1-\beta_{2}) \text{g}{t}^2 \beta_{2} = 0.95 $$
+
+$$ \theta_{t} = \theta_{\text{t-1}} - \eta\cdot \hat{m}_t/(\sqrt{\hat{v}}_t+\varepsilon) - \eta\cdot \lambda\cdot \theta_{\text{t-1}} $$
+
+$$ \text{clip}: g \text{arrow} g \cdot \min(1, 1/\|g\|_2) $$
 
 ### Chapter 8 — Generation
 
-$$
-\begin{aligned}
-z_{v}   = logit_{v} / T \\
-z'_v  = z_{v} if z_{v} \geq  k-th largest else -\infty\text{top-k} \\
-p_{v}   = \exp(z'_v - max z') / \sum  \exp(z'_u - max z') \\
-cutoff = min { k : \sum_{j\leq k} p_(j) \geq  topP }\text{top-p (browser)} \\
-p'_i  = p_{i} / \sum\text{kept p} \\
-next  \sim  multinomial(p') or inverse-CDF draw \\
-stop when next \in  {eos_{id}, bos_{id}}
-\end{aligned}
-$$
+$$ \text{z}{v} = \text{logit}{v} / T $$
+
+$$ z'_v = \text{z}{v} \text{if} \text{z}{v} \geq \text{k-th} \text{largest} \text{else} -\infty\text{top-k} $$
+
+$$ \text{p}{v} = \exp(z'_v - \text{max} z') / \sum \exp(z'_u - \text{max} z') $$
+
+$$ \text{cutoff} = \text{min} { k : \sum_{j\leq k} \text{p}(j) \geq \text{topP} }\text{top-p (browser)} $$
+
+$$ p'_i = \text{p}{i} / \sum\text{kept p} $$
+
+$$ \text{next} \sim \text{multinomial}(p') \text{or} \text{inverse-CDF} \text{draw} $$
+
+$$ \text{stop} \text{when} \text{next} \in {\text{eos}{\text{id}}, \text{bos}{\text{id}}} $$
 
 ### Chapter 9 — Tools
 
-$$
-\begin{aligned}
-P(decided at k) = \prod_{i<k}(1 - p_{i}) \cdot p_{k} \\
-tool dispatch if probe confidence \geq  0.5 \\
-web escalation if p_{yes} \geq  0.5 \\
-clarify if confidence < 0.75 and p_{yes} < 0.5
-\end{aligned}
-$$
+$$ P(\text{decided} \text{at} k) = \prod_{i<k}(1 - \text{p}{i}) \cdot \text{p}{k} $$
+
+$$ \text{tool} \text{dispatch} \text{if} \text{probe} \text{confidence} \geq 0.5 $$
+
+$$ \text{web} \text{escalation} \text{if} \text{p}{\text{yes}} \geq 0.5 $$
+
+$$ \text{clarify} \text{if} \text{confidence} < 0.75 \text{and} \text{p}{\text{yes}} < 0.5 $$
 
 ### Chapter 10 — Decision model
 
-$$
-\begin{aligned}
-x      = (h - \mu)/\sigma \\
-scores = W x + b \\
-\log p  = log_{softmax}(scores / T) \\
-ridge: A = X^TX + \alpha I,  W^T = A^{-1}X^T(Y - \bar{y}) \\
-Platt target: own = (n_{c}+1)/(n_{c}+2), rest = (1-own)/(K-1) \\
-temperature: T* = \exp(argmin_{t} NLL(scores\cdot e^{-t}, targets)) \\
-prior: corrected = \log p - \lambda \log \pi, then softmax \\
-accuracy = mean(argmax p == y) \\
-NLL      = -mean(\log clamp(p[i,y_{i}], 1e-12)) \\
-ECE      = \sum_b (n_{b}/n)|mean conf_{b} - mean correct_{b}| \\
-macro F1 = (1/K) \sum_c 2P_{cR\_c}/(P_{c}+R_{c}) \\
-CI       = percentile bootstrap, \alpha = 0.05
-\end{aligned}
-$$
+$$ x = (h - \mu)/\sigma $$
+
+$$ \text{scores} = W x + b $$
+
+$$ \log p = \text{log}{\text{softmax}}(\text{scores} / T) $$
+
+$$ \text{ridge}: A = X^\text{TX} + \alpha I, W^T = A^{-1}X^T(Y - \bar{y}) $$
+
+$$ \text{Platt} \text{target}: \text{own} = (\text{n}{c}+1)/(\text{n}{c}+2), \text{rest} = (1-\text{own})/(\text{K-1}) $$
+
+$$ \text{temperature}: T* = \exp(\text{argmin}{t} \text{NLL}(\text{scores}\cdot e^{-t}, \text{targets})) $$
+
+$$ \text{prior}: \text{corrected} = \log p - \lambda \log \pi, \text{then} \text{softmax} $$
+
+$$ \text{accuracy} = \text{mean}(\text{argmax} p == y) $$
+
+$$ \text{NLL} = -\text{mean}(\log \text{clamp}(p[i,\text{y}{i}], 1\text{e-12})) $$
+
+$$ \text{ECE} = \sum_b (\text{n}{b}/n)|\text{mean} \text{conf}{b} - \text{mean} \text{correct}{b}| $$
+
+$$ \text{macro} \text{F1} = (1/K) \sum_c 2\text{P}{\text{cR}\_c}/(\text{P}{c}+\text{R}{c}) $$
+
+$$ \text{CI} = \text{percentile} \text{bootstrap}, \alpha = 0.05 $$
 
 ### Chapter 11 — RLHF
 
-$$
-\begin{aligned}
-R = 2\min(\text{overlap}, 0.4) - 1.5\,\text{rep} - \text{len pen} - \text{style pen} - 3\,\text{break pen}
-\end{aligned}
-$$
+$$ R = 2\min(\text{overlap}, 0.4) - 1.5\,\text{rep} - \text{len pen} - \text{style pen} - 3\,\text{break pen} $$
 
 ### Chapter 12 — Export
 
-$$
-\begin{aligned}
-\text{scale} = (r_{\max} - r_{\min})/255 \\
-\text{zero point} = \operatorname{round}(-r_{\min}/\text{scale}) \\
-q = \operatorname{clip}\big(\operatorname{round}(r/\text{scale}) + \text{zero point}, 0, 255\big)
-\end{aligned}
-$$
+$$ \text{scale} = (\text{r}{\max} - \text{r}{\min})/255 $$
+
+$$ \text{zero point} = \text{round}(-\text{r}{\min}/\text{scale}) $$
+
+$$ q = \text{clip}\big(\text{round}(r/\text{scale}) + \text{zero point}, 0, 255\big) $$
 
 ### Chapter 13 — Evaluation
 
-$$
-\begin{aligned}
-\text{PPL} = 1.929 \\
-\text{tool rate} = 2/3 \\
-\text{paired CI} = \text{bootstrap of } (\text{stat}_b - \text{stat}_a)
-\end{aligned}
-$$
+$$ \text{PPL} = 1.929 $$
+
+$$ \text{tool rate} = 2/3 $$
+
+$$ \text{paired CI} = \text{bootstrap of} (\text{stat}_b - \text{stat}_a) $$
 
 ---
 

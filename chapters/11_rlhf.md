@@ -52,11 +52,11 @@ The formula:
 
 $$
 \begin{aligned}
-R(text) = 2.0 \cdot \min(overlap, 0.4) \\
-- 1.5 \cdot repetition \\
-- 1.0 \cdot length_{penalty} \\
-- 1.0 \cdot style_{penalty} \\
-- 3.0 \cdot break_{penalty}
+R(text) &= 2.0 \cdot \min(overlap, 0.4) \\
+        &- 1.5 \cdot repetition \\
+        &- 1.0 \cdot length_{penalty} \\
+        &- 1.0 \cdot style_{penalty} \\
+        &- 3.0 \cdot break_{penalty}
 \end{aligned}
 $$
 
@@ -384,8 +384,8 @@ The objective is equivalent to maximizing:
 
 $$
 \begin{aligned}
-\beta \cdot [ (\log \pi(chosen) - \log \pi_{ref}(chosen)) \\
-- (\log \pi(rejected) - \log \pi_{ref}(rejected)) ]
+\beta \cdot [ &(\log \pi(chosen) - \log \pi_{ref}(chosen)) \\
+             &- (\log \pi(rejected) - \log \pi_{ref}(rejected)) ]
 \end{aligned}
 $$
 

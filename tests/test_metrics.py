@@ -4,8 +4,10 @@ import pytest
 import torch
 
 from hermitlm.tools.artifacts import (
+    SCHEMA_VERSION,
     ArtifactMismatchError,
     artifact_metadata,
+    head_metadata,
     verify_artifact,
 )
 from hermitlm.tools.metrics import (
@@ -72,11 +74,45 @@ def test_artifact_hash_roundtrip_and_mismatch(tmp_path):
     tokenizer = tmp_path / "tokenizer.json"
     checkpoint.write_bytes(b"weights-v1")
     tokenizer.write_bytes(b"{}")
-    metadata = artifact_metadata(checkpoint, tokenizer)
-    verify_artifact(metadata, checkpoint, tokenizer)  # no raise
+    metadata = head_metadata(
+        checkpoint, tokenizer,
+        chosen_layer=4,
+        thresholds={"tool": 0.5},
+        refit={"folds": 5, "seed": 42, "heads": {"tool": {"solver": "ridge"}}},
+    )
+    assert metadata["schema_version"] == SCHEMA_VERSION
+    verify_artifact(metadata, checkpoint, tokenizer, layer=4)  # no raise
     checkpoint.write_bytes(b"weights-v2")
     with pytest.raises(ArtifactMismatchError):
-        verify_artifact(metadata, checkpoint, tokenizer)
+        verify_artifact(metadata, checkpoint, tokenizer, layer=4)
+
+
+def test_schema3_requires_fit_metadata(tmp_path):
+    checkpoint = tmp_path / "model.pt"
+    tokenizer = tmp_path / "tokenizer.json"
+    checkpoint.write_bytes(b"weights")
+    tokenizer.write_bytes(b"{}")
+    meta = artifact_metadata(checkpoint, tokenizer)
+    assert meta["schema_version"] == SCHEMA_VERSION
+    with pytest.raises(ArtifactMismatchError, match="missing chosen_layer"):
+        verify_artifact(meta, checkpoint, tokenizer)
+
+    meta["chosen_layer"] = 2
+    meta["thresholds"] = {"tool": 0.5}
+    meta["refit"] = {"folds": 5, "heads": {"tool": {}}}
+    with pytest.raises(ArtifactMismatchError, match="different chosen layer"):
+        verify_artifact(meta, checkpoint, tokenizer, layer=3)
+    verify_artifact(meta, checkpoint, tokenizer, layer=2)
+
+
+def test_legacy_schema2_artifact_is_still_readable(tmp_path):
+    checkpoint = tmp_path / "model.pt"
+    tokenizer = tmp_path / "tokenizer.json"
+    checkpoint.write_bytes(b"weights")
+    tokenizer.write_bytes(b"{}")
+    legacy = artifact_metadata(checkpoint, tokenizer)
+    legacy["schema_version"] = 2
+    verify_artifact(legacy, checkpoint, tokenizer)  # no new fields required
 
 
 def test_legacy_artifact_without_hashes_is_rejected(tmp_path):

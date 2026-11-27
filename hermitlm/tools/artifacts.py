@@ -9,7 +9,10 @@ checkpoint is worse than failing loudly and retraining.
 import hashlib
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
+# Schema 3 adds the fit context that schema 2 artifacts omit. Older artifacts
+# stay readable; a v3 artifact must carry all of these fields.
+V3_REQUIRED_FIELDS = ("chosen_layer", "thresholds", "refit")
 
 
 class ArtifactMismatchError(ValueError):
@@ -51,6 +54,50 @@ def artifact_metadata(
     return meta
 
 
+def refit_metadata(heads: dict, *, folds: int, seed: int) -> dict:
+    """Per-head solver/alpha/temperature plus the shared fold count and seed."""
+    fitted = {}
+    for name, state in heads.items():
+        if not isinstance(state, dict):
+            # Legacy linear heads have no solver choice recorded.
+            fitted[name] = {
+                "solver": "legacy",
+                "alpha": None,
+                "temperature": 1.0,
+                "oof_nll": 0.0,
+            }
+            continue
+        alpha = state.get("alpha")
+        fitted[name] = {
+            "solver": str(state.get("solver", "legacy")),
+            "alpha": None if alpha is None else float(alpha),
+            "temperature": float(state.get("temperature", 1.0)),
+            "oof_nll": float(state.get("oof_nll", 0.0)),
+        }
+    return {"folds": int(folds), "seed": int(seed), "heads": fitted}
+
+
+def head_metadata(
+    checkpoint_path: str | Path,
+    tokenizer_path: str | Path,
+    *,
+    chosen_layer: int,
+    thresholds: dict,
+    refit: dict,
+    prompt_template=None,
+    dtype=None,
+) -> dict:
+    """Version/hash fields plus the fit context required by schema 3."""
+    meta = artifact_metadata(
+        checkpoint_path, tokenizer_path,
+        prompt_template=prompt_template, dtype=dtype, layer=chosen_layer,
+    )
+    meta["chosen_layer"] = int(chosen_layer)
+    meta["thresholds"] = {str(k): float(v) for k, v in thresholds.items()}
+    meta["refit"] = refit
+    return meta
+
+
 def verify_artifact(
     artifact: dict,
     checkpoint_path: str | Path,
@@ -72,6 +119,25 @@ def verify_artifact(
             "decision head is missing schema_version/checkpoint_sha256/"
             "tokenizer_sha256; retrain the probe with the current scripts"
         )
+    version = int(artifact.get("schema_version", 1))
+    if version >= 3:
+        missing = [key for key in V3_REQUIRED_FIELDS if key not in artifact]
+        if missing:
+            raise ArtifactMismatchError(
+                "decision head is schema 3 but is missing " + ", ".join(missing)
+            )
+        thresholds = artifact["thresholds"]
+        refit = artifact["refit"]
+        if not isinstance(thresholds, dict) or not thresholds:
+            raise ArtifactMismatchError("decision head has no fitted thresholds")
+        if not isinstance(refit, dict) or "heads" not in refit:
+            raise ArtifactMismatchError("decision head has no refit metadata")
+        chosen = artifact.get("chosen_layer")
+        if chosen is None:
+            raise ArtifactMismatchError("decision head has no chosen_layer")
+        if layer is not None and int(chosen) != int(layer):
+            raise ArtifactMismatchError("decision head records a different chosen layer")
+
     if file_sha256(checkpoint_path) != expected_checkpoint:
         raise ArtifactMismatchError(
             "decision head was fitted for a different checkpoint; retrain the probe"

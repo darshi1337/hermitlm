@@ -71,6 +71,8 @@ export function classifyIntent(lastHidden, probe) {
     rotations: 1,
     clarify_threshold: probe.clarify_threshold ?? LEGACY_CLARIFY_THRESHOLD,
     escalation_threshold: probe.escalation_threshold ?? LEGACY_ESCALATION_THRESHOLD,
+    // -1 means the final hidden state; the ONNX export bakes this in too.
+    layer: probe.chosen_layer ?? probe.head_layer ?? -1,
   };
 }
 

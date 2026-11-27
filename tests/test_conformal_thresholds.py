@@ -78,13 +78,20 @@ def test_api_and_browser_read_the_same_stored_thresholds():
         assert key in artifact and key in web
         assert web[key] == pytest.approx(float(artifact[key]))
     assert web.get("threshold_coverage") == artifact.get("threshold_coverage")
+    assert web["schema_version"] == 3
+    assert web["chosen_layer"] == artifact["chosen_layer"]
+    assert web["head_layer"] == web["chosen_layer"]
+    assert web["thresholds"] == artifact["thresholds"]
+    assert web["refit"] == artifact["refit"]
 
     js = Path("web/intent.js").read_text(encoding="utf-8")
     html = Path("web/index.html").read_text(encoding="utf-8")
     assert "probe.clarify_threshold" in js
     assert "probe.escalation_threshold" in js
+    assert "probe.chosen_layer" in js
     assert "intent.clarify_threshold" in html
     assert "intent.escalation_threshold" in html
+    assert "intent.layer" in html
     assert "CLARIFY_THRESHOLD } from" not in html
 
 

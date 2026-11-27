@@ -660,7 +660,7 @@ async function send(message, opts = {}) {
       }
     } catch (e) { console.warn("intent failed", e); }
     const intentText = intent
-      ? `intent: ${intent.name}${fine ? " · " + fine.fine : ""} · ${(intent.confidence * 100).toFixed(0)}%`
+      ? `intent: ${intent.name}${fine ? " · " + fine.fine : ""} · ${(intent.confidence * 100).toFixed(0)}% · L${intent.layer}`
       : "";
     if (intent && !manualPersona) {
       personaEl.value = INTENT_PERSONA[intent.label] || "";

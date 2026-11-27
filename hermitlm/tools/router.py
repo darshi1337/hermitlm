@@ -9,6 +9,8 @@ tool fired. Older probes fall back to `p_confused`.
 import os
 import re
 
+from hermitlm.tools.artifacts import ArtifactMismatchError
+
 
 def _faq(q):
     from hermitlm.tools.bot_faq import get_faq_response
@@ -115,7 +117,11 @@ def _get_probe():
         if os.path.exists(TOOL_PROBE_PATH):
             _probe.load_tool_heads(TOOL_PROBE_PATH)
         return _probe
-    except Exception:  # noqa: BLE001 - probe must never break routing
+    except ArtifactMismatchError:
+        # Stale/mismatched artifacts must fail loudly instead of silently
+        # dropping intent routing.
+        raise
+    except Exception:  # noqa: BLE001 - a missing probe must not break routing
         _probe_failed = True
         return None
 

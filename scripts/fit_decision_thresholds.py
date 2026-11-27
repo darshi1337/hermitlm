@@ -83,6 +83,12 @@ def main() -> None:
     probe["threshold_coverage"] = fit["coverage"]
     probe["threshold_abstention"] = fit["abstention"]
     probe["threshold_cal_n"] = fit["cal_n"]
+    probe["thresholds"] = {
+        **(probe.get("thresholds") or {}),
+        "clarify": fit["clarify_threshold"],
+        "escalation": fit["escalation_threshold"],
+        "target_error": fit["target_error"],
+    }
     torch.save(probe, args.probe)
 
     print(

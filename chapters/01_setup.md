@@ -117,8 +117,8 @@ One training row looks like this:
 | `checkpoints/best_model.pt` | 33,838,453 bytes | Shipped SFT model, step 24,200, eval loss 0.6541 |
 | `checkpoints/final_model.pt` | 34,126,593 bytes | Older 30,000-step run, vocab 2,831 |
 | `checkpoints/step_1000.pt` … `step_31000.pt` | ~32 MB each | Periodic saves |
-| `checkpoints/decision_probe.pt` | 95,785 bytes | 7-way, binary and 21-way linear heads |
-| `checkpoints/decision_tool_probe.pt` | 7,685 bytes | 4-way tool head |
+| `checkpoints/decision_probe.pt` | 96,233 bytes | 7-way, binary and 21-way linear heads |
+| `checkpoints/decision_tool_probe.pt` | 7,877 bytes | 4-way tool head |
 | `checkpoints/ppo/ppo_final.pt` | — | Optional PPO policy |
 | `checkpoints/dpo/dpo_final.pt` | — | Optional DPO policy |
 | `checkpoints/config.json` | 578 bytes | Hyperparameters of the current run |

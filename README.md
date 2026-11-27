@@ -217,9 +217,10 @@ Temperatures come from a bounded golden-section search over log T, not a coarse 
 (`hermitlm/tools/calibration.py`). Binary heads use Platt-smoothed targets, which stops
 near-separable scores from collapsing to 0/1 confidence. `scripts/eval_decision.py` fits T on
 a disjoint calibration split and reports 95% bootstrap CIs plus a paired
-calibrated-minus-uncalibrated table. Head files carry schema version 2, SHA-256 hashes of the
-checkpoint, tokenizer and prompt template, plus dtype and selected layer. Loading a head after
-a retrain or prompt change raises an error instead of scoring with stale weights.
+calibrated-minus-uncalibrated table. Head files carry schema version 3, SHA-256 hashes of the
+checkpoint, tokenizer and prompt template, plus dtype, chosen layer, fit-time thresholds and
+per-head solver/alpha/fold/temperature refit metadata. Loading a head after a retrain or prompt
+change raises an error instead of scoring with stale weights.
 
 ### Decision metrics with 95% bootstrap intervals
 
@@ -282,8 +283,10 @@ The decision stack includes label-free and supervised calibration pieces:
 - `python -m hermitlm.tools.check`: validates label tokens, batch consistency, hidden layers,
   prompt-template hashes, auxiliary heads and score-label tokenization before deploy.
 
-Artifact metadata now also pins the prompt-template hash, dtype and selected layer, so a
-probe cannot be silently paired with a changed prompt or precision.
+Artifact metadata now also pins the prompt-template hash, dtype, chosen layer, fit-time thresholds
+and refit details (solver, alpha, fold count, temperature), so a probe cannot be silently paired
+with a changed prompt or precision. `scripts/upgrade_probe_metadata.py` adds these fields to older
+artifacts without refitting the heads.
 
 Evaluated on the hand-written human eval, the currently shipped last-layer probe still
 generalizes better than OOF-selected ridge/LDA heads (0.62 coarse / 0.48 fine vs 0.62 / 0.35),

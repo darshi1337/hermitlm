@@ -21,7 +21,7 @@ import torch.nn.functional as F
 from tokenizers import Tokenizer
 
 from hermitlm.config import HermitConfig
-from hermitlm.tools.artifacts import verify_artifact
+from hermitlm.tools.artifacts import ArtifactMismatchError, verify_artifact
 from hermitlm.tools.heads import FittedHead
 from hermitlm.tools.prior import apply_prior
 from hermitlm.training.model import HermitLM
@@ -31,6 +31,18 @@ from hermitlm.training.model import HermitLM
 # stored values, not the environment thresholds in hermitlm/settings.py.
 LEGACY_CLARIFY_THRESHOLD = 0.75
 LEGACY_ESCALATION_THRESHOLD = 0.5
+
+
+def _resolved_layer(probe: dict) -> int | None:
+    """Layer selected for the heads; None/(-1) means the final hidden state."""
+    for key in ("chosen_layer", "layer"):
+        if key in probe and probe[key] is not None:
+            return int(probe[key])
+    selection = probe.get("selection") or {}
+    if "layer" in selection:
+        return int(selection["layer"])
+    return None
+
 
 # Coarse intent mapping: 7 balanced buckets covering all 21 fine types.
 # Bucket sizes on train.jsonl (95k) stay within a factor of two:
@@ -304,7 +316,7 @@ class ProbeDecisionModel:
         self.model.eval()
         probe = torch.load(probe_path, map_location=self.device, weights_only=True)
         selection = probe.get("selection")
-        self.layer = selection["layer"] if selection else None
+        self.layer = _resolved_layer(probe)
         verify_artifact(
             probe, checkpoint_path, tokenizer_path,
             dtype=str(next(self.model.parameters()).dtype),
@@ -469,14 +481,18 @@ class ProbeDecisionModel:
         return expected, proba.tolist()
 
     def load_tool_heads(self, tool_probe_path: str) -> bool:
+        if not Path(tool_probe_path).exists():
+            return False
         try:
             tool = torch.load(tool_probe_path, map_location=self.device, weights_only=True)
+            layer = _resolved_layer(tool)
             verify_artifact(
                 tool, self.checkpoint_path, self.tokenizer_path,
                 dtype=str(next(self.model.parameters()).dtype),
+                layer=layer,
             )
             selection = tool.get("selection")
-            self.tool_layer = selection["layer"] if selection else None
+            self.tool_layer = layer
             if selection:
                 self.tool_head = FittedHead.from_dict(selection["heads"]["tool"]).to(self.device)
                 self.tool_priors = {k: torch.as_tensor(v, dtype=torch.float64) for k, v in tool.get("priors", {}).items()}
@@ -487,7 +503,10 @@ class ProbeDecisionModel:
                 self.tool_priors = {}
                 self.tool_prior_lambda = 1.0
             return True
-        except Exception:  # noqa: BLE001 - missing file means no tool routing
+        except ArtifactMismatchError:
+            # A stale head must fail loudly, not silently disable tool routing.
+            raise
+        except Exception:  # noqa: BLE001 - a broken head means no tool routing
             self.tool_head = None
             return False
 
@@ -572,6 +591,18 @@ def export_probe(probe_path: str, output_path: str) -> dict:
     for key in ("score_levels", "score_thresholds", "score_labels"):
         if key in probe:
             data[key] = probe[key]
+    # Fit context. The browser reads the same chosen layer and thresholds as
+    # the API; refit records solver/alpha/fold count/temperature per head.
+    if "chosen_layer" in probe:
+        data["chosen_layer"] = int(probe["chosen_layer"])
+    resolved_layer = _resolved_layer(probe)
+    data["head_layer"] = -1 if resolved_layer is None else resolved_layer
+    for key in ("thresholds", "refit"):
+        if key in probe:
+            data[key] = probe[key]
+    for key in ("threshold_cal_n",):
+        if key in probe:
+            data[key] = int(probe[key])
     # Split-conformal gates. Only store plain JSON numbers so the browser and
     # the API read exactly the same cutoffs (old artifacts simply omit them).
     for key in ("clarify_threshold", "escalation_threshold", "target_error", "threshold_abstention"):

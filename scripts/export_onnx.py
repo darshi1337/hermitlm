@@ -25,9 +25,11 @@ def export_onnx(checkpoint_path, tokenizer_path, output_dir, opset=17):
     layer = None
     if probe_path.exists():
         probe = torch.load(probe_path, map_location="cpu", weights_only=True)
-        selection = probe.get("selection")
-        if selection:
-            layer = int(selection["layer"])
+        from hermitlm.tools.decision_model import _resolved_layer
+
+        resolved = _resolved_layer(probe)
+        if resolved is not None and resolved >= 0:
+            layer = resolved
     wrapper = ChatWithHidden(model, layer=layer)
     dummy = torch.randint(0, config.vocab_size, (1, 8), dtype=torch.long)
 

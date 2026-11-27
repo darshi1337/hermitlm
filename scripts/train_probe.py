@@ -7,22 +7,27 @@ for label-free batch debiasing.
 import argparse
 import collections
 import json
+import os
 import random
 
 import torch
 from tokenizers import Tokenizer
 
 from hermitlm.config import HermitConfig
-from hermitlm.tools.artifacts import artifact_metadata
+from hermitlm.tools.artifacts import head_metadata, refit_metadata
 from hermitlm.tools.decision_model import (
     FINE21_ORDER,
     FINE_TO_COARSE,
+    LEGACY_CLARIFY_THRESHOLD,
+    LEGACY_ESCALATION_THRESHOLD,
     OPTION_LETTERS,
     PROMPT_TEMPLATES,
 )
 from hermitlm.tools.heads import default_layers, select_head
 from hermitlm.tools.prior import fit_prior
 from hermitlm.training.model import HermitLM
+
+FOLDS = 5  # stratified k-fold OOF selection; stored in the artifact's refit metadata
 
 
 def chat_prompt(query: str) -> str:
@@ -106,11 +111,11 @@ def main() -> None:
 
     layers = default_layers(config.n_layers)
     print(f"candidate layers: {layers}")
-    coarse_head = select_head(feats, torch.tensor(coarse_idx), 7, layers, seed=args.seed)
+    coarse_head = select_head(feats, torch.tensor(coarse_idx), 7, layers, k=FOLDS, seed=args.seed)
     layer = coarse_head.layer
     print(f"selected layer {layer} (oof_nll={coarse_head.oof_nll:.4f})")
 
-    binary_head = select_head(feats, torch.tensor(is_confused), 2, [layer], seed=args.seed + 1)
+    binary_head = select_head(feats, torch.tensor(is_confused), 2, [layer], k=FOLDS, seed=args.seed + 1)
 
     fine_queries, fine_targets = [], []
     by_fine = collections.defaultdict(list)
@@ -127,7 +132,7 @@ def main() -> None:
             fine_targets.append(FINE21_ORDER.index(fine))
     print(f"sampled {len(fine_queries)} queries for 21-way ({args.per_fine}/fine-type cap)")
     fine_feats = extract_hidden_layers(model, tokenizer, fine_queries, config.max_seq_len, device)
-    fine_head = select_head(fine_feats, torch.tensor(fine_targets), len(FINE21_ORDER), [layer], seed=args.seed + 2)
+    fine_head = select_head(fine_feats, torch.tensor(fine_targets), len(FINE21_ORDER), [layer], k=FOLDS, seed=args.seed + 2)
 
     heads = {"coarse": coarse_head, "confused": binary_head, "fine": fine_head}
     priors = {
@@ -139,19 +144,36 @@ def main() -> None:
         print(f"{name}: layer={head.layer} solver={head.solver} alpha={head.alpha} "
               f"T={head.temperature:.3f} oof_acc={head.oof_accuracy:.4f}")
 
+    # Keep any thresholds already fitted for this artifact path; otherwise
+    # record the legacy defaults until fit_decision_thresholds.py is rerun.
+    existing = {}
+    if os.path.exists(args.out):
+        existing = torch.load(args.out, map_location="cpu", weights_only=True)
+    thresholds = {
+        "clarify": float(existing.get("clarify_threshold", LEGACY_CLARIFY_THRESHOLD)),
+        "escalation": float(existing.get("escalation_threshold", LEGACY_ESCALATION_THRESHOLD)),
+        "target_error": float(existing.get("target_error", 0.1)),
+    }
+    head_states = {k: v.as_dict() for k, v in heads.items()}
+    refit = refit_metadata(head_states, folds=FOLDS, seed=args.seed)
     artifact = {
-        "selection": {"layer": layer, "heads": {k: v.as_dict() for k, v in heads.items()}},
+        "selection": {"layer": layer, "heads": head_states},
+        "chosen_layer": layer,
+        "thresholds": thresholds,
+        "refit": refit,
         "priors": priors,
         "prior_lambda": args.prior_lambda,
         "d_model": feats.size(2),
         "options": OPTION_LETTERS,
         "fine_options": FINE21_ORDER,
         "base_checkpoint": args.checkpoint,
-        **artifact_metadata(
+        **head_metadata(
             args.checkpoint, args.tokenizer,
+            chosen_layer=layer,
+            thresholds=thresholds,
+            refit=refit,
             prompt_template=PROMPT_TEMPLATES,
             dtype=str(next(model.parameters()).dtype),
-            layer=layer,
         ),
     }
     torch.save(artifact, args.out)

@@ -12,14 +12,16 @@ Usage:
 import argparse
 import collections
 import json
+import os
 import random
 
 import torch
 from tokenizers import Tokenizer
-from train_probe import extract_hidden_layers
+from train_probe import FOLDS, extract_hidden_layers
 
 from hermitlm.config import HermitConfig
-from hermitlm.tools.artifacts import artifact_metadata
+from hermitlm.settings import TOOL_THRESHOLD
+from hermitlm.tools.artifacts import head_metadata, refit_metadata
 from hermitlm.tools.decision_model import PROMPT_TEMPLATES
 from hermitlm.tools.heads import default_layers, select_head
 from hermitlm.tools.prior import apply_prior, fit_prior
@@ -76,7 +78,7 @@ def main() -> None:
     feats = extract_hidden_layers(model, tokenizer, queries, config.max_seq_len, device)
     print(f"features: {tuple(feats.shape)}")
     layers = default_layers(config.n_layers)
-    head = select_head(feats, torch.tensor(targets), len(TOOL_CLASSES), layers, seed=args.seed)
+    head = select_head(feats, torch.tensor(targets), len(TOOL_CLASSES), layers, k=FOLDS, seed=args.seed)
     layer = head.layer
     prior = fit_prior(head.log_probs(feats[:, layer, :].double())).tolist()
     print(f"selected layer={layer} solver={head.solver} alpha={head.alpha} "
@@ -105,21 +107,37 @@ def main() -> None:
         acc_kept = (pred[kept] == true[kept]).float().mean().item() if kept.sum() else 0.0
         print(f"  thr={thr}: coverage={cov:.3f} acc_when_kept={acc_kept:.4f}")
 
+    existing = {}
+    if os.path.exists(args.out):
+        existing = torch.load(args.out, map_location="cpu", weights_only=True)
+    thresholds = {
+        "tool": float(existing.get("thresholds", {}).get("tool", TOOL_THRESHOLD)),
+        "coverage_grid": [0.5, 0.7, 0.9],
+    }
+    head_state = head.as_dict()
+    refit = refit_metadata({"tool": head_state}, folds=FOLDS, seed=args.seed)
     torch.save(
         {
-            "selection": {"layer": layer, "heads": {"tool": head.as_dict()}},
+            **head_metadata(
+                args.checkpoint, args.tokenizer,
+                chosen_layer=layer,
+                # head_metadata casts every threshold to float; the coverage
+                # grid is stored as plain metadata after this spread.
+                thresholds={"tool": thresholds["tool"]},
+                refit=refit,
+                prompt_template=PROMPT_TEMPLATES,
+                dtype=str(next(model.parameters()).dtype),
+            ),
+            "selection": {"layer": layer, "heads": {"tool": head_state}},
+            "chosen_layer": layer,
+            "thresholds": thresholds,
+            "refit": refit,
             "priors": {"tool": prior},
             "prior_lambda": args.prior_lambda,
             "classes": TOOL_CLASSES,
             "d_model": feats.size(2),
             "eval_accuracy": acc,
             "base_checkpoint": args.checkpoint,
-            **artifact_metadata(
-                args.checkpoint, args.tokenizer,
-                prompt_template=PROMPT_TEMPLATES,
-                dtype=str(next(model.parameters()).dtype),
-                layer=layer,
-            ),
         },
         args.out,
     )

@@ -162,12 +162,15 @@ Not every array shrinks 4×. LayerNorm scales, biases and scale/zero-point param
 | `head_yes`, `temperature_yes` | calibrated out-of-scope head |
 | `head_score`, `temperature_score` | 5-way reply-quality head |
 | `score_levels`, `score_thresholds`, `score_labels` | level centres, bucket edges and label tokens (`0`–`4`) |
+| `chosen_layer`, `head_layer` | layer the heads were fitted on (`-1` = final hidden state) |
+| `thresholds` | fit-time clarify/escalation/tool thresholds |
+| `refit` | per-head solver, alpha, temperature plus fold count and seed |
 | `priors` | label-free coarse/confused/fine/yes/score priors fitted by `scripts/fit_probe_prior.py` and `scripts/train_yes_score_heads.py` |
 | `prior_lambda` | 0.5 |
-| `schema_version` | 2 |
+| `schema_version` | 3 |
 | three SHA-256 hashes | checkpoint, tokenizer, prompt template |
 
-File size: 262,502 bytes. `export_probe()` emits all heads and priors for both selection-format
+File size: 263,430 bytes. `export_probe()` emits all heads and priors for both selection-format
 and legacy artifacts, so the browser and the API apply the same corrections.
 
 `scripts/write_asset_manifest.py:21-33` writes `asset-manifest.json` with the SHA-256 and byte size of `model.quant.onnx`, `tokenizer.json` and `probe.json`. The browser uses the model hash as the Cache API version (`web/model.js:9-18`):

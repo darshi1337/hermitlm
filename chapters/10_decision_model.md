@@ -359,7 +359,7 @@ $$ \Large \text{tokenizer fingerprint} = \texttt{2cb03484}\ldots $$
 
 $$ \Large \text{prompt fingerprint} = \texttt{56b51898}\ldots $$
 
-$$ \Large \text{schema version} = 2, \quad \text{dtype} = \text{float32} $$
+$$ \Large \text{schema version} = 3, \quad \text{dtype} = \text{float32} $$
 
 Loading a head after a retrain or a prompt-template change raises an error instead of scoring with stale weights.
 
@@ -403,7 +403,7 @@ $$ \Large \text{bias bytes} = 37 \times 4 = 148 \text{ bytes} $$
 
 $$ \Large \text{probe bytes} = 47{,}360 + 148 = 47{,}508 \text{ bytes} $$
 
-$$ \Large \text{browser JSON} = 262{,}705 \text{ bytes} $$
+$$ \Large \text{browser JSON} = 263{,}430 \text{ bytes} $$
 
 $$ \Large \text{JSON to probe ratio} = \frac{262{,}502}{47{,}508} = 5.5\times $$
 

@@ -13,6 +13,8 @@ This is a chapter set that explains **how HermitLM is built, trained, tuned, exp
 
 Every chapter ends with a **Math and calculations** section. Chapter 14 collects every formula into one sheet.
 
+For shorter topic summaries, see the split [README index](../README.md) and the files under `docs/`.
+
 ---
 
 ## Chapters

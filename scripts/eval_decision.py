@@ -8,6 +8,9 @@ log T (binary heads use Platt-smoothed targets) and applied to the test split.
 Usage:
     conda run -n hermit python scripts/eval_decision.py \
         --checkpoint checkpoints/best_model.pt --max-n 1000 --out-dir eval_out/decision
+    # Recompute every metric from a saved per-item dump, with no model pass:
+    python scripts/eval_decision.py --from-npz eval_out/decision/items.npz \
+        --out-dir eval_out/decision_replay
 """
 
 import argparse
@@ -15,6 +18,7 @@ import json
 import os
 import random
 
+import numpy as np
 import torch
 
 from hermitlm.tools.calibration import InsufficientDataError, fit_temperature
@@ -23,6 +27,7 @@ from hermitlm.tools.decision_model import (
     FINE21_ORDER,
     FINE_TO_COARSE,
     OPTION_LETTERS,
+    TOOL_CLASSES,
     DecisionModel,
     ProbeDecisionModel,
     format_prompt,
@@ -38,6 +43,7 @@ from hermitlm.tools.metrics import (
     paired_bootstrap_diff,
 )
 from hermitlm.tools.prior import apply_prior
+from hermitlm.tools.router import keyword_tool
 
 N_BINS = 10
 
@@ -290,6 +296,370 @@ def _stored_gate_report(probe_path: str) -> dict | None:
     }
 
 
+def _pack_json(obj) -> np.ndarray:
+    """Store a small JSON blob as a uint8 array (npz stays pickle-free)."""
+    return np.frombuffer(json.dumps(obj).encode("utf-8"), dtype=np.uint8)
+
+
+def _unpack_json(arr) -> dict:
+    return json.loads(bytes(np.asarray(arr, dtype=np.uint8)).decode("utf-8"))
+
+
+def _tool_eval_arrays(
+    checkpoint: str,
+    tokenizer_path: str,
+    probe_path: str,
+    tool_probe_path: str,
+    tool_eval_path: str,
+    device: str,
+):
+    """Return (gold, tool_pred, keyword_pred) label lists for tool_eval.jsonl."""
+    model = ProbeDecisionModel(checkpoint, tokenizer_path, probe_path, device)
+    if not model.load_tool_heads(tool_probe_path):
+        return None
+    gold, tool_pred, keyword_pred = [], [], []
+    with open(tool_eval_path, encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            query, label = row.get("input"), row.get("label")
+            if not query or label not in TOOL_CLASSES:
+                continue
+            predicted = model.predict_tool(query)
+            gold.append(label)
+            tool_pred.append(predicted[0] if predicted else "chat")
+            # Pure keyword decision: no Wolfram/DuckDuckGo calls.
+            keyword_pred.append(keyword_tool(query))
+    return gold, tool_pred, keyword_pred
+
+
+def _tool_keyword_diff(gold, tool_pred, keyword_pred, n_boot: int, seed: int) -> dict:
+    """Paired bootstrap of tool-head minus keyword decisions, per metric."""
+    if not gold:
+        return {}
+    n = len(gold)
+    target = torch.tensor([TOOL_CLASSES.index(v) for v in gold])
+    tools = torch.tensor([TOOL_CLASSES.index(v) for v in tool_pred])
+    keywords = torch.tensor([TOOL_CLASSES.index(v) for v in keyword_pred])
+    correct_tool = (tools == target).float()
+    correct_keyword = (keywords == target).float()
+    specs = {
+        "accuracy": (
+            lambda idx: float(correct_keyword[idx].mean()),
+            lambda idx: float(correct_tool[idx].mean()),
+        ),
+        "macro_f1": (
+            lambda idx: float(macro_f1(keywords[idx], target[idx], len(TOOL_CLASSES))),
+            lambda idx: float(macro_f1(tools[idx], target[idx], len(TOOL_CLASSES))),
+        ),
+    }
+    out = {}
+    for offset, (name, (stat_keyword, stat_tool)) in enumerate(specs.items()):
+        res = paired_bootstrap_diff(
+            stat_keyword, stat_tool, n, n_boot=max(1, n_boot), seed=seed + offset
+        )
+        out[name] = {"diff": round(res["diff"], 4), "ci": [round(v, 4) for v in res["ci"]]}
+    out["tool_accuracy"] = round(float(correct_tool.mean()), 4)
+    out["keyword_accuracy"] = round(float(correct_keyword.mean()), 4)
+    out["n"] = n
+    return out
+
+
+def _save_items(path: str, items: dict) -> None:
+    """Save per-item scores so a second run can recompute without a model."""
+    arrays = {
+        "method": np.array(items["method"]),
+        "n_cal": np.array(items["n_cal"]),
+        "labels": np.array(items["labels"], dtype="<U1"),
+        "fine_types": np.array(items["fine_types"], dtype="<U24"),
+        "y_confused": np.array(items["y_confused"], dtype=np.int64),
+        "best_t": np.array(items["best_t"]),
+        "gate_json": _pack_json(items.get("gate_calibration") or {}),
+        "order_flip": _pack_json(items.get("order_flip") or {}),
+        "tool_gold": np.array(items.get("tool_gold") or [], dtype="<U8"),
+        "tool_pred": np.array(items.get("tool_pred") or [], dtype="<U8"),
+        "keyword_pred": np.array(items.get("keyword_pred") or [], dtype="<U8"),
+    }
+    for key in ("raw7", "rawb", "raw21", "logits", "p_yes_test"):
+        value = items.get(key)
+        if value is not None:
+            arrays[key] = np.asarray(value, dtype=np.float64)
+    for key in (
+        "best_t_bin", "temperature21", "clarify_threshold",
+        "escalation_threshold", "target_error",
+    ):
+        if key in items:
+            arrays[key] = np.array(items[key])
+    np.savez_compressed(path, **arrays)
+
+
+def _report_from_npz(path: str, bootstrap: int, seed: int) -> dict:
+    """Recompute the whole report from a saved per-item dump, no model pass."""
+    with np.load(path, allow_pickle=False) as d:
+        method = str(np.asarray(d["method"]).item())
+        n_cal = int(np.asarray(d["n_cal"]).item())
+        y_true = [str(v) for v in d["labels"]]
+        fine_types = [str(v) for v in d["fine_types"]]
+        y_confused = [int(v) for v in d["y_confused"]]
+        y_test = y_true[n_cal:]
+        best_t = float(np.asarray(d["best_t"]).item())
+        gate = _unpack_json(d["gate_json"])
+        order_flip = _unpack_json(d["order_flip"])
+        tool_gold = [str(v) for v in d["tool_gold"]]
+        tool_pred = [str(v) for v in d["tool_pred"]]
+        keyword_pred = [str(v) for v in d["keyword_pred"]]
+        p_yes_test = [float(v) for v in d["p_yes_test"]] if "p_yes_test" in d else []
+
+        if method == "probe":
+            raw7 = torch.tensor(np.asarray(d["raw7"]), dtype=torch.float64)
+            rawb = torch.tensor(np.asarray(d["rawb"]), dtype=torch.float64) if "rawb" in d else None
+            raw21 = torch.tensor(np.asarray(d["raw21"]), dtype=torch.float64) if "raw21" in d else None
+            best_t_bin = float(np.asarray(d["best_t_bin"]).item()) if "best_t_bin" in d else 1.0
+            clarify = float(np.asarray(d["clarify_threshold"]).item())
+            escalation = float(np.asarray(d["escalation_threshold"]).item())
+            target_error = float(np.asarray(d["target_error"]).item())
+
+            probas_t = torch.softmax(raw7[n_cal:] / best_t, dim=-1).tolist()
+            probas = [{letter: float(p) for letter, p in zip(OPTION_LETTERS, row)} for row in probas_t]
+            y_pred = [max(OPTION_LETTERS, key=lambda letter: p[letter]) for p in probas]
+            report = {
+                "probed": summarize(y_test, y_pred, probas, best_t, n_boot=bootstrap, seed=seed),
+                "cal_n": n_cal,
+            }
+            report["probed"]["cal_n"] = n_cal
+            uncal = torch.softmax(raw7[n_cal:], dim=-1).tolist()
+            uncal_probas = [
+                {letter: float(p) for letter, p in zip(OPTION_LETTERS, row)} for row in uncal
+            ]
+            report["paired"] = paired_report(
+                uncal_probas, probas, y_test, n_boot=bootstrap, seed=seed + 10
+            )
+
+            if rawb is not None:
+                cal_pb = torch.softmax(rawb[:n_cal] / best_t_bin, dim=-1)[:, 1]
+                c_cal = torch.tensor(y_confused[:n_cal])
+                best_thr, best_f1 = 0.5, -1.0
+                for thr in [0.3, 0.5, 0.7, 0.8, 0.9, 0.95]:
+                    pr = (cal_pb >= thr).long()
+                    tp = int(((pr == 1) & (c_cal == 1)).sum())
+                    fp = int(((pr == 1) & (c_cal == 0)).sum())
+                    fn = int(((pr == 0) & (c_cal == 1)).sum())
+                    f1 = 2 * tp / (2 * tp + fp + fn) if tp else 0.0
+                    if f1 > best_f1:
+                        best_f1, best_thr = f1, thr
+                test_pb = torch.softmax(rawb[n_cal:] / best_t_bin, dim=-1)[:, 1]
+                bin_pred = [1 if p >= best_thr else 0 for p in test_pb]
+                yc = y_confused[n_cal:]
+                tp = sum(1 for t, p in zip(yc, bin_pred) if t == p == 1)
+                fp = sum(1 for t, p in zip(yc, bin_pred) if t == 0 and p == 1)
+                fn = sum(1 for t, p in zip(yc, bin_pred) if t == 1 and p == 0)
+                report["confused_detector"] = {
+                    "threshold": best_thr,
+                    "precision": round(tp / (tp + fp), 4) if tp + fp else 0.0,
+                    "recall": round(tp / (tp + fn), 4) if tp + fn else 0.0,
+                    "support": sum(yc),
+                    "temperature": best_t_bin,
+                }
+                report["confused_detector"].update(
+                    _confused_ci(test_pb, yc, best_thr, bootstrap, seed + 20)
+                )
+                conf_test = [max(p.values()) for p in probas]
+                p_yes = p_yes_test or [float(v) for v in test_pb]
+                clarify_flags = [c < clarify for c in conf_test]
+                escalate_flags = [p >= escalation for p in p_yes]
+                in_scope = [i for i, label in enumerate(yc) if label == 0]
+                out_scope = [i for i, label in enumerate(yc) if label == 1]
+                report["gate_calibration"] = {
+                    "clarify_threshold": clarify,
+                    "escalation_threshold": escalation,
+                    "target_error": target_error,
+                    "clarify_coverage": round(
+                        sum(not clarify_flags[i] and not escalate_flags[i] for i in in_scope)
+                        / len(in_scope), 4
+                    ) if in_scope else 0.0,
+                    "escalation_coverage": round(
+                        sum(escalate_flags[i] for i in out_scope) / len(out_scope), 4
+                    ) if out_scope else 0.0,
+                    "abstention_rate": round(
+                        sum(a or b for a, b in zip(clarify_flags, escalate_flags)) / len(yc), 4
+                    ) if yc else 0.0,
+                    "n": len(yc),
+                    "source": "test split",
+                }
+
+            if raw21 is not None and len(fine_types) == len(raw21):
+                y21 = torch.tensor([FINE21_ORDER.index(t) for t in fine_types])
+                best_t21 = _fit_or_default(
+                    raw21[:n_cal], y21[:n_cal],
+                    float(np.asarray(d["temperature21"]).item()) if "temperature21" in d else 1.0,
+                )
+                pred21 = raw21[n_cal:].argmax(-1).tolist()
+                true21 = y21[n_cal:].tolist()
+                acc21 = sum(1 for t, p in zip(true21, pred21) if t == p) / len(true21)
+                f1s, per_fine = [], {}
+                for i, fine in enumerate(FINE21_ORDER):
+                    tp = sum(1 for t, p in zip(true21, pred21) if t == p == i)
+                    fp = sum(1 for t, p in zip(true21, pred21) if t != i == p)
+                    fn = sum(1 for t, p in zip(true21, pred21) if t == i != p)
+                    prec = tp / (tp + fp) if tp + fp else 0.0
+                    rec = tp / (tp + fn) if tp + fn else 0.0
+                    f1 = 2 * prec * rec / (prec + rec) if prec + rec else 0.0
+                    f1s.append(f1)
+                    per_fine[fine] = {"f1": round(f1, 4), "support": sum(1 for t in true21 if t == i)}
+                report["fine21"] = {
+                    "temperature": best_t21,
+                    "accuracy": round(acc21, 4),
+                    "macro_f1": round(sum(f1s) / len(f1s), 4),
+                    "per_fine": per_fine,
+                }
+            report["calibrated"] = report["probed"]
+        else:
+            logits_matrix = torch.tensor(np.asarray(d["logits"]), dtype=torch.float64)
+            def probas_at(t: float, part: slice) -> list[dict[str, float]]:
+                scaled = torch.softmax(logits_matrix[part] / t, dim=-1).tolist()
+                return [{letter: float(p) for letter, p in zip(OPTION_LETTERS, row)} for row in scaled]
+            def preds_of(probas: list[dict[str, float]]) -> list[str]:
+                return [max(OPTION_LETTERS, key=lambda letter: p[letter]) for p in probas]
+            base = probas_at(1.0, slice(n_cal, None))
+            calibrated = probas_at(best_t, slice(n_cal, None))
+            report = {
+                "uncalibrated": summarize(y_test, preds_of(base), base, 1.0, n_boot=bootstrap, seed=seed),
+                "calibrated": summarize(
+                    y_test, preds_of(calibrated), calibrated, best_t,
+                    n_boot=bootstrap, seed=seed + 1,
+                ),
+                "paired": paired_report(base, calibrated, y_test, n_boot=bootstrap, seed=seed + 2),
+                "cal_n": n_cal,
+            }
+            if order_flip:
+                report["order_flip"] = order_flip
+            if gate:
+                report["gate_calibration"] = gate
+
+    report["tool_keyword_diff"] = _tool_keyword_diff(
+        tool_gold, tool_pred, keyword_pred, bootstrap, seed + 30
+    )
+    return report, method
+
+
+def _write_report(report: dict, out_dir: str, method: str) -> dict:
+    with open(os.path.join(out_dir, "report.json"), "w") as f:
+        json.dump(report, f, indent=2)
+
+    lines = [f"# Decision-model eval ({method})", ""]
+    n_cal = int(report.get("cal_n", 0))
+    n_test = sum(int(s.get("n", 0)) for k, s in report.items()
+                 if k in ("uncalibrated", "calibrated", "probed"))
+    lines.append(f"calibration split: {n_cal} rows; test split: {n_test} rows")
+    lines.append("")
+    if "confused_detector" in report:
+        cd = report["confused_detector"]
+        lines.append(
+            f"confused detector @{cd['threshold']}: precision={cd['precision']} recall={cd['recall']} "
+            f"support={cd['support']} (T={cd['temperature']})"
+        )
+        if "precision_ci" in cd:
+            lines.append(f"precision 95% CI={cd['precision_ci']} recall 95% CI={cd['recall_ci']}")
+        lines.append("")
+    if "gate_calibration" in report:
+        g = report["gate_calibration"]
+        lines.append("## conformal gates (empirical coverage on the test split)")
+        lines.append("")
+        lines.append(
+            f"source: {g.get('source', 'calibration split')}; "
+            f"target error={g['target_error']}; n={g['n']}; "
+            f"abstention rate={g['abstention_rate']}"
+        )
+        lines.append("")
+        lines.append("| gate | threshold | coverage |")
+        lines.append("| --- | ---: | ---: |")
+        lines.append(
+            f"| clarify (confidence below) | {g['clarify_threshold']} "
+            f"| {g['clarify_coverage']} |"
+        )
+        lines.append(
+            f"| escalation (p_yes at or above) | {g['escalation_threshold']} "
+            f"| {g['escalation_coverage']} |"
+        )
+        lines.append("")
+    if "order_flip" in report:
+        of = report["order_flip"]
+        lines.append("## order robustness (zero-shot)")
+        lines.append("")
+        lines.append(
+            f"option order permuted by {of['permutation_shift']} of {len(OPTION_LETTERS)}; "
+            f"L0 averages {of['rotations']} evenly spaced rotations; n={of['n']}"
+        )
+        lines.append("")
+        lines.append("| variant | order-flip rate |")
+        lines.append("| --- | --- |")
+        lines.append(f"| raw (1 pass) | {of['raw']} |")
+        lines.append(f"| L0 ({of['rotations']} passes) | {of['L0']} |")
+        lines.append("")
+    for key, s in report.items():
+        if key in ("grid", "paired", "confused_detector", "gate_calibration", "fine21", "calibrated", "cal_n", "order_flip", "tool_keyword_diff"):
+            continue
+        lines.append(f"## {key} (T={s['temperature']}, n={s['n']})")
+        lines.append(f"accuracy={s['accuracy']} nll={s['nll']} ece={s['ece']} macro_f1={s['macro_f1']}")
+        if "accuracy_ci" in s:
+            lines.append(
+                f"95% CI: accuracy={s['accuracy_ci']} nll={s['nll_ci']} "
+                f"ece={s['ece_ci']} macro_f1={s['macro_f1_ci']}"
+            )
+        lines.append("")
+        lines.append("| opt | name | prec | rec | f1 | support |")
+        lines.append("| --- | --- | --- | --- | --- | --- |")
+        for letter in OPTION_LETTERS:
+            c = s["per_class"][letter]
+            lines.append(f"| {letter} | {c['name']} | {c['precision']} | {c['recall']} | {c['f1']} | {c['support']} |")
+        lines.append("")
+        lines.append("| bin | count | confidence | accuracy |")
+        lines.append("| --- | --- | --- | --- |")
+        for b in s["bins"]:
+            lines.append(f"| {b['bin']} | {b['count']} | {b['confidence']} | {b['accuracy']} |")
+        lines.append("")
+    if report.get("paired"):
+        lines.append("## paired: calibrated - uncalibrated")
+        lines.append("")
+        lines.append("| metric | diff | 95% CI |")
+        lines.append("| --- | --- | --- |")
+        for metric, res in report["paired"].items():
+            lines.append(f"| {metric} | {res['diff']} | {res['ci']} |")
+        lines.append("")
+    if report.get("tool_keyword_diff"):
+        d = report["tool_keyword_diff"]
+        lines.append("## paired: tool head - keywords")
+        lines.append("")
+        lines.append(
+            f"n={d['n']}; tool accuracy={d['tool_accuracy']}; "
+            f"keyword accuracy={d['keyword_accuracy']}"
+        )
+        lines.append("")
+        lines.append("| metric | diff (tool - keywords) | 95% CI |")
+        lines.append("| --- | ---: | --- |")
+        for metric in ("accuracy", "macro_f1"):
+            res = d[metric]
+            lines.append(f"| {metric} | {res['diff']} | {res['ci']} |")
+        lines.append("")
+    if "fine21" in report:
+        f21 = report["fine21"]
+        lines.append(f"## fine21 (T={f21['temperature']})")
+        lines.append(f"accuracy={f21['accuracy']} macro_f1={f21['macro_f1']}")
+        lines.append("")
+        lines.append("| fine type | f1 | support |")
+        lines.append("| --- | --- | --- |")
+        for fine in FINE21_ORDER:
+            c = f21["per_fine"][fine]
+            lines.append(f"| {fine} | {c['f1']} | {c['support']} |")
+        lines.append("")
+    with open(os.path.join(out_dir, "report.md"), "w") as f:
+        f.write("\n".join(lines))
+    print("\n".join(lines))
+    return report
+
+
 def run_eval(
     checkpoint: str = "checkpoints/best_model.pt",
     tokenizer_path: str = "data/tokenizer.json",
@@ -304,7 +674,16 @@ def run_eval(
     bootstrap: int = 1000,
     seed: int = 0,
     rotations: int = 2,
+    from_npz: str | None = None,
+    tool_probe_path: str = "checkpoints/decision_tool_probe.pt",
+    tool_eval_path: str = "data/tool_eval.jsonl",
 ) -> dict:
+    os.makedirs(out_dir, exist_ok=True)
+    if from_npz:
+        report, replay_method = _report_from_npz(from_npz, bootstrap, seed)
+        _write_report(report, out_dir, replay_method)
+        return report
+
     from hermitlm.training.train import accelerator_available
 
     resolved_device = torch.device(device)
@@ -318,6 +697,7 @@ def run_eval(
     if len(rows) < 2:
         raise ValueError("need at least two eval rows")
     y_true = [FINE_TO_COARSE[r["type"]] for r in rows]
+    fine_types = [r["type"] for r in rows]
     y_confused = [1 if r["type"] == "confused" else 0 for r in rows]
     n_cal = max(1, min(cal_n, len(rows) // 2))
 
@@ -456,6 +836,24 @@ def run_eval(
                 "per_fine": per_fine,
             }
         report["calibrated"] = report["probed"]
+        saved_items = {
+            "method": method,
+            "n_cal": n_cal,
+            "labels": y_true,
+            "fine_types": fine_types,
+            "y_confused": y_confused,
+            "best_t": best_t,
+            "best_t_bin": best_t_bin,
+            "raw7": raw7.detach().cpu(),
+            "rawb": rawb.detach().cpu(),
+            "raw21": torch.stack(raw21).detach().cpu() if raw21 else None,
+            "p_yes_test": p_yes_test,
+            "temperature21": float(model.temperature21),
+            "clarify_threshold": float(model.clarify_threshold),
+            "escalation_threshold": float(model.escalation_threshold),
+            "target_error": float(model.target_error),
+            "gate_calibration": report["gate_calibration"],
+        }
     else:
         model = DecisionModel(checkpoint, tokenizer_path, device)
         order_flip = _order_flip_rate(rows, model, rotations=rotations)
@@ -508,102 +906,33 @@ def run_eval(
         stored_gates = _stored_gate_report(probe_path)
         if stored_gates is not None:
             report["gate_calibration"] = stored_gates
+        saved_items = {
+            "method": method,
+            "n_cal": n_cal,
+            "labels": y_true,
+            "fine_types": fine_types,
+            "y_confused": y_confused,
+            "best_t": best_t,
+            "logits": logits_matrix.detach().cpu(),
+            "order_flip": order_flip,
+            "gate_calibration": report.get("gate_calibration", {}),
+        }
 
-    with open(os.path.join(out_dir, "report.json"), "w") as f:
-        json.dump(report, f, indent=2)
-
-    lines = [f"# Decision-model eval ({method})", ""]
-    lines.append(f"calibration split: {n_cal} rows; test split: {len(rows) - n_cal} rows")
-    lines.append("")
-    if "confused_detector" in report:
-        cd = report["confused_detector"]
-        lines.append(
-            f"confused detector @{cd['threshold']}: precision={cd['precision']} recall={cd['recall']} "
-            f"support={cd['support']} (T={cd['temperature']})"
+    tool = _tool_eval_arrays(
+        checkpoint, tokenizer_path, probe_path, tool_probe_path, tool_eval_path, device
+    )
+    if tool:
+        gold, tool_pred, keyword_pred = tool
+        saved_items.update(
+            tool_gold=gold, tool_pred=tool_pred, keyword_pred=keyword_pred
         )
-        if "precision_ci" in cd:
-            lines.append(f"precision 95% CI={cd['precision_ci']} recall 95% CI={cd['recall_ci']}")
-        lines.append("")
-    if "gate_calibration" in report:
-        g = report["gate_calibration"]
-        lines.append("## conformal gates (empirical coverage on the test split)")
-        lines.append("")
-        lines.append(
-            f"source: {g.get('source', 'calibration split')}; "
-            f"target error={g['target_error']}; n={g['n']}; "
-            f"abstention rate={g['abstention_rate']}"
+        report["tool_keyword_diff"] = _tool_keyword_diff(
+            gold, tool_pred, keyword_pred, bootstrap, seed + 30
         )
-        lines.append("")
-        lines.append("| gate | threshold | coverage |")
-        lines.append("| --- | ---: | ---: |")
-        lines.append(
-            f"| clarify (confidence below) | {g['clarify_threshold']} "
-            f"| {g['clarify_coverage']} |"
-        )
-        lines.append(
-            f"| escalation (p_yes at or above) | {g['escalation_threshold']} "
-            f"| {g['escalation_coverage']} |"
-        )
-        lines.append("")
-    if "order_flip" in report:
-        of = report["order_flip"]
-        lines.append("## order robustness (zero-shot)")
-        lines.append("")
-        lines.append(
-            f"option order permuted by {of['permutation_shift']} of {len(OPTION_LETTERS)}; "
-            f"L0 averages {of['rotations']} evenly spaced rotations; n={of['n']}"
-        )
-        lines.append("")
-        lines.append("| variant | order-flip rate |")
-        lines.append("| --- | --- |")
-        lines.append(f"| raw (1 pass) | {of['raw']} |")
-        lines.append(f"| L0 ({of['rotations']} passes) | {of['L0']} |")
-        lines.append("")
-    for key in report:
-        if key in ("grid", "paired", "confused_detector", "gate_calibration", "fine21", "calibrated", "cal_n", "order_flip"):
-            continue
-        s = report[key]
-        lines.append(f"## {key} (T={s['temperature']}, n={s['n']})")
-        lines.append(f"accuracy={s['accuracy']} nll={s['nll']} ece={s['ece']} macro_f1={s['macro_f1']}")
-        if "accuracy_ci" in s:
-            lines.append(
-                f"95% CI: accuracy={s['accuracy_ci']} nll={s['nll_ci']} "
-                f"ece={s['ece_ci']} macro_f1={s['macro_f1_ci']}"
-            )
-        lines.append("")
-        lines.append("| opt | name | prec | rec | f1 | support |")
-        lines.append("| --- | --- | --- | --- | --- | --- |")
-        for letter in OPTION_LETTERS:
-            c = s["per_class"][letter]
-            lines.append(f"| {letter} | {c['name']} | {c['precision']} | {c['recall']} | {c['f1']} | {c['support']} |")
-        lines.append("")
-        lines.append("| bin | count | confidence | accuracy |")
-        lines.append("| --- | --- | --- | --- |")
-        for b in s["bins"]:
-            lines.append(f"| {b['bin']} | {b['count']} | {b['confidence']} | {b['accuracy']} |")
-        lines.append("")
-    if report.get("paired"):
-        lines.append("## paired: calibrated - uncalibrated")
-        lines.append("")
-        lines.append("| metric | diff | 95% CI |")
-        lines.append("| --- | --- | --- |")
-        for metric, res in report["paired"].items():
-            lines.append(f"| {metric} | {res['diff']} | {res['ci']} |")
-        lines.append("")
-    if "fine21" in report:
-        f21 = report["fine21"]
-        lines.append(f"## fine21 (T={f21['temperature']})")
-        lines.append(f"accuracy={f21['accuracy']} macro_f1={f21['macro_f1']}")
-        lines.append("")
-        lines.append("| fine type | f1 | support |")
-        lines.append("| --- | --- | --- |")
-        for fine in FINE21_ORDER:
-            c = f21["per_fine"][fine]
-            lines.append(f"| {fine} | {c['f1']} | {c['support']} |")
-        lines.append("")
-    with open(os.path.join(out_dir, "report.md"), "w") as f:
-        f.write("\n".join(lines))
-    print("\n".join(lines))
+    else:
+        report["tool_keyword_diff"] = {}
+    _save_items(os.path.join(out_dir, "items.npz"), saved_items)
+    _write_report(report, out_dir, method)
     return report
 
 
@@ -623,6 +952,9 @@ if __name__ == "__main__":
     parser.add_argument("--bootstrap", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--rotations", type=int, default=2, help="L0 rotations for the zero-shot order-flip report")
+    parser.add_argument("--from-npz", default=None, help="recompute metrics from items.npz, no model pass")
+    parser.add_argument("--tool-probe", default="checkpoints/decision_tool_probe.pt")
+    parser.add_argument("--tool-eval", default="data/tool_eval.jsonl")
     args = parser.parse_args()
     run_eval(
         args.checkpoint,
@@ -637,4 +969,7 @@ if __name__ == "__main__":
         bootstrap=args.bootstrap,
         seed=args.seed,
         rotations=args.rotations,
+        from_npz=args.from_npz,
+        tool_probe_path=args.tool_probe,
+        tool_eval_path=args.tool_eval,
     )

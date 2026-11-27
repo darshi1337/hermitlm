@@ -119,6 +119,11 @@ Uses the model's own next-token logits at constrained option-token IDs (`decisio
 
 Support sums to 1,000: `a=144, b=167, c=100, d=163, e=120, f=100, g=206`.
 
+A newer run is tabulated in the README with a 95% CI for every metric. `eval_decision.py` also
+saves `items.npz` next to `report.json`; `--from-npz` recomputes all metrics from it without a
+model pass (keep the same `--bootstrap` and `--seed` for identical intervals). Every report now
+includes a paired tool-head-vs-keywords diff on the 80 hand-written tool-eval queries.
+
 The ECE calculation: all rows fall in one confidence bin with mean confidence 0.17 and accuracy 0.214, so `ECE = |0.17 − 0.214| = 0.044`. After calibration the mean confidence drops to 0.1516 and ECE rises to 0.0624, even though NLL improves. One metric can improve while another gets worse.
 
 ### Probe method

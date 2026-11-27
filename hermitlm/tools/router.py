@@ -36,6 +36,33 @@ def parse_tool_tag(text):
         return None
     return m.group(1).lower(), m.group(2).strip()
 
+
+def keyword_tool(user_input):
+    """Return the 4-way keyword/tag decision without any network dispatch.
+
+    Mirrors the decision order of `route()` (tag, FAQ, math, web) but maps the
+    no-tool outcome to `chat`. Evaluators can compare it with the tool head
+    without triggering Wolfram, DuckDuckGo, or any other side effect.
+    """
+    q = (user_input or "").lower()
+    tag = parse_tool_tag(user_input)
+    if tag:
+        name = tag[0]
+        if name in ("math", "wolfram"):
+            return "math"
+        if name in ("search", "web"):
+            return "web"
+        if name == "faq":
+            return "faq"
+    if _faq(user_input):
+        return "faq"
+    if _hit(MATH_KW, q) or MATH_RE.search(q):
+        return "math"
+    if _hit(WEB_KW, q):
+        return "web"
+    return "chat"
+
+
 def route(user_input):
     """Return (tool_name, result) or (None, None) if no tool applies."""
     q = user_input.lower()

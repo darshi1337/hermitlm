@@ -221,6 +221,23 @@ calibrated-minus-uncalibrated table. Head files carry schema version 2, SHA-256 
 checkpoint, tokenizer and prompt template, plus dtype and selected layer. Loading a head after
 a retrain or prompt change raises an error instead of scoring with stale weights.
 
+### Decision metrics with 95% bootstrap intervals
+
+From `eval_out/decision_order/report.json` (zero-shot logits, T fitted on a disjoint split):
+
+| Metric | Uncalibrated (T=1) [95% CI] | Calibrated [95% CI] | Paired diff [95% CI] |
+|---|---|---|---|
+| Accuracy | 0.0900 [0.0500, 0.1300] | 0.0900 [0.0550, 0.1350] | 0.0000 [0.0000, 0.0000] |
+| NLL | 4.6204 [4.3678, 4.8493] | 1.9633 [1.9526, 1.9727] | −2.6571 [−2.8888, −2.4303] |
+| ECE | 0.8473 [0.8036, 0.8840] | 0.0863 [0.0460, 0.1266] | −0.7610 [−0.7705, −0.7494] |
+| Macro F1 | 0.0236 [0.0136, 0.0329] | 0.0236 [0.0149, 0.0329] | 0.0000 [0.0000, 0.0000] |
+
+`scripts/eval_decision.py` writes `items.npz` beside each report. Replay with
+`--from-npz eval_out/decision_order/items.npz --bootstrap 1000 --seed 0` to recompute every
+metric without another model pass; pass the same bootstrap and seed as the original run to get
+identical intervals. Reports also include a paired **tool head vs keywords** row on
+`data/tool_eval.jsonl` (tool head 0.7250, keywords 0.5875, diff +0.1375).
+
 The 21-way head (`FINE21_ORDER` in `hermitlm/tools/decision_model.py`) reaches accuracy 0.9932
 and macro F1 0.9930 on the template split. Those numbers flatter the model. The training data now
 includes ~4,200 hand-written natural paraphrases, but the only honest measure is the 126-row
@@ -279,8 +296,9 @@ the head-selection tooling remains available for future data improvements.
 queries) to `data/tool_train.jsonl` / `data/tool_eval.jsonl`. `scripts/train_tool_probe.py` trains
 a 4-way head (math/web/faq/chat) into `checkpoints/decision_tool_probe.pt`. Routing order is
 tag, then keywords (93% precise when they fire), then the probe on the residue, then out-of-scope
-escalation using the calibrated `p_yes` from `head_yes` (`HERMIT_YES_THRESHOLD`, default 0.5).
-Older probes without that head fall back to `p_confused`. Training now includes 50 extra natural web queries and 28 hard negatives (chat/FAQ
+escalation using the calibrated `p_yes` from `head_yes` and the fitted `escalation_threshold` in
+the probe artifact (0.4248 in the shipped probe). Older probes without that head fall back to
+`p_confused`. Training now includes 50 extra natural web queries and 28 hard negatives (chat/FAQ
 messages containing web trigger words). Scores on the 80 hand-authored eval queries after the
 latest retrain: probe **0.7250** (math 0.80, web 0.65, faq 0.60, chat 0.85), up from 0.6125 —
 the web class went from 0.15 to 0.65.

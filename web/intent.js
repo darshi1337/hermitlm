@@ -3,11 +3,11 @@
 // (see HermitModel.classify in model.js). This module applies the exported
 // linear heads (web/probe.json) with temperature-scaled softmax.
 
-export const CONFUSED_THRESHOLD = 0.9;
-// Decision boundary of the calibrated yes/no head (HERMIT_YES_THRESHOLD).
-// CONFUSED_THRESHOLD remains as the fallback for legacy probes without it.
-export const YES_THRESHOLD = 0.5;
-export const CLARIFY_THRESHOLD = 0.75;
+// Fallbacks for probe JSON files fitted before the conformal gates existed.
+// A calibrated probe carries clarify_threshold / escalation_threshold, and
+// both gates read those stored values rather than any hard-coded boundary.
+const LEGACY_CLARIFY_THRESHOLD = 0.75;
+const LEGACY_ESCALATION_THRESHOLD = 0.5;
 
 export function linear(hidden, weight, bias) {
   // hidden: Float32Array/number[n], weight: number[out][n], bias: number[out]
@@ -69,6 +69,8 @@ export function classifyIntent(lastHidden, probe) {
     // Debiasing provenance, matching classify_intent() in router.py.
     level: Array.isArray(probe.priors?.coarse) && lambda > 0 ? "L0" : "raw",
     rotations: 1,
+    clarify_threshold: probe.clarify_threshold ?? LEGACY_CLARIFY_THRESHOLD,
+    escalation_threshold: probe.escalation_threshold ?? LEGACY_ESCALATION_THRESHOLD,
   };
 }
 

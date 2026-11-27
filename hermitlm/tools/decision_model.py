@@ -26,6 +26,12 @@ from hermitlm.tools.heads import FittedHead
 from hermitlm.tools.prior import apply_prior
 from hermitlm.training.model import HermitLM
 
+# Fallbacks for probe artifacts fitted before the conformal gates existed.
+# They are deliberately local to the artifact loader: runtime gates read the
+# stored values, not the environment thresholds in hermitlm/settings.py.
+LEGACY_CLARIFY_THRESHOLD = 0.75
+LEGACY_ESCALATION_THRESHOLD = 0.5
+
 # Coarse intent mapping: 7 balanced buckets covering all 21 fine types.
 # Bucket sizes on train.jsonl (95k) stay within a factor of two:
 # a~14.9k b~14.8k c~11.9k d~14.8k e~11.9k f~9.0k g~17.9k
@@ -330,6 +336,15 @@ class ProbeDecisionModel:
         self.score_labels, _ = get_label_ids(self.tokenizer, labels)
         self.score_levels = [float(v) for v in probe.get("score_levels", [])]
         self.score_thresholds = [float(v) for v in probe.get("score_thresholds", [])]
+        self.clarify_threshold = float(probe.get("clarify_threshold", LEGACY_CLARIFY_THRESHOLD))
+        self.escalation_threshold = float(
+            probe.get("escalation_threshold", LEGACY_ESCALATION_THRESHOLD)
+        )
+        self.target_error = float(probe.get("target_error", 0.1))
+        self.threshold_coverage = {
+            str(k): float(v) for k, v in probe.get("threshold_coverage", {}).items()
+        }
+        self.threshold_abstention = float(probe.get("threshold_abstention", 0.0))
         self.tool_head = None
         self.tool_layer = None
 
@@ -557,6 +572,15 @@ def export_probe(probe_path: str, output_path: str) -> dict:
     for key in ("score_levels", "score_thresholds", "score_labels"):
         if key in probe:
             data[key] = probe[key]
+    # Split-conformal gates. Only store plain JSON numbers so the browser and
+    # the API read exactly the same cutoffs (old artifacts simply omit them).
+    for key in ("clarify_threshold", "escalation_threshold", "target_error", "threshold_abstention"):
+        if key in probe:
+            data[key] = float(probe[key])
+    if "threshold_coverage" in probe:
+        data["threshold_coverage"] = {
+            str(name): float(value) for name, value in probe["threshold_coverage"].items()
+        }
     # Priors are label-free and apply to both legacy and selected artifacts.
     # Export them even when empty so the browser sees the same payload the API
     # loads (intent.js checks probe.priors?.coarse).

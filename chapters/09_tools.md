@@ -166,7 +166,7 @@ Per-class accuracy on the 80-row eval set: math 0.80 (16/20), web 0.65 (13/20), 
 172:             probe_tool, probe_result = _dispatch_probe(decision["label"], user_input)
 ...
 175:     if tool is None and intent is not None:
-176:         threshold = YES_THRESHOLD if confused_threshold is None else confused_threshold
+176:         threshold = probe.escalation_threshold if confused_threshold is None else confused_threshold
 177:         if intent.get("p_yes", intent["p_confused"]) >= threshold:
 178:             try:
 179:                 web_result = _web(user_input)
@@ -176,11 +176,15 @@ Settings (`hermitlm/settings.py:20-25`):
 
 | Threshold | Value | Meaning |
 |---|---:|---|
-| `YES_THRESHOLD` | 0.5 | Calibrated out-of-scope probability that triggers web search |
-| `CONFUSED_THRESHOLD` | 0.9 | Legacy fallback for probes without `head_yes` |
+| `escalation_threshold` (in probe artifact) | 0.4248 | Fitted P(out-of-scope) cutoff for web search |
+| `clarify_threshold` (in probe artifact) | 0.9884 | Below this confidence, ask a clarifying question |
 | `TOOL_THRESHOLD` | 0.5 | Minimum probe confidence to dispatch a tool |
 | `BEST_OF` | 3 | Candidates sampled before score-head reranking |
-| `CLARIFY_THRESHOLD` | 0.75 | Below this confidence, ask a clarifying question |
+
+Both decision thresholds are fitted split-conformally by
+`scripts/fit_decision_thresholds.py` (`--target-error 0.1`) and exported to
+`web/probe.json`; the legacy constants in `settings.py` are no longer read by
+the runtime gates.
 
 ### Worked escalation example
 
@@ -188,7 +192,7 @@ For a message like `quantum entanglement photosynthesis`:
 
 1. No tag, no FAQ hit, no keyword.
 2. Tool probe returns `chat` with confidence 0.42, below 0.5, so no dispatch.
-3. The yes head reports `p_yes = 0.97`, above 0.5.
+3. The yes head reports `p_yes = 0.97`, above the fitted 0.4248 cutoff.
 4. Web search runs and its result becomes the reply.
 
 With `p_yes = 0.10`, step 4 is skipped and the model answers normally.

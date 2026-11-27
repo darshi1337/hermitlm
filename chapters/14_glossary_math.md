@@ -48,10 +48,10 @@ From `checkpoints/config.json` and `hermitlm/config.py`:
 | Coarse intents | 7 (`a`–`g`) |
 | Fine intents | 21 |
 | Tool classes | 4 (math, web, faq, chat) |
-| `YES_THRESHOLD` | 0.5 |
-| `CONFUSED_THRESHOLD` (legacy fallback) | 0.9 |
+| `escalation_threshold` (fitted) | 0.4248 |
+| `clarify_threshold` (fitted) | 0.9884 |
+| conformal target error | 0.1 |
 | `TOOL_THRESHOLD` | 0.5 |
-| `CLARIFY_THRESHOLD` | 0.75 |
 | `BEST_OF` | 3 |
 | Default temperature / top-k / max tokens | 0.6 / 20 / 80 |
 | Browser top-p | 0.95 |
@@ -176,9 +176,9 @@ $$ \Large P(\text{check } k \text{ decides}) = \left(\prod_{i=1}^{k-1}(1-p_i)\ri
 
 $$ \Large \text{dispatch tool when probe confidence} \geq 0.5 $$
 
-$$ \Large \text{escalate to web when } p_{\text{yes}} \geq 0.5 $$
+$$ \Large \text{escalate to web when } p_{\text{yes}} \geq 0.4248 $$
 
-$$ \Large \text{ask for clarification when confidence} < 0.75 \text{ and } p_{\text{yes}} < 0.5 $$
+$$ \Large \text{ask for clarification when confidence} < 0.9884 \text{ and } p_{\text{yes}} < 0.4248 $$
 
 ### Chapter 10 — Decision model
 

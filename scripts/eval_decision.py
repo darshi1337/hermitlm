@@ -270,6 +270,26 @@ def _confused_ci(pb: torch.Tensor, labels: list[int], threshold: float, n_boot: 
     }
 
 
+def _stored_gate_report(probe_path: str) -> dict | None:
+    """Coverage fitted on the held-out calibration split, for any eval method."""
+    if not os.path.exists(probe_path):
+        return None
+    probe = torch.load(probe_path, map_location="cpu", weights_only=True)
+    if "clarify_threshold" not in probe:
+        return None
+    coverage = probe.get("threshold_coverage", {})
+    return {
+        "clarify_threshold": float(probe["clarify_threshold"]),
+        "escalation_threshold": float(probe["escalation_threshold"]),
+        "target_error": float(probe.get("target_error", 0.1)),
+        "clarify_coverage": float(coverage.get("clarify", 0.0)),
+        "escalation_coverage": float(coverage.get("escalation", 0.0)),
+        "abstention_rate": float(probe.get("threshold_abstention", 0.0)),
+        "n": int(probe.get("threshold_cal_n", 0)),
+        "source": "held-out calibration split",
+    }
+
+
 def run_eval(
     checkpoint: str = "checkpoints/best_model.pt",
     tokenizer_path: str = "data/tokenizer.json",
@@ -377,6 +397,36 @@ def run_eval(
             _confused_ci(test_pb, yc, best_thr, bootstrap, seed + 20)
         )
 
+        # Empirical coverage of the stored conformal gates on the held-out
+        # test half. Nothing here refits a threshold: the cutoffs came from
+        # scripts/fit_decision_thresholds.py and ride in the probe artifact.
+        p_yes_test = []
+        for i, row in enumerate(rows[n_cal:]):
+            yes = model.predict_yes(row["input"]) if model.has_yes_head else None
+            p_yes_test.append(yes[0] if yes is not None else float(test_pb[i]))
+        conf_test = [max(p.values()) for p in probas]
+        clarify_flags = [c < model.clarify_threshold for c in conf_test]
+        escalate_flags = [p >= model.escalation_threshold for p in p_yes_test]
+        in_scope = [i for i, label in enumerate(yc) if label == 0]
+        out_scope = [i for i, label in enumerate(yc) if label == 1]
+        report["gate_calibration"] = {
+            "clarify_threshold": model.clarify_threshold,
+            "escalation_threshold": model.escalation_threshold,
+            "target_error": model.target_error,
+            "clarify_coverage": round(
+                sum(not clarify_flags[i] and not escalate_flags[i] for i in in_scope)
+                / len(in_scope), 4
+            ) if in_scope else 0.0,
+            "escalation_coverage": round(
+                sum(escalate_flags[i] for i in out_scope) / len(out_scope), 4
+            ) if out_scope else 0.0,
+            "abstention_rate": round(
+                sum(a or b for a, b in zip(clarify_flags, escalate_flags)) / len(yc), 4
+            ) if yc else 0.0,
+            "n": len(yc),
+            "source": "test split",
+        }
+
         if raw21:
             raw21_t = torch.stack(raw21)
             y21 = torch.tensor(
@@ -455,6 +505,9 @@ def run_eval(
             "cal_n": n_cal,
             "order_flip": order_flip,
         }
+        stored_gates = _stored_gate_report(probe_path)
+        if stored_gates is not None:
+            report["gate_calibration"] = stored_gates
 
     with open(os.path.join(out_dir, "report.json"), "w") as f:
         json.dump(report, f, indent=2)
@@ -471,6 +524,27 @@ def run_eval(
         if "precision_ci" in cd:
             lines.append(f"precision 95% CI={cd['precision_ci']} recall 95% CI={cd['recall_ci']}")
         lines.append("")
+    if "gate_calibration" in report:
+        g = report["gate_calibration"]
+        lines.append("## conformal gates (empirical coverage on the test split)")
+        lines.append("")
+        lines.append(
+            f"source: {g.get('source', 'calibration split')}; "
+            f"target error={g['target_error']}; n={g['n']}; "
+            f"abstention rate={g['abstention_rate']}"
+        )
+        lines.append("")
+        lines.append("| gate | threshold | coverage |")
+        lines.append("| --- | ---: | ---: |")
+        lines.append(
+            f"| clarify (confidence below) | {g['clarify_threshold']} "
+            f"| {g['clarify_coverage']} |"
+        )
+        lines.append(
+            f"| escalation (p_yes at or above) | {g['escalation_threshold']} "
+            f"| {g['escalation_coverage']} |"
+        )
+        lines.append("")
     if "order_flip" in report:
         of = report["order_flip"]
         lines.append("## order robustness (zero-shot)")
@@ -486,7 +560,7 @@ def run_eval(
         lines.append(f"| L0 ({of['rotations']} passes) | {of['L0']} |")
         lines.append("")
     for key in report:
-        if key in ("grid", "paired", "confused_detector", "fine21", "calibrated", "cal_n", "order_flip"):
+        if key in ("grid", "paired", "confused_detector", "gate_calibration", "fine21", "calibrated", "cal_n", "order_flip"):
             continue
         s = report[key]
         lines.append(f"## {key} (T={s['temperature']}, n={s['n']})")

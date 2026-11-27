@@ -10,17 +10,20 @@ from hermitlm.settings import (
     BEST_OF,
     CHECKPOINT_PATH,
     CLARIFY,
-    CLARIFY_THRESHOLD,
     DEFAULT_MAX_TOKENS,
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_K,
     DEVICE,
     PERSONA_PROMPT,
     TOKENIZER_PATH,
-    YES_THRESHOLD,
 )
 from hermitlm.tools.db import init_db, insert_conversation, insert_intent, intent_stats
-from hermitlm.tools.decision_model import COARSE_NAMES, INTENT_PERSONA
+from hermitlm.tools.decision_model import (
+    COARSE_NAMES,
+    INTENT_PERSONA,
+    LEGACY_CLARIFY_THRESHOLD,
+    LEGACY_ESCALATION_THRESHOLD,
+)
 from hermitlm.tools.memory import extract_fact, get_memory, init_memory_db, save_memory
 from hermitlm.tools.router import get_probe, route_with_intent
 
@@ -65,6 +68,8 @@ class IntentResponse(BaseModel):
     p_yes: float = 0.0
     level: str = "raw"
     rotations: int = 1
+    clarify_threshold: float = LEGACY_CLARIFY_THRESHOLD
+    escalation_threshold: float = LEGACY_ESCALATION_THRESHOLD
 
 
 class ChatResponse(BaseModel):
@@ -94,7 +99,14 @@ def health():
 
 @app.get("/stats/intents")
 def stats_intents():
-    return intent_stats()
+    stats = intent_stats()
+    probe = get_probe()
+    stats["coverage"] = (
+        {k: float(v) for k, v in getattr(probe, "threshold_coverage", {}).items()}
+        if probe is not None else {}
+    )
+    stats["target_error"] = float(getattr(probe, "target_error", 0.1)) if probe else None
+    return stats
 
 
 def _respond(user_input, req):
@@ -150,15 +162,22 @@ def _respond(user_input, req):
 
         memory_context = ". ".join(memory_parts) + ". " if memory_parts else ""
 
+        clarify_threshold = float(
+            (intent or {}).get("clarify_threshold", LEGACY_CLARIFY_THRESHOLD)
+        )
+        escalation_threshold = float(
+            (intent or {}).get("escalation_threshold", LEGACY_ESCALATION_THRESHOLD)
+        )
         if (
             _tool is None
             and CLARIFY
             and intent is not None
-            and intent["confidence"] < CLARIFY_THRESHOLD
-            and intent.get("p_yes", intent["p_confused"]) < YES_THRESHOLD
+            and intent["confidence"] < clarify_threshold
+            and intent.get("p_yes", intent["p_confused"]) < escalation_threshold
             and len(intent.get("top2", [])) == 2
         ):
             (first, _), (second, _) = intent["top2"]
+            intent["clarified"] = True
             response = (
                 "Quick check before I scuttle ahead: is this about "
                 f"{COARSE_NAMES[first]} or {COARSE_NAMES[second]}?"
@@ -215,6 +234,10 @@ def chat(req: ChatRequest):
             p_yes=intent.get("p_yes", intent["p_confused"]),
             level=intent.get("level", "raw"),
             rotations=intent.get("rotations", 1),
+            clarify_threshold=intent.get("clarify_threshold", LEGACY_CLARIFY_THRESHOLD),
+            escalation_threshold=intent.get(
+                "escalation_threshold", LEGACY_ESCALATION_THRESHOLD
+            ),
         ) if intent else None,
         persona=persona,
     )

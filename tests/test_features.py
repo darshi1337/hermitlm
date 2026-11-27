@@ -39,7 +39,13 @@ class FakeProbe:
 
 
 def _mock_probe(monkeypatch, **kwargs):
-    monkeypatch.setattr(router, "_probe", FakeProbe(**kwargs))
+    # Calibrated gates live on the probe artifact; the fake mirrors that shape.
+    clarify = kwargs.pop("clarify_threshold", 0.75)
+    escalation = kwargs.pop("escalation_threshold", 0.5)
+    probe = FakeProbe(**kwargs)
+    probe.clarify_threshold = clarify
+    probe.escalation_threshold = escalation
+    monkeypatch.setattr(router, "_probe", probe)
     monkeypatch.setattr(router, "_probe_failed", False)
     monkeypatch.setattr(router, "_faq", lambda q: None)
 
@@ -89,7 +95,6 @@ def test_clarify_gate_fires_on_low_confidence(monkeypatch, tmp_path):
     memory_mod.init_memory_db()
     db.init_db()
     monkeypatch.setattr(api, "CLARIFY", True)
-    monkeypatch.setattr(api, "CLARIFY_THRESHOLD", 0.75)
     from fastapi.testclient import TestClient
 
     from hermitlm.runtime.api import app

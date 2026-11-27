@@ -17,9 +17,9 @@ DEFAULT_TOP_K = int(os.getenv("HERMIT_TOP_K", "20"))
 DEFAULT_MAX_TOKENS = int(os.getenv("HERMIT_MAX_TOKENS", "80"))
 
 PROBE_PATH = os.getenv("HERMIT_PROBE", "checkpoints/decision_probe.pt")
+# Legacy values kept only for older integrations. The runtime clarify and
+# escalation gates read the fitted thresholds stored in the probe artifact.
 CONFUSED_THRESHOLD = float(os.getenv("HERMIT_CONFUSED_THRESHOLD", "0.9"))
-# P(out-of-scope) from the calibrated yes/no head. Falls back to p_confused
-# when an older probe artifact does not carry head_yes.
 YES_THRESHOLD = float(os.getenv("HERMIT_YES_THRESHOLD", "0.5"))
 TOOL_PROBE_PATH = os.getenv("HERMIT_TOOL_PROBE", "checkpoints/decision_tool_probe.pt")
 TOOL_THRESHOLD = float(os.getenv("HERMIT_TOOL_THRESHOLD", "0.5"))

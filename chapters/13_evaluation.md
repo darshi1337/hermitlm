@@ -258,8 +258,9 @@ Defaults: `n_boot = 2000` in `metrics.py:81-83`, 1,000 in the eval script. The p
 $$ \Large \text{binary F1} = \frac{2\,\text{TP}}{2\,\text{TP}+\text{FP}+\text{FN}} $$
 
 The shipped confused detector selected 0.3 on template data. The runtime now uses the calibrated
-yes head for escalation (`HERMIT_YES_THRESHOLD = 0.5`); this grid only applies to the legacy
-`head_bin` fallback.
+yes head with the fitted `escalation_threshold` from the probe artifact (0.4248); this grid only
+applies to the legacy `head_bin` fallback. `report.md` also lists empirical coverage and abstention
+for both conformal gates.
 
 ---
 

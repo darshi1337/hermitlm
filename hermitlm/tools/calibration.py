@@ -8,6 +8,9 @@ drives ``T`` to its lower bound and produces ~0/1 probabilities. Following
 Platt (1999), two-class fits therefore always use smoothed targets. Multiclass
 fits use plain NLL and fall back to one-vs-rest Platt targets only when the
 plain fit lands on the lower bound.
+
+Split-conformal threshold fitting lives here too: one-sided order statistics
+bound the false-abstention rate of the clarify and escalation gates.
 """
 
 import math
@@ -144,3 +147,71 @@ def fit_temperature(
     if fn(t) >= fn(0.0) - 1e-12:
         return 1.0
     return math.exp(t)
+
+
+def conformal_quantile(values, target_error: float, *, tail: str = "lower") -> float:
+    """Split-conformal cutoff for a one-sided decision gate.
+
+    ``tail="lower"`` returns an order statistic below which at most
+    ``target_error`` of the calibration scores fall. ``tail="upper"`` returns
+    one above which at most ``target_error`` fall. The ``(n + 1)`` correction
+    is the usual finite-sample adjustment: it keeps the empirical error just
+    below the requested rate instead of landing exactly on it.
+
+    A smaller ``target_error`` moves a lower-tail cutoff down and an
+    upper-tail cutoff up, so both gates become more conservative.
+    """
+    if tail not in ("lower", "upper"):
+        raise ValueError("tail must be 'lower' or 'upper'")
+    if not 0.0 < target_error < 1.0:
+        raise ValueError("target_error must be in (0, 1)")
+    x = torch.as_tensor(values, dtype=torch.float64, device="cpu").reshape(-1)
+    if x.numel() == 0:
+        raise ValueError("conformal calibration needs at least one score")
+    x = torch.sort(x).values
+    n = x.numel()
+    quantile = target_error if tail == "lower" else 1.0 - target_error
+    index = min(n, max(1, math.ceil((n + 1) * quantile)))
+    return float(x[index - 1])
+
+
+def fit_decision_thresholds(
+    in_scope_confidence,
+    in_scope_out_of_scope_prob,
+    out_scope_out_of_scope_prob,
+    target_error: float,
+) -> dict:
+    """Fit the clarify and escalation gates on a held-out split.
+
+    The clarify gate fires when the 7-way confidence is *below* its cutoff;
+    the escalation gate fires when P(out-of-scope) is *above* its cutoff.
+    Both cutoffs are fitted from in-scope rows so that the false-abstention
+    rate is bounded by ``target_error``. Coverage is then measured on scores
+    that were not used to fit anything: in-scope rows for clarify, and
+    out-of-scope rows for escalation.
+    """
+    conf = torch.as_tensor(in_scope_confidence, dtype=torch.float64, device="cpu").reshape(-1)
+    p_in = torch.as_tensor(in_scope_out_of_scope_prob, dtype=torch.float64, device="cpu").reshape(-1)
+    p_out = torch.as_tensor(out_scope_out_of_scope_prob, dtype=torch.float64, device="cpu").reshape(-1)
+    if conf.numel() != p_in.numel():
+        raise ValueError("in-scope confidence and out-of-scope probability must have equal length")
+    if conf.numel() == 0 or p_out.numel() == 0:
+        raise ValueError("both in-scope and out-of-scope calibration scores are required")
+
+    clarify = conformal_quantile(conf, target_error, tail="lower")
+    escalation = conformal_quantile(p_in, target_error, tail="upper")
+    clarify_ok = conf >= clarify
+    escalation_ok = p_out >= escalation
+    abstain = (~clarify_ok) | (p_in >= escalation)
+    return {
+        "clarify_threshold": clarify,
+        "escalation_threshold": escalation,
+        "target_error": float(target_error),
+        "coverage": {
+            "clarify": round(float(clarify_ok.float().mean()), 4),
+            "escalation": round(float(escalation_ok.float().mean()), 4),
+        },
+        "abstention": round(float(abstain.float().mean()), 4),
+        "cal_n": conf.numel(),
+        "cal_n_out_of_scope": p_out.numel(),
+    }

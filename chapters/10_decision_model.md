@@ -279,7 +279,8 @@ exports them for the browser.
 - `head_yes`: a 2-way classifier trained on `type == "confused"` with balanced sampling. Class 1
   means "yes, this is out of scope". Its temperature is fitted with `fit_temperature()` (binary
   targets get Platt smoothing). `classify_intent()` returns `p_yes`, and the router escalates when
-  `p_yes >= HERMIT_YES_THRESHOLD` (0.5). Older artifacts fall back to `p_confused`.
+  `p_yes` reaches the fitted `escalation_threshold` in the artifact (0.4248 in the shipped probe).
+  Older artifacts fall back to `p_confused`.
 - `head_score`: a 5-way classifier over reply-quality levels. Weak supervision comes from
   `context_score(query, reply)` in `reward.py` — the persona reward plus a bounded topical
   overlap bonus — fitted on replies sampled from the model itself so training matches runtime.
@@ -402,7 +403,7 @@ $$ \Large \text{bias bytes} = 37 \times 4 = 148 \text{ bytes} $$
 
 $$ \Large \text{probe bytes} = 47{,}360 + 148 = 47{,}508 \text{ bytes} $$
 
-$$ \Large \text{browser JSON} = 262{,}502 \text{ bytes} $$
+$$ \Large \text{browser JSON} = 262{,}705 \text{ bytes} $$
 
 $$ \Large \text{JSON to probe ratio} = \frac{262{,}502}{47{,}508} = 5.5\times $$
 

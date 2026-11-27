@@ -186,8 +186,9 @@ keyword heuristics route to the FAQ responder, Wolfram (`math.py`), or DuckDuckG
 Both the FastAPI backend and the eval harness use it. `POST /chat` returns which tool fired.
 
 `route_with_intent()` also attaches the probe decision-model verdict. It escalates
-out-of-scope messages (`p_yes >= HERMIT_YES_THRESHOLD`, default 0.5) to web search when no other
-tool fired; legacy probes without the yes head fall back to `p_confused`.
+out-of-scope messages when `p_yes` reaches the **fitted** `escalation_threshold` stored in the
+probe artifact (0.4248 in the shipped probe) and no other tool fired; legacy probes without the
+yes head fall back to `p_confused`.
 
 ## Decision model
 
@@ -257,6 +258,10 @@ The decision stack includes label-free and supervised calibration pieces:
   `head_yes` gives a calibrated `p_yes` for out-of-scope escalation; `head_score` predicts a
   context-aware reply-quality level whose expected value is $ \Large \sum_k k\,p_k $. Both are exported
   to `web/probe.json` and applied identically in the API and browser.
+- `hermitlm/tools/calibration.py` + `scripts/fit_decision_thresholds.py`: split-conformal
+  cutoffs for the clarify and escalation gates, fitted on held-out rows at a target error rate
+  (0.1 by default). Both thresholds and their empirical coverage are stored in the probe artifact
+  and exported to `web/probe.json`, so the API and browser read the same numbers.
 - `python -m hermitlm.tools.check`: validates label tokens, batch consistency, hidden layers,
   prompt-template hashes, auxiliary heads and score-label tokenization before deploy.
 
@@ -288,9 +293,10 @@ the web class went from 0.15 to 0.65.
 keeps the best by the score head's `expected` value; it falls back to the heuristic persona
 reward when the artifact has no score head. The chosen candidate's expected score is written
 to `intent_log.expected_score`. Lower the value to 1 for less latency.
-- Clarifying gate (`HERMIT_CLARIFY`, default on, threshold 0.75). When no tool fires and intent
-confidence lands below the threshold without out-of-scope evidence, the API asks which of the
-top two intents the user means instead of guessing.
+- Clarifying gate (`HERMIT_CLARIFY`, default on). The confidence cutoff is fitted split-conformally
+and stored in the probe artifact (0.9884 in the shipped probe). When no tool fires and intent
+confidence lands below that cutoff without out-of-scope evidence, the API asks which of the top
+two intents the user means instead of guessing.
 - Persona auto-router. Coarse intent maps to UI persona mode (needs to hungry, sense to guard,
 body and condition to sleepy). The API returns the persona and prefixes the prompt with
 `[<persona> crab]` (for example `[hungry crab]`), matching the prefixed variants that
@@ -321,7 +327,8 @@ uvicorn hermitlm.runtime.api:app --host 0.0.0.0 --port 8000
 ```
 
 - `GET /health`: status, checkpoint, tokenizer, device, probe.
-- `GET /stats/intents`: totals by intent label and tool, plus the confused rate.
+- `GET /stats/intents`: totals by intent label and tool, gate coverage, confused rate and
+  abstention rate from the logged clarify/escalation decisions.
 - `POST /chat`: `{user_id, message, temperature, top_k, max_tokens}` → `{response, tool, intent, persona}`. `intent` holds the coarse label, the confidence, `p_confused` and `p_yes`. High `p_yes` escalates to web search.
 - `POST /chat/stream`: same request, server-sent events stream.
 

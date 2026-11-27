@@ -105,7 +105,12 @@ def classify_intent(user_input):
     if probe is None:
         return None
     try:
-        from hermitlm.tools.decision_model import COARSE_NAMES, debias_level
+        from hermitlm.tools.decision_model import (
+            COARSE_NAMES,
+            LEGACY_CLARIFY_THRESHOLD,
+            LEGACY_ESCALATION_THRESHOLD,
+            debias_level,
+        )
 
         label, proba, p_confused = probe.predict(user_input)
         yes = probe.predict_yes(user_input) if hasattr(probe, "predict_yes") else None
@@ -129,6 +134,14 @@ def classify_intent(user_input):
             # "raw" = head output, "L0" = fitted batch prior applied.
             "level": debias_level(priors, prior_lambda),
             "rotations": getattr(probe, "rotations", 1),
+            # Gates read the thresholds fitted into the artifact. Legacy probes
+            # keep the old fixed boundaries until they are re-calibrated.
+            "clarify_threshold": float(
+                getattr(probe, "clarify_threshold", LEGACY_CLARIFY_THRESHOLD)
+            ),
+            "escalation_threshold": float(
+                getattr(probe, "escalation_threshold", LEGACY_ESCALATION_THRESHOLD)
+            ),
         }
         fine = probe.predict_fine(user_input)
         if fine is not None:
@@ -178,7 +191,8 @@ def route_with_intent(user_input, confused_threshold=None, tool_threshold=None):
     Order: tag/keyword routing first (high precision), then the tool probe on
     the residue, then confused escalation to web search.
     """
-    from hermitlm.settings import TOOL_THRESHOLD, YES_THRESHOLD
+    from hermitlm.settings import TOOL_THRESHOLD
+    from hermitlm.tools.decision_model import LEGACY_ESCALATION_THRESHOLD
 
     tool, result = route(user_input)
     intent = classify_intent(user_input)
@@ -190,8 +204,12 @@ def route_with_intent(user_input, confused_threshold=None, tool_threshold=None):
             if probe_tool:
                 return probe_tool, probe_result, intent
     if tool is None and intent is not None:
-        threshold = YES_THRESHOLD if confused_threshold is None else confused_threshold
+        fitted = float(
+            getattr(_get_probe(), "escalation_threshold", LEGACY_ESCALATION_THRESHOLD)
+        )
+        threshold = fitted if confused_threshold is None else confused_threshold
         if intent.get("p_yes", intent["p_confused"]) >= threshold:
+            intent["escalated"] = True
             try:
                 web_result = _web(user_input)
             except Exception:  # noqa: BLE001 - escalation must not break chat

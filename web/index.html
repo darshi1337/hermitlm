@@ -287,7 +287,7 @@
 <script type="module">
 import { BPETokenizer } from "./tokenizer.js";
 import { HermitModel, fetchAssetVersion } from "./model.js";
-import { classifyIntent, classifyFine, CONFUSED_THRESHOLD, YES_THRESHOLD, CLARIFY_THRESHOLD } from "./intent.js";
+import { classifyIntent, classifyFine } from "./intent.js";
 import { localMath } from "./math.js";
 
 const content = document.getElementById("content");
@@ -676,7 +676,7 @@ async function send(message, opts = {}) {
     const promptIds = tokenizer.encode(prompt);
 
     // Confidence gate: ask which of the top two intents the user means.
-    if (intent && !opts.fromClarify && intent.confidence < CLARIFY_THRESHOLD && (intent.p_yes ?? intent.p_confused) < YES_THRESHOLD) {
+    if (intent && !opts.fromClarify && intent.confidence < intent.clarify_threshold && (intent.p_yes ?? intent.p_confused) < intent.escalation_threshold) {
       const [first, second] = intent.top2;
       const bubble = addBubble("bot", `Quick check before I scuttle ahead: is this about ${probe.names[first[0]]} or ${probe.names[second[0]]}?`);
       const msg = bubble.parentElement;
@@ -738,7 +738,7 @@ async function send(message, opts = {}) {
         pending.meta.textContent = [intentText, `${generatedIds.length} tokens · ${(generatedIds.length / secs).toFixed(1)} tok/s · ${clock}`].filter(Boolean).join(" · ");
       }
       // Out-of-scope escalation: the static site has no backend search, so link to a web search.
-      if (intent && (intent.p_yes ?? intent.p_confused) >= YES_THRESHOLD) {
+      if (intent && (intent.p_yes ?? intent.p_confused) >= intent.escalation_threshold) {
         const link = document.createElement("a");
         link.className = "search-chip";
         link.textContent = "crab doesn't know — search the web ↗";

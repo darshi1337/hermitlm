@@ -14,6 +14,7 @@ of the tokenizer holds single tokens for `a`-`g` (ids 21-27), but uppercase
 """
 
 import json
+import logging
 from pathlib import Path
 
 import torch
@@ -25,6 +26,9 @@ from hermitlm.tools.artifacts import ArtifactMismatchError, verify_artifact
 from hermitlm.tools.heads import FittedHead
 from hermitlm.tools.prior import apply_prior
 from hermitlm.training.model import HermitLM
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 # Fallbacks for probe artifacts fitted before the conformal gates existed.
 # They are deliberately local to the artifact loader: runtime gates read the
@@ -190,6 +194,21 @@ def debias_level(priors: dict, prior_lambda: float) -> str:
     return "L0" if ("coarse" in (priors or {}) and prior_lambda > 0) else "raw"
 
 
+def escape_delimiters(text: str) -> str:
+    """Rewrite added-token markers so user text cannot open a new turn.
+
+    A space inside the delimiters stops the tokenizer from matching the
+    special tokens, while ordinary text (and therefore the pinned prompt
+    template) is left unchanged.
+    """
+    return text.replace("<|im_start|>", "<| im_start |>").replace("<|im_end|>", "<| im_end |>")
+
+
+def _validate_temperature(temperature: float) -> None:
+    if temperature <= 0:
+        raise ValueError("temperature must be positive")
+
+
 def format_prompt(query: str, assignment: list[str] | None = None, shift: int = 0) -> str:
     """Build the classification prompt. The model scores one letter next.
 
@@ -204,7 +223,7 @@ def format_prompt(query: str, assignment: list[str] | None = None, shift: int = 
     )
     return (
         "<|im_start|>user\n"
-        f"Classify the intent of this message: {query}\n"
+        f"Classify the intent of this message: {escape_delimiters(query)}\n"
         f"Options:\n{options_text}\n"
         "Answer with one letter:\n"
         "<|im_start|>assistant\n"
@@ -216,8 +235,7 @@ def constrained_probs(
     last_logits: torch.Tensor, option_ids: list[int] | torch.Tensor, temperature: float = 1.0
 ) -> torch.Tensor:
     """Mask full-vocab logits to the allowed options and softmax with temperature."""
-    if temperature <= 0:
-        raise ValueError("temperature must be positive")
+    _validate_temperature(temperature)
     if not isinstance(option_ids, torch.Tensor):
         option_ids = torch.tensor(option_ids, dtype=torch.long)
     option_ids = option_ids.to(last_logits.device)
@@ -241,6 +259,7 @@ class DecisionModel:
 
     @torch.no_grad()
     def predict_proba(self, query: str, temperature: float = 1.0, rotations: int = 2) -> dict[str, float]:
+        _validate_temperature(temperature)
         shifts = rotation_shifts(rotations)
         unrotated = []
         for s in shifts:
@@ -267,12 +286,12 @@ class DecisionModel:
 
 def chat_prompt(query: str) -> str:
     """In-distribution chat prompt used for hidden-state probes."""
-    return f"<|im_start|>user\n{query}<|im_end|>\n<|im_start|>assistant\n"
+    return f"<|im_start|>user\n{escape_delimiters(query)}<|im_end|>\n<|im_start|>assistant\n"
 
 
 def score_prompt(query: str, response: str = "") -> str:
     """Prompt for the reply-quality score head: query plus a candidate reply."""
-    return chat_prompt(query) + response
+    return chat_prompt(query) + escape_delimiters(response)
 
 
 PROMPT_TEMPLATES = format_prompt("x") + "\n" + chat_prompt("x")
@@ -359,6 +378,13 @@ class ProbeDecisionModel:
         self.threshold_abstention = float(probe.get("threshold_abstention", 0.0))
         self.tool_head = None
         self.tool_layer = None
+        logger.info(
+            "probe loaded: schema=%s layer=%s heads=%d score_levels=%d "
+            "clarify=%.4f escalate=%.4f",
+            probe.get("schema_version", 1), self.layer,
+            3 + int(self.head_yes is not None) + int(self.head_score is not None),
+            len(self.score_levels), self.clarify_threshold, self.escalation_threshold,
+        )
 
     def _aux_head(self, probe: dict, name: str, head_key: str, temp_key: str):
         """Load an optional head that may live in `selection` or at top level."""
@@ -415,7 +441,12 @@ class ProbeDecisionModel:
         key = (prompt, layer)
         if key in cache:
             return cache[key]
-        ids = self.tokenizer.encode(prompt).ids[-self.config.max_seq_len :]
+        full_ids = self.tokenizer.encode(prompt).ids
+        ids = full_ids[-self.config.max_seq_len :]
+        logger.debug(
+            "prompt tokens=%d truncated=%d layer=%s cache=%d",
+            len(full_ids), len(full_ids) - len(ids), layer, len(cache),
+        )
         idx = torch.tensor([ids], dtype=torch.long, device=self.device)
         if layer is None:
             _, _, hidden = self.model(idx, return_hidden=True)

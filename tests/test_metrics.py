@@ -120,5 +120,5 @@ def test_legacy_artifact_without_hashes_is_rejected(tmp_path):
     tokenizer = tmp_path / "tokenizer.json"
     checkpoint.write_bytes(b"weights")
     tokenizer.write_bytes(b"{}")
-    with pytest.raises(ArtifactMismatchError):
+    with pytest.warns(UserWarning, match="missing checkpoint/tokenizer hash pins"), pytest.raises(ArtifactMismatchError):
         verify_artifact({"temperature7": 1.0}, checkpoint, tokenizer)

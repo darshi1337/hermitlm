@@ -1,8 +1,15 @@
+import logging
+import warnings
+
 import torch
 from tokenizers import Tokenizer
 
 from hermitlm.config import HermitConfig
+from hermitlm.tools.decision_model import escape_delimiters
 from hermitlm.training.model import HermitLM
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 class HermitInference:
@@ -16,15 +23,23 @@ class HermitInference:
         if "config" in ckpt:
             self.config = HermitConfig(**ckpt["config"])
         else:
-            print("Warning: using default config")
+            warnings.warn(
+                "checkpoint has no stored config; using HermitConfig defaults",
+                UserWarning, stacklevel=2,
+            )
+            logger.info("checkpoint config missing; using defaults")
             self.config = HermitConfig()
 
         tokenizer_vocab_size = self.tokenizer.get_vocab_size()
         if self.config.vocab_size != tokenizer_vocab_size:
-            print(
-                f"Warning: checkpoint vocab_size={self.config.vocab_size} differs from "
-                f"tokenizer vocab_size={tokenizer_vocab_size}; using tokenizer size "
-                "(load_state_dict will fail below if the checkpoint doesn't match)"
+            warnings.warn(
+                f"checkpoint vocab_size={self.config.vocab_size} differs from "
+                f"tokenizer vocab_size={tokenizer_vocab_size}; using tokenizer size",
+                UserWarning, stacklevel=2,
+            )
+            logger.info(
+                "vocab mismatch: checkpoint=%d tokenizer=%d",
+                self.config.vocab_size, tokenizer_vocab_size,
             )
         self.config.vocab_size = tokenizer_vocab_size
 
@@ -32,12 +47,17 @@ class HermitInference:
         self.model.load_state_dict(ckpt["model_state_dict"])
         self.model.eval()
 
-        print(f"HermitLM loaded: {self.model.param_summary()}")
+        logger.info("HermitLM loaded: %s", self.model.param_summary())
 
     def chat(self, user_input, temperature=0.8, top_k=40, max_tokens=64):
         prompt = self._format_prompt(user_input)
 
-        input_ids = self.tokenizer.encode(prompt).ids
+        full_ids = self.tokenizer.encode(prompt).ids
+        input_ids = full_ids[-self.config.max_seq_len :]
+        logger.info(
+            "chat prompt tokens=%d truncated=%d max_new=%d temperature=%.3f top_k=%d",
+            len(full_ids), len(full_ids) - len(input_ids), max_tokens, temperature, top_k,
+        )
         input_t = torch.tensor([input_ids], dtype=torch.long, device=self.device)
 
         output_t = self.model.generate(
@@ -98,7 +118,7 @@ class HermitInference:
     def _format_prompt(self, user_input):
         return (
             "<|im_start|>user\n"
-            f"{user_input}<|im_end|>\n"
+            f"{escape_delimiters(user_input)}<|im_end|>\n"
             "<|im_start|>assistant\n"
         )
 

@@ -7,7 +7,12 @@ checkpoint is worse than failing loudly and retraining.
 """
 
 import hashlib
+import logging
+import warnings
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 SCHEMA_VERSION = 3
 # Schema 3 adds the fit context that schema 2 artifacts omit. Older artifacts
@@ -115,11 +120,20 @@ def verify_artifact(
     expected_checkpoint = artifact.get("checkpoint_sha256")
     expected_tokenizer = artifact.get("tokenizer_sha256")
     if not expected_checkpoint or not expected_tokenizer:
+        warnings.warn(
+            "decision head is missing checkpoint/tokenizer hash pins; "
+            "refusing to load it",
+            UserWarning, stacklevel=2,
+        )
         raise ArtifactMismatchError(
             "decision head is missing schema_version/checkpoint_sha256/"
             "tokenizer_sha256; retrain the probe with the current scripts"
         )
     version = int(artifact.get("schema_version", 1))
+    logger.info(
+        "verifying artifact schema=%s checkpoint_sha=%s tokenizer_sha=%s",
+        version, str(expected_checkpoint)[:12], str(expected_tokenizer)[:12],
+    )
     if version >= 3:
         missing = [key for key in V3_REQUIRED_FIELDS if key not in artifact]
         if missing:
@@ -149,6 +163,12 @@ def verify_artifact(
     import hashlib
 
     expected_prompt = artifact.get("prompt_template_sha256")
+    if not expected_prompt:
+        warnings.warn(
+            "decision head has no prompt-template hash pin; prompt changes "
+            "will not be detected",
+            UserWarning, stacklevel=2,
+        )
     if expected_prompt:
         from hermitlm.tools.decision_model import PROMPT_TEMPLATES
 

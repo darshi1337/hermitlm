@@ -3,7 +3,9 @@
 Run with: python -m hermitlm.tools.check
 """
 import hashlib
+import logging
 import os
+import warnings
 
 import torch
 from tokenizers import Tokenizer
@@ -24,6 +26,9 @@ from hermitlm.tools.decision_model import (
     get_option_ids,
 )
 from hermitlm.training.model import HermitLM
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 def main() -> None:
@@ -60,6 +65,17 @@ def main() -> None:
             actual = hashlib.sha256(PROMPT_TEMPLATES.encode("utf-8")).hexdigest()
             assert actual == expected, "prompt template changed since probe was fitted"
             print("PASS  prompt_template: matches probe artifact")
+            logger.info("prompt template pin verified: %s", expected[:12])
+        else:
+            warnings.warn(
+                "probe artifact has no prompt-template hash pin",
+                UserWarning, stacklevel=2,
+            )
+        logger.info(
+            "probe schema=%s chosen_layer=%s score_levels=%d",
+            probe.get("schema_version", 1), probe.get("chosen_layer"),
+            len(probe.get("score_levels", [])),
+        )
         selection = probe.get("selection")
         if selection:
             print(f"PASS  probe: selected layer {selection['layer']}, "

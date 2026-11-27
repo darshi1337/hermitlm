@@ -15,6 +15,7 @@ Usage:
 
 import argparse
 import json
+import logging
 import os
 import random
 
@@ -44,6 +45,9 @@ from hermitlm.tools.metrics import (
 )
 from hermitlm.tools.prior import apply_prior
 from hermitlm.tools.router import keyword_tool
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 N_BINS = 10
 
@@ -680,6 +684,7 @@ def run_eval(
 ) -> dict:
     os.makedirs(out_dir, exist_ok=True)
     if from_npz:
+        logger.info("replaying npz=%s bootstrap=%d seed=%d", from_npz, bootstrap, seed)
         report, replay_method = _report_from_npz(from_npz, bootstrap, seed)
         _write_report(report, out_dir, replay_method)
         return report
@@ -700,6 +705,10 @@ def run_eval(
     fine_types = [r["type"] for r in rows]
     y_confused = [1 if r["type"] == "confused" else 0 for r in rows]
     n_cal = max(1, min(cal_n, len(rows) // 2))
+    logger.info(
+        "eval method=%s rows=%d cal=%d test=%d bootstrap=%d",
+        method, len(rows), n_cal, len(rows) - n_cal, bootstrap,
+    )
 
     if method == "probe":
         model = ProbeDecisionModel(checkpoint, tokenizer_path, probe_path, device)

@@ -173,7 +173,11 @@ export class HermitModel {
   }
 
   formatPrompt(userInput) {
-    return `<|im_start|>user\n${userInput}<|im_end|>\n<|im_start|>assistant\n`;
+    // Escape added-token markers so user text cannot open a new turn.
+    const safe = String(userInput)
+      .replaceAll("<|im_start|>", "<| im_start |>")
+      .replaceAll("<|im_end|>", "<| im_end |>");
+    return `<|im_start|>user\n${safe}<|im_end|>\n<|im_start|>assistant\n`;
   }
 
   // Single forward pass over the prompt. Returns the last-token hidden

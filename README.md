@@ -259,7 +259,8 @@ only that way. Left padding silently shifts positions and once cost 30 points of
 
 ## Calibration toolkit
 
-The decision stack includes label-free and supervised calibration pieces:
+The decision stack includes label-free and supervised calibration pieces. The status of each
+work item is tracked in [docs/calibration-improvements.md](docs/calibration-improvements.md):
 
 - `hermitlm/tools/prior.py`: batch prior correction (`L0`). A prior fitted from an unlabelled
   pool is applied as $ \Large \log p - \lambda \log \pi $. `scripts/fit_probe_prior.py` fits it into the
@@ -433,7 +434,7 @@ pip install onnx onnxscript onnxruntime
 pip install torch --index-url https://download.pytorch.org/whl/xpu
 # NVIDIA CUDA instead: pip install torch --index-url https://download.pytorch.org/whl/cu121
 
-pytest tests/          # 89 passed, 2 skipped
+pytest tests/          # 111 passed, 2 skipped
 ruff check .           # clean
 python -m hermitlm.tools.check
 ```

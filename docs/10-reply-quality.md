@@ -11,9 +11,9 @@ and stored in the probe artifact (0.9884 in the shipped probe). When no tool fir
 confidence lands below that cutoff without out-of-scope evidence, the API asks which of the top
 two intents the user means instead of guessing.
 - Persona auto-router. Coarse intent maps to UI persona mode (needs to hungry, sense to guard,
-body and condition to sleepy). The API returns the persona and prefixes the prompt with
-`[<persona> crab]` (for example `[hungry crab]`), matching the prefixed variants that
-`generate_data.add_persona_variants()` writes into training. Set `HERMIT_PERSONA_PROMPT=0` to disable it.
+body and condition to sleepy). The API returns the persona for the UI. The prefix `[<persona> crab]`
+is off by default because the shipped checkpoint has no `[mode` rows in `data/train.jsonl`. Set
+`HERMIT_PERSONA_PROMPT=1` only for a checkpoint trained with `generate_data.add_persona_variants()`.
 - Analytics. Every reply logs its verdict to `intent_log` in `data/hermit.db`.
 `GET /stats/intents` returns totals by label and tool plus the confused rate.
 

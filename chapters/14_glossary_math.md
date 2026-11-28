@@ -180,6 +180,14 @@ $$ \Large \text{escalate to web when } p_{\text{yes}} \geq 0.4248 $$
 
 $$ \Large \text{ask for clarification when confidence} < 0.9884 \text{ and } p_{\text{yes}} < 0.4248 $$
 
+Split-conformal fitting uses `x_(i)`, the `i`-th sorted calibration score:
+
+$$ \Large q = \alpha \text{ for the lower tail}, \quad q = 1-\alpha \text{ for the upper tail}, \quad \alpha = 0.1 $$
+
+$$ \Large i = \min\left(n, \max\left(1, \lceil(n+1)q\rceil\right)\right) $$
+
+$$ \Large \text{threshold} = x_{(i)}, \quad n = 955 $$
+
 ### Chapter 10 — Decision model
 
 $$ \Large x = \frac{h-\mu}{\sigma} $$
@@ -187,6 +195,12 @@ $$ \Large x = \frac{h-\mu}{\sigma} $$
 $$ \Large s = W x + b $$
 
 $$ \Large \log p = \log\,\text{softmax}\left(\frac{s}{T}\right) $$
+
+Option rotation averages the log-probability of each class under two letter assignments:
+
+$$ \Large \text{score}_s(c) = \log p_s\left(\text{letter}_s(c)\right) $$
+
+$$ \Large \text{score}(c) = \frac{1}{|S|}\sum_{s\in S}\text{score}_s(c), \quad S=\{0,4\} \text{ when } k=7 $$
 
 $$ \Large A = X^T X + \alpha I $$
 
@@ -217,6 +231,10 @@ $$ \Large \text{macro F1} = \frac{1}{K}\sum_{c=1}^{K}\frac{2 P_c R_c}{P_c+R_c} $
 $$ \Large \text{95\% CI} = \left[\text{2.5th percentile}, \text{97.5th percentile}\right] $$
 
 ### Chapter 11 — RLHF
+
+Score-head reranking uses the calibrated levels `level_k` from `web/probe.json`:
+
+$$ \Large \text{expected} = \sum_{k=0}^{4} \text{level}_k\,p_k $$
 
 $$ \Large R = 2\min(\text{overlap}, 0.4) - 1.5\,\text{repetition} - \text{length penalty} - \text{style penalty} - 3\,\text{break-phrase count} $$
 
@@ -312,7 +330,7 @@ $$ \Large \text{paired CI} = \text{bootstrap distribution of }(\text{stat}_b-\te
 | **Batch prior (L0)** | Mean predicted class probability over an unlabelled pool; subtracted as `λ log π` to undo label bias. |
 | **Option rotation** | Repeats a multiple-choice prompt with the classes assigned to different letters and averages the result. |
 | **p_yes** | Calibrated probability that a message is out of scope; replaces the ad-hoc confused flag. |
-| **Expected score** | `sum(k * p_k)` over calibrated reply-quality levels, used to rerank best-of-N candidates. |
+| **Expected score** | `sum(level_k * p_k)` over calibrated reply-quality levels, used to rerank best-of-N candidates. |
 | **top-k** | Keep only the k largest logits. |
 | **top-p** | Keep the smallest set reaching cumulative probability p. |
 | **EOS / BOS** | End-of-sequence and beginning-of-sequence markers. |
@@ -341,7 +359,7 @@ These are real. They are listed so you do not debug them twice.
 | Stale local web artifacts | Local ONNX has 2,831-token vocab; deploy CI regenerates it |
 | Three vocab eras | 2,833 default, 2,831 older PPO/DPO/final run, 3,774 current |
 | Two training runs | `best_model.pt` step 24,200; `final_model.pt` from an older 30k run |
-| README vs reports | README reward 0.495 vs `eval_out/report.json` 0.378 |
+| Eval table vs reports | `docs/05-eval.md:19` reward 0.495 vs `eval_out/report.json` 0.378 |
 | Probe template vs human | 1.000 template accuracy vs 0.6212 on 126 hand-written rows |
 | `--epochs 30` in retrain scripts | Neither probe trainer defines that flag; remove it |
 | Tags parsed only in user text | Generated tool tags are not rescanned |

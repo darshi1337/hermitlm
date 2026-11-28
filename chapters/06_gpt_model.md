@@ -129,7 +129,7 @@ Notation: `V = 3,774`, `D = 320`, `L = 6`, `H = 8`, `F = 800`, `P = 512`.
 | Duplicate tied head in `state_dict` | `V × D` | +1,207,680 |
 | **Raw checkpoint sum** | | **9,660,800** |
 
-This matches `README.md:67-84` exactly. If you want to check it yourself:
+This matches `docs/02-architecture.md:22-37` exactly. If you want to check it yourself:
 
 ```python
 from hermitlm.config import HermitConfig

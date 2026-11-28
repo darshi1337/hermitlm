@@ -52,7 +52,7 @@ flowchart TD
 
 Average formatted length is about 20 words and 169 characters per training row, far below `max_seq_len = 512`.
 
-> ⚠️ The on-disk JSONL files predate the natural-sample and persona-variant code. A fresh run of `generate_dataset()` would produce 104,200 rows, not 95,000. `README.md:149-151` also notes that PPO and DPO were not rerun on the newer corpus.
+> ⚠️ The on-disk JSONL files predate the natural-sample and persona-variant code. A fresh run of `generate_dataset()` would produce 104,200 rows, not 95,000. `docs/05-eval.md:23-25` also notes that PPO and DPO were not rerun on the newer corpus.
 
 ### Training category counts
 
@@ -87,13 +87,19 @@ That roughly matches an older 3/2/1 weighting scheme: heavy classes get about 9.
 ```python
 133:    train_loader, train_dataset = get_dataloader(
 134:        os.path.join(tc.data_dir, "train.jsonl"),
-135:        tokenizer_path, mc.max_seq_len, tc.batch_size, shuffle=True,
-136:    )
+135:        tokenizer_path,
+136:        mc.max_seq_len,
+137:        tc.batch_size,
+138:        shuffle=True,
+139:    )
 ...
 141:    eval_loader, eval_dataset = get_dataloader(
 142:        os.path.join(tc.data_dir, "eval.jsonl"),
-143:        tokenizer_path, mc.max_seq_len, tc.batch_size, shuffle=False,
-144:    )
+143:        tokenizer_path,
+144:        mc.max_seq_len,
+145:        tc.batch_size,
+146:        shuffle=False,
+147:    )
 ```
 
 ---

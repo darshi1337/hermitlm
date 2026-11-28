@@ -64,7 +64,7 @@ This textbook follows the code as it exists in the repository today.
 
 ## The architecture in one table
 
-From `README.md:48-84` and `checkpoints/config.json`:
+From `docs/02-architecture.md:1-37` and `checkpoints/config.json`:
 
 | Field | Value |
 |---|---|

@@ -30,4 +30,4 @@ CLARIFY_THRESHOLD = float(os.getenv("HERMIT_CLARIFY_THRESHOLD", "0.75"))
 # generated with persona variants (generate_data.add_persona_variants). The
 # shipped checkpoint was trained without them, so injecting them by default
 # would feed the model an out-of-distribution prompt.
-PERSONA_PROMPT = os.getenv("HERMIT_PERSONA_PROMPT", "1") == "1"
+PERSONA_PROMPT = os.getenv("HERMIT_PERSONA_PROMPT", "0") == "1"

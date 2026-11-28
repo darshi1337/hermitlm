@@ -52,15 +52,16 @@ This keeps contractions together (`'s`, `'t`) and groups letters, numbers and pu
 `hermitlm/training/prepare_data.py:13-34` trains the tokenizer:
 
 ```python
-13: def train_tokenizer(texts, save_path, vocab_size=4096):
+13: def train_tokenizer(texts, save_path, vocab_size=VOCAB_SIZE):
 ...
-     tokenizer = Tokenizer(BPE(unk_token=None, byte_fallback=False))
-     tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
-     trainer = trainers.BpeTrainer(
-         vocab_size=vocab_size,
-         min_frequency=1,
-         special_tokens=SPECIAL_TOKENS,
-     )
+16:     tokenizer = Tokenizer(models.BPE())
+18:     tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+19:     tokenizer.decoder = decoders.ByteLevel()
+21:     trainer = trainers.BpeTrainer(
+22:         vocab_size=vocab_size,
+23:         special_tokens=SPECIAL_TOKENS,
+24:         min_frequency=1,
+25:     )
 ```
 
 Requested size was 4,096. The shipped file has 3,774 tokens because training stopped when no more useful merges existed.
@@ -79,15 +80,16 @@ So `hello crab` becomes `[530, 170]`: the word `hello` and the space-attached wo
 
 ## Worked example: a real chat prompt
 
-`hermitlm/runtime/inference.py:81-86` builds the prompt:
+`hermitlm/runtime/inference.py:118-123` builds the prompt. `escape_delimiters()` stops a user
+message from adding a new turn:
 
 ```python
-81:    def _format_prompt(self, user_input):
-82:        return (
-83:            "<|im_start|>user\n"
-84:            f"{user_input}<|im_end|>\n"
-85:            "<|im_start|>assistant\n"
-86:        )
+118:     def _format_prompt(self, user_input):
+119:         return (
+120:             "<|im_start|>user\n"
+121:             f"{escape_delimiters(user_input)}<|im_end|>\n"
+122:             "<|im_start|>assistant\n"
+123:         )
 ```
 
 For `user_input = "hello crab"` the string is:
@@ -202,7 +204,7 @@ The model never sees `y[t]`. It sees `x[0..t]` and must guess `y[t]`. This is th
 
 For a batch of two rows of lengths 10 and 7, `T = 10`. The second row has `attention_mask = [1,1,1,1,1,1,1,0,0,0]`. The loss divides by the total number of ones, so padding never changes the answer.
 
-> Padding is **right** padding. `README.md:210-211` records that left padding once cost 30 points of probe accuracy, because learned position embeddings see the wrong positions.
+> Padding is **right** padding. `docs/07-decision-model.md:66` records that left padding once cost 30 points of probe accuracy, because learned position embeddings see the wrong positions.
 
 ---
 
@@ -234,7 +236,7 @@ $$ \Large \text{reply budget} = 512 - 10 = 502 \text{ tokens} $$
 
 $$ \Large \text{runtime reply limit} = 80 \text{ tokens} $$
 
-`hermitlm/runtime/inference.py:177` truncates generation context to the last 512 tokens, so a long chat keeps only its most recent part.
+`hermitlm/runtime/inference.py:55-56` truncates generation context to the last 512 tokens, so a long chat keeps only its most recent part.
 
 ---
 

@@ -81,7 +81,7 @@ Current `eval_out/report.json`: **0.378**.
 ```python
 71:    checks = ["integrate x^2", "latest AI news", "hello crab"]
 72:    tool_ok = sum(1 for q in checks if _offline_tool_trigger(q))
-73:    report = {"perplexity_proxy": round(ppl, 3), "avg_persona_reward": round(avg_r, 3), ...}
+73:    report = {"perplexity_proxy": round(ppl, 3), "avg_persona_reward": round(avg_r, 3), "tool_trigger_rate": f"{tool_ok}/{len(checks)}"}
 ```
 
 Result: **2/3**. The greeting is expected to stay in chat mode, so 2/3 is the good outcome.
@@ -91,7 +91,7 @@ Result: **2/3**. The greeting is expected to stay in chat mode, so 2/3 is the go
 | Checkpoint | Perplexity | Persona reward | Tool triggers |
 |---|---:|---:|---:|
 | SFT current (`eval_out/report.json`) | 1.929 | 0.378 | 2/3 |
-| SFT in `README.md:145` | 1.931 | 0.495 | — |
+| SFT in `docs/05-eval.md:19` | 1.931 | 0.495 | — |
 | PPO | 1.992 | 0.648 | 2/3 |
 | DPO v2 | 1.930 | 0.449 | 2/3 |
 | DPO final | 1.929 | 0.487 | 2/3 |
@@ -181,7 +181,7 @@ python scripts/eval_aux_heads.py --max-n 126 --train-n 2000 --out-dir eval_out/a
 
 | Predictor | NLL |
 |---|---:|
-| Score head (`expected = sum(k * p_k)`) | **1.2578** |
+| Score head (`expected = sum(level_k * p_k)`) | **1.2578** |
 | Heuristic reward at unit temperature | 1.3780 |
 | Yes head | 0.3245 |
 | Legacy confused head | 0.2416 |

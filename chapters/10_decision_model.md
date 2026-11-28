@@ -28,7 +28,7 @@ flowchart TD
 
 ## The intent label system
 
-`hermitlm/tools/decision_model.py:29-78` defines two label sets.
+`hermitlm/tools/decision_model.py:29-87` defines two label sets.
 
 ### 7 coarse intents
 
@@ -62,26 +62,26 @@ The coarse buckets on the 95k training set:
 
 ## Where the feature comes from
 
-`scripts/train_probe.py:32-49` extracts hidden states at the true last token of each right-padded prompt:
+`scripts/train_probe.py:37-54` extracts hidden states at the true last token of each right-padded prompt:
 
 ```python
-38:    feats = []
-39:    for i in range(0, len(queries), batch_size):
-40:        batch = queries[i : i + batch_size]
-41:        ids = [tokenizer.encode(chat_prompt(q)).ids[-max_seq_len:] for q in batch]
-42:        width = max(len(s) for s in ids)
-43:        padded = [s + [0] * (width - len(s)) for s in ids]
-44:        idx = torch.tensor(padded, dtype=torch.long, device=device)
-45:        _, hidden = model.forward_with_hidden_layers(idx)
-46:        lengths = torch.tensor([len(s) for s in ids], dtype=torch.long)
-47:        # Advanced indexing on Intel XPU hits Level Zero limits: gather on CPU.
-48:        feats.append(hidden.cpu()[torch.arange(len(batch)), lengths - 1, :])
-49:    return torch.cat(feats)
+43:    feats = []
+44:    for i in range(0, len(queries), batch_size):
+45:        batch = queries[i : i + batch_size]
+46:        ids = [tokenizer.encode(chat_prompt(q)).ids[-max_seq_len:] for q in batch]
+47:        width = max(len(s) for s in ids)
+48:        padded = [s + [0] * (width - len(s)) for s in ids]
+49:        idx = torch.tensor(padded, dtype=torch.long, device=device)
+50:        _, hidden = model.forward_with_hidden_layers(idx)
+51:        lengths = torch.tensor([len(s) for s in ids], dtype=torch.long)
+52:        # Advanced indexing on Intel XPU hits Level Zero limits: gather on CPU.
+53:        feats.append(hidden.cpu()[torch.arange(len(batch)), lengths - 1, :])
+54:    return torch.cat(feats)
 ```
 
 The model is frozen. `forward_with_hidden_layers` (`model.py:155-168`) returns all six block outputs, so the trainer can pick the best layer.
 
-**Right padding is essential.** Adding zeros to the left would shift every learned position embedding, and `README.md:210-211` records a 30-point accuracy loss when that happened.
+**Right padding is essential.** Adding zeros to the left would shift every learned position embedding, and `docs/07-decision-model.md:66` records a 30-point accuracy loss when that happened.
 
 ---
 
@@ -121,15 +121,16 @@ From `checkpoints/decision_probe.pt` and `web/probe.json`:
 
 ### Prediction
 
-`decision_model.py:411-416`:
+`decision_model.py:468-474`:
 
 ```python
-411:    def predict(self, query: str) -> tuple[str, dict[str, float], float]:
-412:        h = self._hidden(query, self.layer)
-413:        proba7 = torch.exp(self._log_probs(self.head7, h, "coarse"))[0]
-414:        proba = {letter: float(p) for letter, p in zip(OPTION_LETTERS, proba7.tolist())}
-415:        p_confused = float(torch.exp(self._log_probs(self.head_bin, h, "confused"))[0, 1])
-416:        return max(OPTION_LETTERS, key=lambda letter: proba[letter]), proba, p_confused
+468:    @torch.no_grad()
+469:    def predict(self, query: str) -> tuple[str, dict[str, float], float]:
+470:        h = self._hidden(query, self.layer)
+471:        proba7 = torch.exp(self._log_probs(self.head7, h, "coarse"))[0]
+472:        proba = {letter: float(p) for letter, p in zip(OPTION_LETTERS, proba7.tolist())}
+473:        p_confused = float(torch.exp(self._log_probs(self.head_bin, h, "confused"))[0, 1])
+474:        return max(OPTION_LETTERS, key=lambda letter: proba[letter]), proba, p_confused
 ```
 
 For a zero hidden vector, the coarse head emits only its biases. Those biases are `[-0.01427, -0.08197, -0.01813, 0.0085, -0.00159, -0.0419, 0.06219]`, and after division by `T = 1.23006` plus softmax the largest class is `g` (mind) at **0.1517**. The binary head's biases give `p_confused = sigmoid((0.00603 − 0.06934)/1.33109) = 0.4881`.
@@ -143,12 +144,12 @@ That is what "no information" looks like: nearly a uniform guess.
 `heads.py:94-99` solves ridge regression directly:
 
 ```python
-94: def fit_ridge(x, y, alpha=1.0):
-95:     x = _standardize(x)
-96:     a = x.T @ x + alpha * torch.eye(x.size(1))
-97:     y_mean = _one_hot(y, classes).mean(0)
-98:     w = torch.linalg.solve(a, x.T @ (_one_hot(y, classes) - y_mean))
-99:     return w.T, y_mean
+94: def fit_ridge(hidden, y, n_classes, alpha):
+95:     x, mean, std = _standardize(hidden)
+96:     y_mean = _one_hot(y, n_classes).mean(dim=0)
+97:     a = x.T @ x + alpha * torch.eye(x.size(1), dtype=torch.float64)
+98:     w = torch.linalg.solve(a, x.T @ (_one_hot(y, n_classes) - y_mean))
+99:     return mean, std, w.T, y_mean
 ```
 
 The formula is:
@@ -161,7 +162,7 @@ $$ \Large b = \bar{y} $$
 
 where `Y` is a one-hot label matrix and `ȳ` is the vector of class frequencies.
 
-LDA is also available (`heads.py:102-123`) with Ledoit–Wolf shrinkage of the covariance matrix.
+LDA is also available (`heads.py:102-133`) with Ledoit–Wolf shrinkage of the covariance matrix.
 
 ### Layer and solver selection
 
@@ -169,6 +170,7 @@ LDA is also available (`heads.py:102-123`) with Ledoit–Wolf shrinkage of the c
 
 ```python
 135: def default_layers(num_layers: int) -> list[int]:
+136:     """Every 2nd block from 40% to 90% depth."""
 137:     first = -(-4 * num_layers // 10)   # ceil(0.4×6) = 3
 138:     last = 9 * num_layers // 10        # floor(0.9×6) = 5
 139:     return list(range(first, last + 1, 2)) or [num_layers // 2]
@@ -186,16 +188,16 @@ A head can rank classes correctly but still report silly probabilities. Calibrat
 
 ### Platt-smoothed targets
 
-`calibration.py:29-44`:
+`calibration.py:32-47`:
 
 ```python
-38:    targets = targets.detach().to(dtype=torch.long)
-39:    counts = torch.bincount(targets, minlength=n_classes).to(dtype=torch.float64)
-40:    own = (counts[targets] + 1.0) / (counts[targets] + 2.0)
-41:    rest = (1.0 - own) / (n_classes - 1)
-42:    out = rest.unsqueeze(1).expand(targets.numel(), n_classes).clone()
-43:    out[torch.arange(targets.numel()), targets] = own
-44:    return out
+41:    targets = targets.detach().to(dtype=torch.long)
+42:    counts = torch.bincount(targets, minlength=n_classes).to(dtype=torch.float64)
+43:    own = (counts[targets] + 1.0) / (counts[targets] + 2.0)
+44:    rest = (1.0 - own) / (n_classes - 1)
+45:    out = rest.unsqueeze(1).expand(targets.numel(), n_classes).clone()
+46:    out[torch.arange(targets.numel()), targets] = own
+47:    return out
 ```
 
 For a class with `n_c` examples:
@@ -285,7 +287,7 @@ exports them for the browser.
   `context_score(query, reply)` in `reward.py` — the persona reward plus a bounded topical
   overlap bonus — fitted on replies sampled from the model itself so training matches runtime.
   Levels are rank-based bins with strictly increasing centres. The ranker uses
-  `expected = sum(k * p_k)`; it beats the heuristic reward on human eval NLL
+  `expected = sum(level_k * p_k)`; it beats the heuristic reward on human eval NLL
   (1.2578 vs 1.3780 in `eval_out/aux_heads/report.md`).
 
 `HermitInference.best_of_n()` ranks candidates by `expected` when the probe has a score head and
@@ -342,7 +344,7 @@ The huge gap between template and human scores is the honest generalization gap.
 
 Other shipped template numbers:
 
-- NLL `0.0015`, ECE `0.0012` (`README.md:184-185`)
+- NLL `0.0015`, ECE `0.0012` (`docs/07-decision-model.md:21`)
 - confused detector precision 1.0, recall 1.0
 - 21-way accuracy 0.9982, macro F1 0.9971 (`eval_out/decision_probe/report.json`)
 - tool probe accuracy 0.7250 on 80 hand-written queries
@@ -367,7 +369,7 @@ Loading a head after a retrain or a prompt-template change raises an error inste
 
 ## Export to the browser
 
-`decision_model.export_probe()` (`decision_model.py:496-577`) writes `web/probe.json` with `options`, `names`, `fine_options`, the three heads and their temperatures, the `head_yes` / `head_score` pair with `score_levels` / `score_labels`, the `priors` / `prior_lambda` pair, and the hashes. `scripts/export_probe.py` is a 23-line wrapper. All heads are exported for both selection-format and legacy artifacts.
+`decision_model.export_probe()` (`decision_model.py:561-663`) writes `web/probe.json` with `options`, `names`, `fine_options`, the three heads and their temperatures, the `head_yes` / `head_score` pair with `score_levels` / `score_labels`, the `priors` / `prior_lambda` pair, and the hashes. `scripts/export_probe.py` is a 23-line wrapper. All heads are exported for both selection-format and legacy artifacts.
 
 When a head has standardization, `FittedHead.effective()` (`heads.py:43-47`) folds it into plain weights for JSON:
 
@@ -431,15 +433,15 @@ $$ \Large \text{probabilities} = \text{softmax}(\text{scaled scores}) \approx [0
 
 | File and lines | What it does |
 |---|---|
-| `hermitlm/tools/decision_model.py:29-78` | Intent label sets and persona map |
-| `hermitlm/tools/decision_model.py:378-420` | Hidden-state extraction, prior application and prediction |
-| `hermitlm/tools/decision_model.py:111-184` | Label-token resolution, option rotation and prompt template |
+| `hermitlm/tools/decision_model.py:29-87` | Intent label sets and persona map |
+| `hermitlm/tools/decision_model.py:431-476` | Hidden-state extraction, prior application and prediction |
+| `hermitlm/tools/decision_model.py:133-234` | Label-token resolution, option rotation and prompt template |
 | `hermitlm/tools/heads.py:36-47` | Scoring, log-softmax, export folding |
 | `hermitlm/tools/heads.py:94-139` | Ridge, LDA, layer grid |
-| `hermitlm/tools/calibration.py:29-146` | Platt targets and temperature search |
+| `hermitlm/tools/calibration.py:32-176` | Platt targets and temperature search |
 | `hermitlm/tools/prior.py:10-24` | Prior fit and correction |
 | `hermitlm/tools/metrics.py:26-120` | Accuracy, NLL, ECE, macro F1, bootstrap |
-| `scripts/train_probe.py:32-49` | Frozen hidden-state extraction |
+| `scripts/train_probe.py:37-54` | Frozen hidden-state extraction |
 | `scripts/train_yes_score_heads.py` | Yes/no and score head fitting |
 | `scripts/eval_aux_heads.py` | Score-head vs heuristic NLL report |
 | `web/intent.js:21-85` | Browser-side probe inference |

@@ -113,11 +113,13 @@ Dropout is forced to 0.0 (`ppo.py:319`) so old and new log-probabilities are com
 
 ```python
 16: class ActorCriticHermitLM(HermitLM):
-17:     def __init__(self, config):
-18:         super().__init__(config)
-19:         self.value_head = nn.Linear(config.d_model, 1)
-20:         nn.init.zeros_(self.value_head.weight)
-21:         nn.init.zeros_(self.value_head.bias)
+17:     """HermitLM policy with a scalar value head for PPO advantage estimation."""
+18:
+19:     def __init__(self, config):
+20:         super().__init__(config)
+21:         self.value_head = nn.Linear(config.d_model, 1)
+22:         nn.init.zeros_(self.value_head.weight)
+23:         nn.init.zeros_(self.value_head.bias)
 ```
 
 The value head starts at zero, so initial value predictions are 0. When saving, `extract_policy_state_dict()` (`ppo.py:290-291`) removes this head, so PPO checkpoints are plain `HermitLM` models.
@@ -319,7 +321,7 @@ Logged losses in `logs/dpo_margin.log` move from about 0.69 to 0.60, with 3 or 4
 | PPO (`ppo_final.pt`) | 1.992 | **0.648** |
 | DPO (`dpo_final.pt`) | 1.930 | 0.449 |
 
-`eval_out/report.json` for the currently shipped model says perplexity 1.929 and reward 0.378. `README.md:149-151` explains that PPO and DPO values come from an earlier run and have not been reproduced on the newer data. Treat those rows as a demonstration that the stages work, not as the current production numbers.
+`eval_out/report.json` for the currently shipped model says perplexity 1.929 and reward 0.378. `docs/05-eval.md:23-25` explains that PPO and DPO values come from an earlier run and have not been reproduced on the newer data. Treat those rows as a demonstration that the stages work, not as the current production numbers.
 
 ---
 

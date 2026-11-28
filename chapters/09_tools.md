@@ -28,7 +28,7 @@ flowchart TD
     H -->|"yes"| I["web search"]
     H -->|"no"| J["tool probe (4-way)"]
     J -->|"confidence ≥ 0.5"| C
-    J -->|"low"| K{"p_yes ≥ 0.5?"}
+    J -->|"low"| K{"p_yes ≥ 0.4248?"}
     K -->|"yes"| I
     K -->|"no"| L["chat with the model"]
 ```
@@ -37,26 +37,26 @@ flowchart TD
 
 ## The router code
 
-`hermitlm/tools/router.py:25-28` defines the patterns:
+`hermitlm/tools/router.py:27-30` defines the patterns:
 
 ```python
-25: TOOL_TAG_RE = re.compile(r"<tool>(\w+)\((.*?)\)</tool>", re.DOTALL)
-26: MATH_RE = re.compile(r"\d\s*[+\-*/=]\s*\d")
-27: MATH_KW = ["solve","integrate","differentiate","derivative","equation","factor","simplify","limit","matrix","sin","cos","tan"]
-28: WEB_KW = ["latest","news","today","current","who is","search","explain"]
+27: TOOL_TAG_RE = re.compile(r"<tool>(\w+)\((.*?)\)</tool>", re.DOTALL)
+28: MATH_RE = re.compile(r"\d\s*[+\-*/=]\s*\d")
+29: MATH_KW = ["solve","integrate","differentiate","derivative","equation","factor","simplify","limit","matrix","sin","cos","tan"]
+30: WEB_KW = ["latest","news","today","current","who is","search","explain"]
 ```
 
-`parse_tool_tag()` (`router.py:33-37`) returns a lowercased name and its argument:
+`parse_tool_tag()` (`router.py:35-39`) returns a lowercased name and its argument:
 
 ```python
-33: def parse_tool_tag(text):
-34:     m = TOOL_TAG_RE.search(text or "")
-35:     if not m:
-36:         return None
-37:     return m.group(1).lower(), m.group(2).strip()
+35: def parse_tool_tag(text):
+36:     m = TOOL_TAG_RE.search(text or "")
+37:     if not m:
+38:         return None
+39:     return m.group(1).lower(), m.group(2).strip()
 ```
 
-Accepted names (`router.py:45-50`):
+Accepted names (`router.py:73-79`):
 
 | Tag name | Tool |
 |---|---|
@@ -66,39 +66,39 @@ Accepted names (`router.py:45-50`):
 
 Example: `<tool>math(integrate x^2)</tool>` calls the math tool with the argument `integrate x^2`.
 
-> The router looks for tags in the **user message** (`router.py:42`). It does not rescan generated text for tags, even though the module docstring suggests the model can emit them.
+> The router looks for tags in the **user message** (`router.py:71`). It does not rescan generated text for tags, even though the module docstring suggests the model can emit them.
 
 ---
 
 ## Keyword routing
 
-`route()` (`router.py:39-62`) runs a cascade:
+`route()` (`router.py:68-91`) runs a cascade:
 
 ```python
-39: def route(user_input):
-40:     """Return (tool_name, result) or (None, None) if no tool applies."""
-41:     q = user_input.lower()
-42:     tag = parse_tool_tag(user_input)
-43:     if tag:
-44:         name, arg = tag
-45:         if name in ("math", "wolfram"):
-46:             return name, _wolfram(arg or user_input)
+68: def route(user_input):
+69:     """Return (tool_name, result) or (None, None) if no tool applies."""
+70:     q = user_input.lower()
+71:     tag = parse_tool_tag(user_input)
+72:     if tag:
+73:         name, arg = tag
+74:         if name in ("math", "wolfram"):
+75:             return name, _wolfram(arg or user_input)
 ...
-51:     faq = _faq(user_input)
-52:     if faq:
-53:         return "faq", faq
-54:     if _hit(MATH_KW, q) or MATH_RE.search(q):
-55:         r = _wolfram(user_input)
-56:         if r:
-57:             return "math", r
-58:     if _hit(WEB_KW, q):
-59:         r = _web(user_input)
-60:         if r:
-61:             return "web", r
-62:     return None, None
+80:     faq = _faq(user_input)
+81:     if faq:
+82:         return "faq", faq
+83:     if _hit(MATH_KW, q) or MATH_RE.search(q):
+84:         r = _wolfram(user_input)
+85:         if r:
+86:             return "math", r
+87:     if _hit(WEB_KW, q):
+88:         r = _web(user_input)
+89:         if r:
+90:             return "web", r
+91:     return None, None
 ```
 
-`_hit()` (`router.py:30-31`) uses word-boundary regular expressions, so `sin` matches the word "sin" but not "single".
+`_hit()` (`router.py:32-33`) uses word-boundary regular expressions, so `sin` matches the word "sin" but not "single".
 
 ### Worked routing examples
 
@@ -111,16 +111,16 @@ Example: `<tool>math(integrate x^2)</tool>` calls the math tool with the argumen
 | `who is Elon Musk?` | `WEB_KW` contains `who is` | `web` |
 | `the water feels calm today` | no keyword | chat or probe |
 
-`README.md:241-246` reports that keyword routing is **93% precise when it fires**. The tool probe handles the residue.
+`docs/09-tool-routing.md:6` reports that keyword routing is **93% precise when it fires**. The tool probe handles the residue.
 
 ---
 
 ## The tool probe
 
-`scripts/train_tool_probe.py:28` defines four classes:
+`scripts/train_tool_probe.py:30` defines four classes:
 
 ```python
-28: TOOL_CLASSES = ["math", "web", "faq", "chat"]
+30: TOOL_CLASSES = ["math", "web", "faq", "chat"]
 ```
 
 Training data (`data/tool_train.jsonl`, 5,038 rows) is built by `scripts/build_tool_data.py:374-405`:
@@ -152,27 +152,37 @@ Per-class accuracy on the 80-row eval set: math 0.80 (16/20), web 0.65 (13/20), 
 
 ## The full cascade
 
-`router.py:158-184`:
+`router.py:221-252`:
 
 ```python
-158: def route_with_intent(user_input, confused_threshold=None, tool_threshold=None):
+221: def route_with_intent(user_input, confused_threshold=None, tool_threshold=None):
 ...
-166:     tool, result = route(user_input)
-167:     intent = classify_intent(user_input)
-168:     if tool is None:
-169:         decision = classify_tool(user_input)
-170:         threshold = TOOL_THRESHOLD if tool_threshold is None else tool_threshold
-171:         if decision is not None and decision["confidence"] >= threshold:
-172:             probe_tool, probe_result = _dispatch_probe(decision["label"], user_input)
-...
-175:     if tool is None and intent is not None:
-176:         threshold = probe.escalation_threshold if confused_threshold is None else confused_threshold
-177:         if intent.get("p_yes", intent["p_confused"]) >= threshold:
-178:             try:
-179:                 web_result = _web(user_input)
+230:     tool, result = route(user_input)
+231:     intent = classify_intent(user_input)
+232:     if tool is None:
+233:         decision = classify_tool(user_input)
+234:         threshold = TOOL_THRESHOLD if tool_threshold is None else tool_threshold
+235:         if decision is not None and decision["confidence"] >= threshold:
+236:             probe_tool, probe_result = _dispatch_probe(decision["label"], user_input)
+237:             if probe_tool:
+238:                 return probe_tool, probe_result, intent
+239:     if tool is None and intent is not None:
+240:         fitted = float(
+241:             getattr(_get_probe(), "escalation_threshold", LEGACY_ESCALATION_THRESHOLD)
+242:         )
+243:         threshold = fitted if confused_threshold is None else confused_threshold
+244:         if intent.get("p_yes", intent["p_confused"]) >= threshold:
+245:             intent["escalated"] = True
+246:             try:
+247:                 web_result = _web(user_input)
+248:             except Exception:  # noqa: BLE001 - escalation must not break chat
+249:                 web_result = None
+250:             if web_result:
+251:                 return "web", web_result, intent
+252:     return tool, result, intent
 ```
 
-Settings (`hermitlm/settings.py:20-25`):
+Settings (`hermitlm/settings.py:20-33`):
 
 | Threshold | Value | Meaning |
 |---|---:|---|
@@ -201,17 +211,24 @@ With `p_yes = 0.10`, step 4 is skipped and the model answers normally.
 
 ## Clarifying questions and personas
 
-The API asks for clarification when no tool fired, intent confidence is below 0.75, `p_yes < 0.5`, and two top intents are available:
+The API reads both thresholds from the intent dict. It asks for clarification when no tool fired,
+intent confidence is below 0.9884, `p_yes < 0.4248`, and two top intents are available:
 
 ```python
-148:        if (
-149:            _tool is None
-150:            and CLARIFY
-151:            and intent is not None
-152:            and intent["confidence"] < CLARIFY_THRESHOLD
-153:            and intent.get("p_yes", intent["p_confused"]) < YES_THRESHOLD
-154:            and len(intent.get("top2", [])) == 2
-155:        ):
+165:        clarify_threshold = float(
+166:            (intent or {}).get("clarify_threshold", LEGACY_CLARIFY_THRESHOLD)
+167:        )
+168:        escalation_threshold = float(
+169:            (intent or {}).get("escalation_threshold", LEGACY_ESCALATION_THRESHOLD)
+170:        )
+171:        if (
+172:            _tool is None
+173:            and CLARIFY
+174:            and intent is not None
+175:            and intent["confidence"] < clarify_threshold
+176:            and intent.get("p_yes", intent["p_confused"]) < escalation_threshold
+177:            and len(intent.get("top2", [])) == 2
+178:        ):
 ```
 
 Example: top intents `tank` and `sense` produce:
@@ -220,7 +237,7 @@ Example: top intents `tank` and `sense` produce:
 Quick check before I scuttle ahead: is this about tank or sense?
 ```
 
-The coarse intent also selects a persona (`hermitlm/tools/decision_model.py:57-65`):
+The coarse intent also selects a persona (`hermitlm/tools/decision_model.py:78-87`):
 
 | Coarse intent | Persona |
 |---|---|
@@ -232,7 +249,9 @@ The coarse intent also selects a persona (`hermitlm/tools/decision_model.py:57-6
 | `f` condition | sleepy |
 | `g` mind | none |
 
-When enabled, the API prefixes the prompt with `[<persona> crab] ` (`api.py:164-166`), matching persona variants in the training data.
+The prefix `[<persona> crab] ` is off by default (`api.py:188-190`). The shipped checkpoint has no
+`[mode` rows in `data/train.jsonl`. Set `HERMIT_PERSONA_PROMPT=1` only for a checkpoint trained with
+`generate_data.add_persona_variants()`.
 
 ---
 
@@ -286,11 +305,11 @@ High-precision checks go first so they handle most cases before the slower probe
 
 | File and lines | What it does |
 |---|---|
-| `hermitlm/tools/router.py:25-37` | Tool tag and keyword patterns |
-| `hermitlm/tools/router.py:39-62` | First four routing checks |
-| `hermitlm/tools/router.py:158-184` | Probe dispatch and confusion escalation |
-| `hermitlm/settings.py:20-25` | Threshold values |
-| `hermitlm/runtime/api.py:148-176` | Clarify gate, persona prompt, best-of-N call |
+| `hermitlm/tools/router.py:27-39` | Tool tag and keyword patterns |
+| `hermitlm/tools/router.py:68-91` | First four routing checks |
+| `hermitlm/tools/router.py:221-252` | Probe dispatch and confusion escalation |
+| `hermitlm/settings.py:20-33` | Threshold values |
+| `hermitlm/runtime/api.py:165-200` | Clarify gate, persona prompt, best-of-N call |
 | `scripts/build_tool_data.py:374-405` | Tool data construction |
 | `web/math.js:190-201` | Local polynomial integration and differentiation |
 

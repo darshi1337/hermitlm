@@ -49,20 +49,21 @@ flowchart TD
 185:
 186:                if top_k > 0:
 187:                    v, _ = torch.topk(sample_logits, min(top_k, sample_logits.size(-1)))
-188:                    sample_logits = torch.where(
-189:                        sample_logits < v[:, [-1]],
-190:                        torch.full_like(sample_logits, float("-inf")),
-191:                        sample_logits,
-192:                    )
-193:
-194:                probs = F.softmax(sample_logits, dim=-1)
-195:                next_cpu = torch.multinomial(probs, num_samples=1)
-196:                next_id = next_cpu.to(idx.device)
-197:
-198:                idx = torch.cat([idx, next_id], dim=1)
-199:
-200:                if next_cpu.numel() == 1 and int(next_cpu.item()) == self.config.eos_id:
-201:                    break
+188:                    # torch.where rather than in-place masked assignment.
+189:                    sample_logits = torch.where(
+190:                        sample_logits < v[:, [-1]],
+191:                        torch.full_like(sample_logits, float("-inf")),
+192:                        sample_logits,
+193:                    )
+194:
+195:                probs = F.softmax(sample_logits, dim=-1)
+196:                next_cpu = torch.multinomial(probs, num_samples=1)
+197:                next_id = next_cpu.to(idx.device)
+198:
+199:                idx = torch.cat([idx, next_id], dim=1)
+200:
+201:                if next_cpu.numel() == 1 and int(next_cpu.item()) == self.config.eos_id:
+202:                    break
 ```
 
 Steps:
@@ -77,13 +78,16 @@ Steps:
 
 ### Stop markers in the runtime
 
-`hermitlm/runtime/inference.py:54-57` also stops at BOS, because a well-behaved model ends with `<|im_end|>` but a stray new turn would start with `<|im_start|>`:
+`hermitlm/runtime/inference.py:72-78` also stops at BOS, because a well-behaved model ends with `<|im_end|>` but a stray new turn would start with `<|im_start|>`:
 
 ```python
-54:        for i, token_id in enumerate(generated_ids):
-55:            if token_id in (self.config.eos_id, self.config.bos_id):
-56:                generated_ids = generated_ids[:i]
-57:                break
+72:        # Stop at the first end-of-turn or new-turn marker. decode() strips
+73:        # special tokens from the text, so a text-level split can't catch
+74:        # them if the model emits a fresh turn instead of hitting eos.
+75:        for i, token_id in enumerate(generated_ids):
+76:            if token_id in (self.config.eos_id, self.config.bos_id):
+77:                generated_ids = generated_ids[:i]
+78:                break
 ```
 
 ---
@@ -173,24 +177,36 @@ The browser draws with inverse CDF (`model.js:92-96`): pick `r = Math.random() �
 | PPO rollouts | 48 | 1.0 | 50 | — | `config.py:57-59` |
 | DPO candidate pairs | 48 | 0.8 | 40 | — | `dpo.py:17,26` |
 
-The API enforces bounds: temperature `[0.1, 2.0]`, top_k `[0, 200]`, max_tokens `[1, 256]` (`api.py:53-55`).
+The API enforces bounds: temperature `[0.1, 2.0]`, top_k `[0, 200]`, max_tokens `[1, 256]` (`api.py:55-60`).
 
 ---
 
 ## Best-of-N reranking
 
-`runtime/inference.py:68-94` generates several replies and keeps the best by the score head's
-`expected = sum(k * p_k)` when the probe carries `head_score`. The heuristic persona reward is
-still computed for every candidate and used as a fallback and for the logged comparison:
+`runtime/inference.py:88-116` generates several replies and keeps the best by the score head's
+`expected = sum(level_k * p_k)` when the probe carries `head_score`. The heuristic persona reward is
+still computed for every candidate and used as a fallback. A failed probe call also falls back:
 
 ```python
-72:        candidates = self.chat_candidates(user_input, n, temperature, top_k, max_tokens)
-73:        scores = [score_response(text) for text in candidates]
-74:        if len(candidates) == 1:
-75:            return candidates[0], [0.0], None
-76:        ranker = [self.probe.predict_score(query, text)[0] for text in candidates]
-77:        best = max(range(len(candidates)), key=lambda i: ranker[i])
-78:        return candidates[best], scores, ranker[best]
+ 98:        candidates = self.chat_candidates(user_input, n, temperature, top_k, max_tokens)
+ 99:        scores = [score_response(text) for text in candidates]
+100:        if len(candidates) == 1:
+101:            return candidates[0], [0.0], None
+102:
+103:        ranker = None
+104:        if getattr(self, "probe", None) is not None:
+105:            query = user_input if score_query is None else score_query
+106:            try:
+107:                ranked = [self.probe.predict_score(query, text) for text in candidates]
+108:                if all(value is not None for value in ranked):
+109:                    ranker = [value[0] for value in ranked]
+110:            except Exception:  # noqa: BLE001 - fall back to the heuristic
+111:                ranker = None
+112:        if ranker is None:
+113:            best = max(range(len(candidates)), key=lambda i: scores[i])
+114:            return candidates[best], scores, None
+115:        best = max(range(len(candidates)), key=lambda i: ranker[i])
+116:        return candidates[best], scores, ranker[best]
 ```
 
 `BEST_OF = 3` by default (`settings.py:24`). With expected scores `[0.46, 0.18, 0.61]`, the API
@@ -203,16 +219,24 @@ skips the reranker.
 
 The browser streams real token IDs: `web/model.js:198-230` is an async generator that yields each sampled ID, and `web/index.html:716-739` decodes and appends it live.
 
-The API's `/chat/stream` is different. It streams **whitespace-split words** after the full reply is ready (`api.py:225-229`):
+The API's `/chat/stream` is different. It streams **whitespace-split words** after the full reply is ready (`api.py:257-268`):
 
 ```python
-225:            # Naive word streaming (true token streaming needs generate()
-226:            # to yield; the local web UI already streams ONNX tokens).
-227:            for w in response.split():
-228:                yield f"data: {w} \n\n"
+257:    def _gen():
+258:        if tool:
+259:            # Tool results are often multi-line. Every line must get its own
+260:            # `data:` prefix or the SSE framing is corrupted.
+261:            for line in response.splitlines() or [""]:
+262:                yield f"data: {line}\n\n"
+263:        else:
+264:            # Naive word streaming (true token streaming needs generate()
+265:            # to yield; the local web UI already streams ONNX tokens).
+266:            for w in response.split():
+267:                yield f"data: {w} \n\n"
+268:        yield "data: [DONE]\n\n"
 ```
 
-Every SSE line gets its own `data:` prefix because tool results can be multi-line (`api.py:219-223`). The stream ends with `data: [DONE]`.
+Tool results get one `data:` prefix per line (`api.py:258-262`). The stream ends with `data: [DONE]`.
 
 ---
 
@@ -261,12 +285,12 @@ The browser displays tokens per second from the count and elapsed time (`web/ind
 | File and lines | What it does |
 |---|---|
 | `hermitlm/training/model.py:170-206` | Python generation loop |
-| `hermitlm/runtime/inference.py:36-61` | Prompt formatting, stop tokens |
-| `hermitlm/runtime/inference.py:67-79` | Best-of-N reranking |
+| `hermitlm/runtime/inference.py:52-86` | Chat call, stop tokens, candidates |
+| `hermitlm/runtime/inference.py:88-116` | Best-of-N reranking |
 | `web/model.js:25-98` | Temperature, top-k, top-p sampler |
 | `web/model.js:198-230` | Browser token stream |
-| `hermitlm/runtime/api.py:207-231` | SSE word stream |
-| `hermitlm/settings.py:15-25` | Runtime defaults and thresholds |
+| `hermitlm/runtime/api.py:217-270` | Chat and SSE word stream |
+| `hermitlm/settings.py:14-33` | Runtime defaults and legacy thresholds |
 
 ---
 

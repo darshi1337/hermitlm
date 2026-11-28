@@ -40,23 +40,25 @@ flowchart TD
 25:    layer = None
 26:    if probe_path.exists():
 27:        probe = torch.load(probe_path, map_location="cpu", weights_only=True)
-28:        selection = probe.get("selection")
-29:        if selection:
-30:            layer = int(selection["layer"])
-31:    wrapper = ChatWithHidden(model, layer=layer)
-32:    dummy = torch.randint(0, config.vocab_size, (1, 8), dtype=torch.long)
-33:
-34:    onnx_path = output_dir / "model.onnx"
-35:    torch.onnx.export(
-36:        wrapper,
-37:        (dummy,),
-38:        str(onnx_path),
-39:        input_names=["input_ids"],
-40:        output_names=["logits", "last_hidden"],
-41:        dynamic_axes={"input_ids": {1: "seq_len"}, "logits": {1: "seq_len"}},
-42:        opset_version=opset,
-43:        dynamo=False,
-44:    )
+28:        from hermitlm.tools.decision_model import _resolved_layer
+29:
+30:        resolved = _resolved_layer(probe)
+31:        if resolved is not None and resolved >= 0:
+32:            layer = resolved
+33:    wrapper = ChatWithHidden(model, layer=layer)
+34:    dummy = torch.randint(0, config.vocab_size, (1, 8), dtype=torch.long)
+35:
+36:    onnx_path = output_dir / "model.onnx"
+37:    torch.onnx.export(
+38:        wrapper,
+39:        (dummy,),
+40:        str(onnx_path),
+41:        input_names=["input_ids"],
+42:        output_names=["logits", "last_hidden"],
+43:        dynamic_axes={"input_ids": {1: "seq_len"}, "logits": {1: "seq_len"}},
+44:        opset_version=opset,
+45:        dynamo=False,
+46:    )
 ```
 
 Key choices:
@@ -69,7 +71,9 @@ Key choices:
 | `dynamo=False` | Legacy TorchScript exporter path |
 | Copy `tokenizer.json` | The browser needs the exact vocabulary |
 
-The shipped probe is a legacy artifact with no `selection` key, so `layer = None` and the wrapper uses the **final** hidden state (`model.py:229-231`).
+`_resolved_layer()` accepts `chosen_layer`, `layer` or the older `selection` dict. For the shipped
+probe it returns `-1`, so `layer = None` and the wrapper uses the **final** hidden state
+(`model.py:229-231`).
 
 Exported graph (inspected from the file itself):
 

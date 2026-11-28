@@ -51,7 +51,7 @@ A user message becomes token IDs (chapter 2). Each ID becomes a 320-number vecto
 
 | Quantity | Value | Source |
 |---|---|---|
-| Unique parameters | 8,453,120 | `hermitlm/training/model.py:208-209`, `README.md:67-84` |
+| Unique parameters | 8,453,120 | `hermitlm/training/model.py:208-209`, `docs/02-architecture.md:1-37` |
 | Transformer blocks | 6 | `checkpoints/config.json:6` |
 | Hidden size | 320 | `checkpoints/config.json:5` |
 | Attention heads | 8, 40 dimensions each | `checkpoints/config.json:7`, `model.py:13` |
